@@ -5,7 +5,7 @@ branches**. It only maps canonical channels to standard Principled inputs:
 
 - ``base_color`` × ORM.R (AO) × Vertex AO (Mesh "mtk_ao" attribute) -> Base Color
 - ORM.G -> Roughness, ORM.B -> Metallic, ORM.A -> Emission Strength
-- aux.R -> IOR via ``encoded * 7 + 1``, aux.B -> Subsurface Weight
+- aux.R -> IOR via ``encoded * 7 + 1``, aux.B -> Subsurface Weight, aux.A -> Transmission Weight
 - normal RGB -> Normal Map
 - alpha -> Alpha
 
@@ -37,6 +37,7 @@ def build_pbr_shading(
     orm_color: Optional[Any] = None,
     orm_alpha: Optional[Any] = None,
     aux_color: Optional[Any] = None,
+    aux_alpha: Optional[Any] = None,
     disable_subsurface: bool = False,
     emission_strength: float = DEFAULT_EMISSION_STRENGTH,
     subsurface_method: str = "BURLEY",
@@ -64,6 +65,7 @@ def build_pbr_shading(
             "Coat Weight": 0.0,
             "Sheen Weight": 0.0,
             "Emission Strength": 0.0,
+            "Transmission Weight": 0.0,
             "Alpha": 1.0,
         },
     )
@@ -219,6 +221,11 @@ def build_pbr_shading(
             links.new(aux_separate.outputs["Blue"], principled.inputs["Subsurface Weight"])
     else:
         principled.inputs["IOR"].default_value = 1.5
+
+    if aux_alpha is not None:
+        links.new(aux_alpha, principled.inputs["Transmission Weight"])
+    else:
+        principled.inputs["Transmission Weight"].default_value = 0.0
 
     if normal_color is not None:
         normal_map = node(

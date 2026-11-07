@@ -187,6 +187,7 @@ def _build_baked_material(block: str, sheets: Path):
         orm_color=orm.outputs["Color"],
         orm_alpha=orm.outputs["Alpha"],
         aux_color=aux.outputs["Color"],
+        aux_alpha=aux.outputs["Alpha"],
         disable_subsurface=False,
         emission_strength=5.0,
         subsurface_method="BURLEY",

@@ -264,7 +264,7 @@ _aux: [(ior - 1) / 7, porosity, sss_weight, transmission_mask /* v1 = 0 */]
 | Emission Strength | `_orm.A` × 5.0 |
 | Subsurface Weight | `_aux.B`（Disable 时 0） |
 | Thin Wall | 不连接（默认 false） |
-| Transmission Weight | 不连接（v1） |
+| Transmission Weight | `_aux.A`（透射权重；水体/玻璃/冰块等通过预编译内置覆盖或纹理注入） |
 
 非 PBR chunk（无 `_n` 且无 `_s`）：roughness 0.5、IOR 1.5、metallic 0、无 normal、
 emission 0。不再有 `transmission → roughness 0` 的特殊分支。
@@ -344,13 +344,12 @@ MER 通道顺序以微软 `texture_set.json` 文档为准；实现前需用本�
 - 玻璃/水在 v1 **只使用 albedo alpha**；albedo alpha = 1 的玻璃会不透明。
 - 非 PBR 发光方块在 v1 **不发光**，直到内部 fallback PBR 层提供 emission mask。
 
-### 6.2 预留路径
+### 6.2 透射通道与内置物理覆盖
 
-- `_aux.A` 定义为 `transmission_mask`。未来若要恢复玻璃/水：
-  1. 在预编译期把 transmission（以及可选 sticker/threshold 逻辑）烘进 `_aux.A`；
-  2. 把 albedo alpha 改为 `transmission > 0 ? 1 : original_alpha`（可烘进 albedo 的 alpha）；
-  3. Blender 侧直接把 `_aux.A` 接到 `Transmission Weight`。
-  仍然没有逐面属性、没有 compare/sticker 节点。
+- `_aux.A` 定义为 `transmission_mask`。
+  1. 在预编译期通过内置物理预设（`PhysicalMaterialPreset`）针对水体（`water_still`/`water_flow`）、玻璃（`glass`/`stained_glass`）、冰块（`ice`）、蜂蜜与史莱姆方块自动注入物理参数（透射权重 `_aux.A`、物理折射率 `_aux.R` 与平滑粗糙度 `_orm.G`）；用户若提供自定义伴生图则优先保留。
+  2. Blender 侧直接把 `_aux.A` 接到 `Principled BSDF` 的 `Transmission Weight`，当无透射或无 aux 时保持 0.0。
+  3. 全程保持纯数据流，不增加逐面属性与运行时 compare 节点。
 - 内部 fallback PBR 贴图作为资源栈的低优先级层插入，走现有 per-channel fallback；
   不写特殊代码，用户包可覆盖。
 - `thin wall` 若以后需要，可作为 `_aux` 的 flag 位或单独通道；v1 不做。

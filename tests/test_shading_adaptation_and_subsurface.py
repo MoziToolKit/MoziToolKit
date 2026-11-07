@@ -117,6 +117,15 @@ def test_build_atlas_chunk_material_has_no_game_semantic_nodes():
     assert nodes.get("Safe Vertex AO") is not None
     assert nodes.get("Base Color × Vertex AO") is not None
 
+    # Transmission Weight must be connected to Aux Texture Alpha
+    bsdf = nodes.get("Principled BSDF")
+    trans_sock = bsdf.inputs["Transmission Weight"]
+    assert trans_sock.is_linked
+    aux_tex = nodes.get("Atlas Aux Texture")
+    assert aux_tex is not None
+    assert trans_sock.links[0].from_node == aux_tex
+    assert trans_sock.links[0].from_socket.name == "Alpha"
+
     # Test with enable_vertex_ao = False
     mat_no_vao = build_atlas_chunk_material(
         chunk_id=98,

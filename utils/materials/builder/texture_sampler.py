@@ -211,6 +211,7 @@ class SampledAtlasChannels:
     orm_color: Optional[Any] = None
     orm_alpha: Optional[Any] = None
     aux_color: Optional[Any] = None
+    aux_alpha: Optional[Any] = None
 
 
 def sample_all_atlas_channels(
@@ -297,7 +298,7 @@ def sample_all_atlas_channels(
         blend_group_getter=ensure_animated_specular_blend,
     )
 
-    aux_out_color, _ = sample_specular_channel(
+    aux_out_color, aux_out_alpha = sample_specular_channel(
         nodes,
         links,
         frame_tex,
@@ -327,4 +328,5 @@ def sample_all_atlas_channels(
         orm_color=orm_out_color,
         orm_alpha=orm_out_alpha,
         aux_color=aux_out_color,
+        aux_alpha=aux_out_alpha,
     )

@@ -295,6 +295,7 @@ def build_atlas_chunk_material(
         orm_color=sampled.orm_color,
         orm_alpha=sampled.orm_alpha,
         aux_color=sampled.aux_color,
+        aux_alpha=sampled.aux_alpha,
         disable_subsurface=cfg["disable_subsurface"],
         emission_strength=cfg["emission_strength"],
         subsurface_method=cfg.get("subsurface_method", "BURLEY"),

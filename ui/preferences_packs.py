@@ -75,6 +75,17 @@ _INSTANCE_SCAN_STATE: str = "IDLE"  # "IDLE", "SCANNING", "DONE", "ERROR"
 _INSTANCE_SCAN_LOCK = threading.Lock()
 
 
+_ACTIVE_SCAN_THREAD: Optional[threading.Thread] = None
+
+
+def wait_for_background_scan(timeout: float = 5.0) -> None:
+    """Wait for any in-flight background instance scanning thread to finish."""
+    global _ACTIVE_SCAN_THREAD
+    thread = _ACTIVE_SCAN_THREAD
+    if thread is not None and thread.is_alive():
+        thread.join(timeout=timeout)
+
+
 def schedule_background_instance_scan(
     force: bool = False,
     custom_dirs: Optional[List[Path]] = None,
@@ -136,14 +147,6 @@ def schedule_background_instance_scan(
                     if best is None and _CACHED_DISCOVERED_INSTANCES:
                         best = _CACHED_DISCOVERED_INSTANCES[0]
 
-                    target_id = getattr(prefs, "detected_instance_id", "NONE")
-                    if target_id in ("NONE", "SCANNING") or not any(i.instance_id == target_id for i in _CACHED_DISCOVERED_INSTANCES):
-                        if best is not None:
-                            try:
-                                prefs.detected_instance_id = best.instance_id
-                            except Exception:
-                                pass
-
                     # Auto-populate resource_packs only if in zero-configuration state
                     existing_packs = getattr(prefs, "resource_packs", None) or []
                     has_any_valid = any(
@@ -158,6 +161,16 @@ def schedule_background_instance_scan(
                             invalidate_guard_cache()
                         except Exception:
                             pass
+                    else:
+                        target_id = getattr(prefs, "detected_instance_id", "NONE")
+                        if (target_id in ("NONE", "SCANNING") or not any(i.instance_id == target_id for i in _CACHED_DISCOVERED_INSTANCES)) and best is not None:
+                            set_is_updating_instance(True)
+                            try:
+                                prefs.detected_instance_id = best.instance_id
+                            except Exception:
+                                pass
+                            finally:
+                                set_is_updating_instance(False)
                 refresh_ui_and_menus(context)
                 if on_complete:
                     on_complete(_CACHED_DISCOVERED_INSTANCES)
@@ -170,7 +183,10 @@ def schedule_background_instance_scan(
         except Exception:
             pass
 
-    threading.Thread(target=_worker, name="MTK-InstanceScan", daemon=True).start()
+    global _ACTIVE_SCAN_THREAD
+    t = threading.Thread(target=_worker, name="MTK-InstanceScan", daemon=True)
+    _ACTIVE_SCAN_THREAD = t
+    t.start()
     return True
 
 
@@ -207,6 +223,62 @@ def get_detected_instances_enum_items(self, context) -> List[Tuple[str, str, str
         return [("NONE", f"No instances for {filter_kind}", "Try selecting 'All Launchers' or scanning", "INFO", 0)]
 
     return items
+
+
+_IS_UPDATING_INSTANCE: bool = False
+
+
+def is_updating_instance() -> bool:
+    """Return whether an instance assets application is currently underway."""
+    global _IS_UPDATING_INSTANCE
+    return _IS_UPDATING_INSTANCE
+
+
+def set_is_updating_instance(val: bool) -> None:
+    """Set the re-entrancy guard flag for instance assets application."""
+    global _IS_UPDATING_INSTANCE
+    _IS_UPDATING_INSTANCE = bool(val)
+
+
+def on_detected_instance_changed(self, context) -> None:
+    """
+    Update callback triggered when user selects a different game instance from the dropdown.
+    Automatically applies the selected instance's assets (vanilla JAR, mods, resource packs)
+    to the preferences and synchronizes with config.json.
+    """
+    global _IS_UPDATING_INSTANCE, _CACHED_DISCOVERED_INSTANCES
+    if _IS_UPDATING_INSTANCE:
+        return
+
+    target_id = getattr(self, "detected_instance_id", "NONE")
+    if target_id in ("NONE", "SCANNING", "") or not _CACHED_DISCOVERED_INSTANCES:
+        return
+
+    inst = next((i for i in _CACHED_DISCOVERED_INSTANCES if i.instance_id == target_id), None)
+    if inst is None:
+        try:
+            idx = int(target_id)
+            if 0 <= idx < len(_CACHED_DISCOVERED_INSTANCES):
+                inst = _CACHED_DISCOVERED_INSTANCES[idx]
+        except Exception:
+            pass
+
+    if inst is None:
+        return
+
+    from ..utils.launcher_scan import apply_instance_to_preferences
+    _IS_UPDATING_INSTANCE = True
+    try:
+        apply_instance_to_preferences(inst, self)
+        try:
+            from ..utils.assets.guard import invalidate_guard_cache
+            invalidate_guard_cache()
+        except Exception:
+            pass
+    finally:
+        _IS_UPDATING_INSTANCE = False
+
+    refresh_ui_and_menus(context)
 
 
 # ---------------------------------------------------------------------------
@@ -1007,61 +1079,15 @@ class MOZI_OT_pick_custom_instance_dir(bpy.types.Operator):
             if not any(i.instance_id == inst.instance_id for i in _CACHED_DISCOVERED_INSTANCES):
                 _CACHED_DISCOVERED_INSTANCES.append(inst)
 
-        self.report({'INFO'}, f"Added {len(found)} instance(s) from '{target.name}'")
-        refresh_ui_and_menus(context)
-        return {'FINISHED'}
-
-
-class MOZI_OT_import_instance_assets(bpy.types.Operator):
-    """Import selected game instance into the asset and prebake stack"""
-
-    bl_idname = "mozi.import_instance_assets"
-    bl_label = "Import Instance Assets"
-    bl_description = "Configure the fallback stack with the selected instance's Vanilla Client JAR, mods, and resource packs"
-    bl_options = {"REGISTER", "UNDO"}
-
-    def execute(self, context):
         prefs = _safe_get_prefs(context)
-        if prefs is None:
-            return {'CANCELLED'}
-
-        target_id = getattr(prefs, "detected_instance_id", "NONE")
-        if target_id in ("NONE", "SCANNING") or not _CACHED_DISCOVERED_INSTANCES:
-            self.report({'WARNING'}, "Please select a valid game instance first")
-            return {'CANCELLED'}
-
-        inst = next((i for i in _CACHED_DISCOVERED_INSTANCES if i.instance_id == target_id), None)
-        if inst is None:
-            # Fallback for numerical index if any
+        if prefs is not None and found:
             try:
-                idx = int(target_id)
-                if 0 <= idx < len(_CACHED_DISCOVERED_INSTANCES):
-                    inst = _CACHED_DISCOVERED_INSTANCES[idx]
+                prefs.detected_instance_id = found[0].instance_id
             except Exception:
                 pass
 
-        if inst is None:
-            self.report({'ERROR'}, "Selected game instance was not found. Please click 'Scan / Refresh'.")
-            return {'CANCELLED'}
-
-        from ..utils.launcher_scan import apply_instance_to_preferences
-
-        _set_is_probing(True)
-        try:
-            asset_mods, skipped_mods = apply_instance_to_preferences(inst, prefs)
-        finally:
-            _set_is_probing(False)
-
+        self.report({'INFO'}, f"Added {len(found)} instance(s) from '{target.name}'")
         refresh_ui_and_menus(context)
-
-        summary = f"Imported '{inst.name}': "
-        if inst.client_jar:
-            summary += "Vanilla Client JAR, "
-        summary += f"{len(asset_mods)} mods"
-        if skipped_mods:
-            summary += f" (filtered {len(skipped_mods)} functional mods)"
-        summary += f", {len(inst.resource_packs)} resource packs."
-        self.report({'INFO'}, summary)
         return {'FINISHED'}
 
 
@@ -1074,5 +1100,4 @@ PACKS_CLASSES = (
     MOZI_OT_pack_detect,
     MOZI_OT_scan_instances,
     MOZI_OT_pick_custom_instance_dir,
-    MOZI_OT_import_instance_assets,
 )

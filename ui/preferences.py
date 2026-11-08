@@ -45,7 +45,7 @@ from .preferences_packs import (
     MOZI_OT_pack_detect,
     MOZI_OT_scan_instances,
     MOZI_OT_pick_custom_instance_dir,
-    MOZI_OT_import_instance_assets,
+    on_detected_instance_changed,
     get_detected_instances_enum_items,
     _CACHED_DISCOVERED_INSTANCES,
     describe_detected_kind,
@@ -94,7 +94,6 @@ __all__ = [
     "MOZI_OT_pack_detect",
     "MOZI_OT_scan_instances",
     "MOZI_OT_pick_custom_instance_dir",
-    "MOZI_OT_import_instance_assets",
     "schedule_pending_pack_detection",
     "MOZI_OT_menu_add_item",
     "MOZI_OT_menu_remove_item",
@@ -232,6 +231,7 @@ class MOZI_AddonPreferences(bpy.types.AddonPreferences):
         name="Game Instance",
         description="Select a locally discovered Minecraft instance",
         items=get_detected_instances_enum_items,
+        update=on_detected_instance_changed,
     )
 
     initial_auto_setup_done: BoolProperty(
@@ -469,14 +469,6 @@ class MOZI_AddonPreferences(bpy.types.AddonPreferences):
                 w_row = info_sub.row(align=True)
                 w_row.alert = True
                 w_row.label(text=tr("Client JAR not found in instance. Run the game once or add manual JAR."), icon="ERROR")
-
-            act_row = inst_box.row(align=True)
-            act_row.scale_y = 1.2
-            act_row.operator(
-                "mozi.import_instance_assets",
-                text=f"{tr('Import & Apply Instance Assets')}: {curr_inst.name}",
-                icon="IMPORT",
-            )
         elif scan_state == "SCANNING":
             info_sub = inst_box.box()
             i_row = info_sub.row(align=True)

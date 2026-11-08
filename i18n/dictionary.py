@@ -348,7 +348,6 @@ translations_dict = {
         ('*', 'Instance'): '游戏实例',
         ('*', 'Isolated Instance'): '独立实例容器',
         ('*', 'Global Shared'): '全局共享模式',
-        ('*', 'Import & Apply Instance Assets'): '一键导入并应用实例资产',
         ('*', 'Scan System for Minecraft Instances'): '扫描系统中的 Minecraft 游戏实例',
         ('*', 'Asset Prebake & Cache:'): '资产预烘焙与缓存状态:',
         ('*', 'Advanced: Manual Resource Pack & JAR Stack'): '高级设置: 手动资源包与 JAR 列表',

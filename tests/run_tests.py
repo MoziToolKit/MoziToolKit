@@ -33,6 +33,16 @@ if _site_packages and _site_packages not in sys.path:
     # Append so Blender's built-in packages (e.g. bundled numpy) take precedence over host Python
     sys.path.append(_site_packages)
 
+# When running under Blender 4.2+ extension system, alias the registered extension
+# module namespace to "MoziToolKit" so test imports do not produce a split-brain duplicate module.
+for _ext_key in list(sys.modules.keys()):
+    if _ext_key.startswith("bl_ext.") and _ext_key.endswith(".MoziToolKit"):
+        for _k, _v in list(sys.modules.items()):
+            if _k == _ext_key or _k.startswith(_ext_key + "."):
+                _alias = "MoziToolKit" + _k[len(_ext_key):]
+                sys.modules.setdefault(_alias, _v)
+        break
+
 
 def main() -> int:
     try:

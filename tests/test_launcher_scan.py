@@ -334,6 +334,89 @@ class TestLauncherScan(unittest.TestCase):
                 elem.enabled = enabled
             prefs.initial_auto_setup_done = orig_done
 
+    def test_detected_instance_changed_auto_updates_packs(self):
+        from MoziToolKit.utils.system import get_prefs
+        from MoziToolKit.ui.preferences_packs import (
+            _CACHED_DISCOVERED_INSTANCES,
+            wait_for_background_scan,
+            on_detected_instance_changed,
+        )
+        import MoziToolKit.ui.preferences_packs as pref_packs
+
+        wait_for_background_scan()
+
+        jar_a = self.root / "client_1_20.jar"
+        jar_a.write_bytes(b"dummy_a")
+        jar_b = self.root / "client_1_21.jar"
+        jar_b.write_bytes(b"dummy_b")
+
+        pack_a = self.root / "pack_a.zip"
+        pack_a.write_bytes(b"dummy_pack")
+
+        inst_a = DiscoveredInstance(
+            "Instance A",
+            LAUNCHER_PRISM,
+            ISOLATION_ISOLATED,
+            self.root / "inst_a",
+            "1.20.1",
+            client_jar=jar_a,
+            resource_packs=[pack_a],
+        )
+
+        inst_b = DiscoveredInstance(
+            "Instance B",
+            LAUNCHER_OFFICIAL,
+            ISOLATION_SHARED,
+            self.root / "inst_b",
+            "1.21.1",
+            client_jar=jar_b,
+        )
+
+        prefs = get_prefs()
+        if prefs is None:
+            self.skipTest("AddonPreferences not available")
+
+        orig_packs = [(p.name, p.path, p.pack_type, p.pack_type_source, p.detected_kind, p.enabled) for p in prefs.resource_packs]
+        orig_cached = list(_CACHED_DISCOVERED_INSTANCES)
+        orig_state = pref_packs._INSTANCE_SCAN_STATE
+
+        pref_packs._INSTANCE_SCAN_STATE = "DONE"
+        _CACHED_DISCOVERED_INSTANCES.clear()
+        _CACHED_DISCOVERED_INSTANCES.extend([inst_a, inst_b])
+
+        try:
+            prefs.resource_packs.clear()
+
+            # 1. Select Instance A: should automatically populate with Instance A assets
+            prefs.detected_instance_id = inst_a.instance_id
+            if len(prefs.resource_packs) == 0:
+                on_detected_instance_changed(prefs, None)
+
+            self.assertEqual(len(prefs.resource_packs), 2)
+            self.assertTrue(any(p.path == str(jar_a) for p in prefs.resource_packs))
+            self.assertTrue(any(p.path == str(pack_a) for p in prefs.resource_packs))
+
+            # 2. Switch to Instance B: should immediately update list to Instance B assets
+            prefs.detected_instance_id = inst_b.instance_id
+            if not any(p.path == str(jar_b) for p in prefs.resource_packs):
+                on_detected_instance_changed(prefs, None)
+
+            self.assertEqual(len(prefs.resource_packs), 1)
+            self.assertEqual(prefs.resource_packs[0].path, str(jar_b))
+        finally:
+            pref_packs._INSTANCE_SCAN_STATE = orig_state
+            _CACHED_DISCOVERED_INSTANCES.clear()
+            _CACHED_DISCOVERED_INSTANCES.extend(orig_cached)
+            prefs.resource_packs.clear()
+            for name, path, p_type, p_source, d_kind, enabled in orig_packs:
+                elem = prefs.resource_packs.add()
+                elem.name = name
+                elem.path = path
+                elem.pack_type = p_type
+                elem.pack_type_source = p_source
+                elem.detected_kind = d_kind
+                elem.enabled = enabled
+
 
 if __name__ == "__main__":
     unittest.main()

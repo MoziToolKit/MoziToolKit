@@ -898,9 +898,18 @@ def apply_instance_to_preferences(inst: DiscoveredInstance, prefs: Any) -> Tuple
     prefs.resource_packs_index = 0
     if hasattr(prefs, "detected_instance_id"):
         try:
-            prefs.detected_instance_id = inst.instance_id
+            from ..ui.preferences_packs import is_updating_instance, set_is_updating_instance
+            was_updating = is_updating_instance()
+            set_is_updating_instance(True)
+            try:
+                prefs.detected_instance_id = inst.instance_id
+            finally:
+                set_is_updating_instance(was_updating)
         except Exception:
-            pass
+            try:
+                prefs.detected_instance_id = inst.instance_id
+            except Exception:
+                pass
 
     try:
         from ..ui.preferences_packs import get_config_manager

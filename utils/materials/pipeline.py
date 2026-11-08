@@ -31,10 +31,6 @@ from ...bridge.material import (
 )
 
 
-def __getattr__(name: str) -> Any:
-    if name == "HAS_LIBMTK":
-        return is_material_bridge_available()
-    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 from ...utils.assets import (
     get_cache_dir,

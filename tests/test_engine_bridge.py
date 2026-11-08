@@ -33,15 +33,15 @@ class TestEngineBridge:
         assert material.BiomeResolver is not None
         assert hasattr(material, "MaterialResolver")
         assert hasattr(material, "GridAtlasSpec")
-        assert material.HAS_LIBMTK is True
+        assert material.is_material_bridge_available() is True
 
         # Dynamic classes in mesh bridge
         assert hasattr(mesh, "MeshData")
         assert hasattr(mesh, "AttributeDomain")
 
-        # The undocumented `mtk_py` / `libmtk_py` module aliases are retired: every
+        # The undocumented `mtk_py` / `libmtk_py` / `HAS_LIBMTK` module aliases are retired: every
         # consumer resolves the native module through `bridge.engine`.
-        for module in (mesh, uv, subdivide, texture, extrude, assets):
+        for module in (material, mesh, uv, subdivide, texture, extrude, assets):
             for alias in ("mtk_py", "libmtk_py", "HAS_LIBMTK"):
                 assert not hasattr(module, alias), (
                     f"retired alias {module.__name__}.{alias} leaked back"

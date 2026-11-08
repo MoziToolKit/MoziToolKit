@@ -44,8 +44,6 @@ TINT_TYPE_DRY_FOLIAGE: int = getattr(mtk_inst, "TINT_TYPE_DRY_FOLIAGE", 5) if mt
 
 def __getattr__(name: str) -> Any:
     mtk = get_libmtk()
-    if name == "HAS_LIBMTK":
-        return is_material_bridge_available()
     if name in ("BiomeResolver", "MaterialResolver", "GridAtlasSpec", "BakedAtlas"):
         require_material_bridge()
         val = getattr(mtk, name, None)
@@ -488,7 +486,6 @@ def resolve_chunk_texture_sources(
 
 
 __all__ = [
-    "HAS_LIBMTK",
     "is_material_bridge_available",
     "require_material_bridge",
     "BiomeResolver",

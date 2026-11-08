@@ -21,10 +21,6 @@ from ....bridge.material import (
 from ....bridge.engine import has_libmtk
 
 
-def __getattr__(name: str) -> Any:
-    if name == "HAS_LIBMTK":
-        return has_libmtk()
-    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 from ..cleaner import clean_obsolete_mesh_attributes
 from ..constants import (

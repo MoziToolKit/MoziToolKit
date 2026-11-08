@@ -40,6 +40,10 @@ class VIEW3D_PT_mtk_dev_panel(bpy.types.Panel):
         if path_str:
             short_path = path_str if len(path_str) <= 38 else "..." + path_str[-35:]
             col.label(text=f"{tr('Path')}: {short_path}")
+        if status.get("is_dev"):
+            col.separator(factor=0.3)
+            reload_row = col.row(align=True)
+            reload_row.operator("mozi.dev_reload_binary", text=tr("Hot Reload Native Binary"), icon="FILE_REFRESH")
 
         # 2. Debug Scenarios
         scenarios_box = layout.box()
@@ -106,13 +110,44 @@ class VIEW3D_PT_mtk_dev_panel(bpy.types.Panel):
 
         # 4. Material & Asset Cache Status
         cache_box = layout.box()
-        cache_box.label(text=tr("Material & Asset Cache"), icon="FILE_CACHE")
+        cache_header = cache_box.row(align=True)
+        cache_header.label(text=tr("Material & Asset Cache"), icon="FILE_CACHE")
+        cache_header.operator("mozi.refresh_cache_stats", text="", icon="FILE_REFRESH")
+
+        prefs = None
         try:
-            stats = bridge.get_cache_stats()
+            from ...utils.system.dependencies import get_prefs
+            prefs = get_prefs(context)
+        except Exception:
+            pass
+
+        try:
+            from ...utils.assets.guard import check_asset_cache_status
+            cache_status = check_asset_cache_status(prefs)
+        except Exception:
+            cache_status = "UNKNOWN"
+
+        try:
+            stats = bridge.get_cache_stats(prefs=prefs)
             c_col = cache_box.column(align=True)
+            status_icons = {
+                "READY": "CHECKMARK",
+                "MISSING": "INFO",
+                "STALE": "TIME",
+                "NO_PACKS": "ERROR",
+                "NO_VANILLA": "ERROR",
+            }
+            c_col.label(
+                text=f"{tr('Status')}: {cache_status}",
+                icon=status_icons.get(cache_status, "INFO"),
+            )
             files = stats.get('files_count', stats.get('total_files', 0))
             size = stats.get('size_formatted', '0 B')
             c_col.label(text=f"{tr('Files')}: {files} ({size})")
+            p = stats.get('path', '')
+            if p:
+                short_p = p if len(p) <= 38 else "..." + p[-35:]
+                c_col.label(text=f"{tr('Path')}: {short_p}")
         except Exception:
             cache_box.label(text=tr("Cache unavailable"))
 

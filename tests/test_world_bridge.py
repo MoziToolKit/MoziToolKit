@@ -58,17 +58,75 @@ class TestWorldBridgePipeline:
     def test_dev_api_diagnostics_and_benchmark(self):
         from _assets import require_assets
         require_assets()
-        from MoziToolKit.dev.api import get_diagnostics, run_mesher_benchmark
+        from MoziToolKit.dev.api import (
+            get_diagnostics,
+            get_cache_stats,
+            clear_material_cache,
+            clear_cache,
+            precompile_material_cache,
+            run_mesher_benchmark,
+        )
 
         diag = get_diagnostics()
         assert diag["available"] is True
         assert diag["debug_world_available"] is True
+        assert "cache" in diag
+        assert "cache_status" in diag
+
+        stats = get_cache_stats()
+        assert "files_count" in stats
+        assert "size_bytes" in stats
+        assert "size_formatted" in stats
+        assert "status" in stats
+
+        # Test clear cache via dev api
+        freed = clear_cache()
+        assert isinstance(freed, int)
+        stats_after_clear = get_cache_stats()
+        assert stats_after_clear["size_bytes"] == 0
+
+        # Test precompile cache via dev api
+        pre = precompile_material_cache()
+        assert pre.get("success", False) is True
+        stats_after_bake = get_cache_stats()
+        assert stats_after_bake["size_bytes"] > 0
+        assert stats_after_bake["status"] == "READY"
 
         bench = run_mesher_benchmark(iterations=1, with_models=False)
         assert bench["iterations"] == 1
         assert bench["quad_count"] > 0
         assert bench["avg_ms"] > 0
         assert bench["quads_per_second"] > 0
+
+    def test_dev_panel_ui_draw(self):
+        """Verifies that the MTK Dev Panel draws without exceptions."""
+        import bpy
+        from types import SimpleNamespace
+        from MoziToolKit.dev.ui.panel import VIEW3D_PT_mtk_dev_panel
+
+        class DummyLayout:
+            def box(self):
+                return self
+
+            def row(self, align=False):
+                return self
+
+            def column(self, align=False):
+                return self
+
+            def label(self, text="", icon="NONE"):
+                pass
+
+            def operator(self, op, text="", icon="NONE"):
+                return SimpleNamespace()
+
+            def separator(self, factor=1.0):
+                pass
+
+            scale_y = 1.0
+
+        mock_panel = SimpleNamespace(layout=DummyLayout())
+        VIEW3D_PT_mtk_dev_panel.draw(mock_panel, bpy.context)
 
     def test_world_bridge_has_no_sync_imports(self):
         """Verify that bridge.world AST imports no networking or LiveSync modules."""

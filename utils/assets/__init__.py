@@ -11,6 +11,7 @@ from .cache_utils import (
     clear_cache,
     get_cache_dir,
     get_cache_stats,
+    invalidate_cache_stats_memo,
     open_cache_folder,
 )
 from .guard import (
@@ -34,6 +35,7 @@ __all__ = [
     # Cache utils
     "get_cache_dir",
     "get_cache_stats",
+    "invalidate_cache_stats_memo",
     "clear_cache",
     "open_cache_folder",
     # Guards

@@ -97,6 +97,18 @@ def invalidate_asset_cache_memory() -> None:
     except Exception:
         pass
 
+    try:
+        from ...utils.assets.cache_utils import invalidate_cache_stats_memo
+        invalidate_cache_stats_memo()
+    except Exception:
+        pass
+
+    try:
+        from ..debug import clear_debug_world_cache
+        clear_debug_world_cache()
+    except Exception:
+        pass
+
 
 def get_active_cache_package_path(prefs=None, compute_fingerprint: bool = True) -> Optional[Path]:
     """

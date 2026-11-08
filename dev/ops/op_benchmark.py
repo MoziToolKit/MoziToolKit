@@ -70,3 +70,21 @@ class MOZI_OT_dev_clear_profile(bpy.types.Operator):
         except Exception:
             pass
         return {"FINISHED"}
+
+
+class MOZI_OT_dev_reload_binary(bpy.types.Operator):
+    """Hot-reload latest compiled Rust binary (.so/.dylib) into running Blender process"""
+
+    bl_idname = "mozi.dev_reload_binary"
+    bl_label = "Hot Reload Native Binary"
+    bl_options = {"INTERNAL"}
+
+    def execute(self, context):
+        from ..loader import reload_dev_binary
+        success = reload_dev_binary()
+        if success:
+            self.report({"INFO"}, "Successfully hot-reloaded native engine binary.")
+            return {"FINISHED"}
+        else:
+            self.report({"WARNING"}, "No newly compiled Rust binary found to hot-reload.")
+            return {"CANCELLED"}

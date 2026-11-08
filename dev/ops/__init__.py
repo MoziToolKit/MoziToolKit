@@ -4,12 +4,17 @@ MoziToolKit Dev Operators Package.
 
 import bpy
 from .op_debug_world import MOZI_OT_dev_load_debug_world
-from .op_benchmark import MOZI_OT_dev_mesh_benchmark, MOZI_OT_dev_clear_profile
+from .op_benchmark import (
+    MOZI_OT_dev_clear_profile,
+    MOZI_OT_dev_mesh_benchmark,
+    MOZI_OT_dev_reload_binary,
+)
 
 CLASSES = [
     MOZI_OT_dev_load_debug_world,
     MOZI_OT_dev_mesh_benchmark,
     MOZI_OT_dev_clear_profile,
+    MOZI_OT_dev_reload_binary,
 ]
 
 

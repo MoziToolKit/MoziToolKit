@@ -349,6 +349,8 @@ translations_dict = {
         ('*', 'Grove'): '雪林',
         ('*', 'Has Selection'): '存在有效选区',
         ('*', 'Hide Voxel Cloud (Apply Mask)'): '隐藏体素点云 (应用遮罩)',
+        ('*', 'Hot Reload Native Binary'): '热重载原生库',
+        ('Operator', 'Hot Reload Native Binary'): '热重载原生库',
         ('*', 'How to modify the current edge selection'): '如何更新当前的边选择状态',
         ('*', 'How to modify the current face selection'): '如何更新当前面的选择状态',
         ('*', 'Ice-Cube'): 'Ice-Cube',

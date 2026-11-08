@@ -72,6 +72,13 @@ def get_cache_dir(prefs=None) -> Path:
     return cache_dir
 
 
+def invalidate_cache_stats_memo() -> None:
+    """Invalidates the memoized cache statistics so the next read re-scans the directory."""
+    global _cached_cache_stats, _cached_cache_stats_path
+    _cached_cache_stats = None
+    _cached_cache_stats_path = None
+
+
 def get_cache_stats(prefs=None, force_refresh: bool = False) -> Dict[str, Any]:
     """
     Returns human-readable and byte statistics for all cached packages on disk.
@@ -192,6 +199,7 @@ def open_cache_folder(prefs=None) -> None:
 __all__ = [
     "get_cache_dir",
     "get_cache_stats",
+    "invalidate_cache_stats_memo",
     "clear_cache",
     "open_cache_folder",
 ]

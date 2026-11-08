@@ -79,18 +79,22 @@ class TestWorldBridgePipeline:
         assert "size_formatted" in stats
         assert "status" in stats
 
-        # Test clear cache via dev api
-        freed = clear_cache()
-        assert isinstance(freed, int)
-        stats_after_clear = get_cache_stats()
-        assert stats_after_clear["size_bytes"] == 0
+        # Test clear and precompile cache via dev api in an isolated sandbox
+        import tempfile
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sandbox_cache = Path(tmp_dir)
+            with patch.dict(os.environ, {"MOZI_CACHE_DIR": str(sandbox_cache)}):
+                freed = clear_cache()
+                assert isinstance(freed, int)
+                stats_after_clear = get_cache_stats()
+                assert stats_after_clear["size_bytes"] == 0
 
-        # Test precompile cache via dev api
-        pre = precompile_material_cache()
-        assert pre.get("success", False) is True
-        stats_after_bake = get_cache_stats()
-        assert stats_after_bake["size_bytes"] > 0
-        assert stats_after_bake["status"] == "READY"
+                pre = precompile_material_cache()
+                assert pre.get("success", False) is True
+                stats_after_bake = get_cache_stats()
+                assert stats_after_bake["size_bytes"] > 0
+                assert stats_after_bake["status"] == "READY"
 
         bench = run_mesher_benchmark(iterations=1, with_models=False)
         assert bench["iterations"] == 1

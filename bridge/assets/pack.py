@@ -60,6 +60,15 @@ def get_configured_pack_stack(prefs=None) -> Optional[Any]:
                 if raw_path and Path(raw_path).exists():
                     paths_to_check.append(str(Path(raw_path).resolve()))
 
+    env_fallback_path = None
+    if not paths_to_check:
+        for env_var in ("MTK_TEST_JAR", "MC_JAR", "MC_DIR", "MC_ASSETS_DIR", "MTK_TEST_ASSETS"):
+            val = os.environ.get(env_var)
+            if val and Path(val).exists():
+                env_fallback_path = str(Path(val).resolve())
+                paths_to_check.append(env_fallback_path)
+                break
+
     sig = tuple((p, os.path.getmtime(p) if os.path.exists(p) else 0.0) for p in paths_to_check)
     if _CACHED_PACK_STACK is not None and _CACHED_STACK_SIGNATURE == sig:
         return _CACHED_PACK_STACK
@@ -99,6 +108,14 @@ def get_configured_pack_stack(prefs=None) -> Optional[Any]:
                 stack.add_directory_pack(str(p.resolve()), name)
             elif p.is_file() and p.suffix.lower() in {".zip", ".jar"}:
                 stack.add_zip_pack(str(p.resolve()))
+
+    # 3. Fallback from environment if no preference packs configured
+    if env_fallback_path and not stack.get_pack_count():
+        p = Path(env_fallback_path)
+        if p.is_dir():
+            stack.add_directory_pack(str(p.resolve()), p.stem)
+        elif p.is_file() and p.suffix.lower() in {".zip", ".jar"}:
+            stack.add_zip_pack(str(p.resolve()))
 
     _CACHED_PACK_STACK = stack
     _CACHED_STACK_SIGNATURE = sig

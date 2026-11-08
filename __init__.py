@@ -57,6 +57,13 @@ def register():
     operators.register()
     ui.register()
 
+    # 4. Out-of-the-box non-blocking background auto-discovery
+    try:
+        from .utils.launcher_scan import schedule_background_auto_setup
+        schedule_background_auto_setup()
+    except Exception:
+        pass
+
 
 def unregister():
     ui.unregister()

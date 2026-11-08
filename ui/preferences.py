@@ -234,6 +234,13 @@ class MOZI_AddonPreferences(bpy.types.AddonPreferences):
         items=get_detected_instances_enum_items,
     )
 
+    initial_auto_setup_done: BoolProperty(
+        name="Initial Auto Setup Done",
+        description="Tracks whether zero-configuration initial discovery has executed",
+        default=False,
+        options={'HIDDEN'},
+    )
+
     material_mode: EnumProperty(
         name="Material Mode",
         description="Choose how imported materials are structured and generated",

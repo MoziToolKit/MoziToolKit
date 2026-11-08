@@ -27,7 +27,11 @@ from MoziToolKit.utils.launcher_scan import (
     LOADER_NEOFORGE,
     LOADER_VANILLA,
     DiscoveredInstance,
+    apply_instance_to_preferences,
+    auto_configure_initial_asset_stack,
     filter_functional_mods,
+    find_latest_vanilla_instance,
+    parse_minecraft_version,
     scan_all_instances,
     scan_curseforge_instances,
     scan_custom_directory,
@@ -238,6 +242,83 @@ class TestLauncherScan(unittest.TestCase):
                 self.assertTrue(inst.name)
                 self.assertTrue(inst.launcher_kind)
                 self.assertIn(inst.isolation_mode, (ISOLATION_ISOLATED, ISOLATION_SHARED))
+
+    def test_parse_minecraft_version(self):
+        self.assertEqual(parse_minecraft_version("1.21.4"), (1, 21, 4))
+        self.assertEqual(parse_minecraft_version("1.21"), (1, 21, 0))
+        self.assertEqual(parse_minecraft_version("1.7.10"), (1, 7, 10))
+        self.assertEqual(parse_minecraft_version("24w45a"), (1, 24, 45))
+        self.assertEqual(parse_minecraft_version("unknown_custom"), (0, 0, 0))
+
+        # Comparison order
+        versions = ["1.12.2", "1.21.4", "1.7.10", "1.20.4", "1.21.1", "1.21"]
+        sorted_ver = sorted(versions, key=parse_minecraft_version)
+        self.assertEqual(sorted_ver, ["1.7.10", "1.12.2", "1.20.4", "1.21", "1.21.1", "1.21.4"])
+
+    def test_find_latest_vanilla_instance(self):
+        dummy_jar = self.root / "client.jar"
+        dummy_jar.write_bytes(b"dummy")
+
+        i1 = DiscoveredInstance("Old", LAUNCHER_OFFICIAL, ISOLATION_SHARED, self.root, "1.12.2", client_jar=dummy_jar)
+        i2 = DiscoveredInstance("Newer", LAUNCHER_PRISM, ISOLATION_ISOLATED, self.root, "1.20.1", client_jar=dummy_jar)
+        i3 = DiscoveredInstance("LatestNoJar", LAUNCHER_MODRINTH, ISOLATION_ISOLATED, self.root, "1.21.4", client_jar=None)
+        i4 = DiscoveredInstance("LatestValid", LAUNCHER_OFFICIAL, ISOLATION_SHARED, self.root, "1.21.1", client_jar=dummy_jar)
+
+        # Must ignore i3 because it lacks client_jar, and pick i4 (1.21.1) over i2 (1.20.1) and i1 (1.12.2)
+        best = find_latest_vanilla_instance([i1, i2, i3, i4])
+        self.assertIsNotNone(best)
+        self.assertEqual(best.name, "LatestValid")
+        self.assertEqual(best.minecraft_version, "1.21.1")
+
+    def test_auto_configure_initial_asset_stack(self):
+        from unittest.mock import patch
+        from MoziToolKit.utils.system import get_prefs
+
+        dummy_jar = self.root / "client_latest.jar"
+        dummy_jar.write_bytes(b"dummy")
+
+        candidate = DiscoveredInstance(
+            "AutoDetected",
+            LAUNCHER_PRISM,
+            ISOLATION_ISOLATED,
+            self.root,
+            "1.21.4",
+            client_jar=dummy_jar,
+        )
+
+        prefs = get_prefs()
+        if prefs is None:
+            self.skipTest("AddonPreferences not available")
+
+        # Backup existing prefs
+        orig_packs = [(p.name, p.path, p.pack_type, p.pack_type_source, p.detected_kind, p.enabled) for p in prefs.resource_packs]
+        orig_done = prefs.initial_auto_setup_done
+        try:
+            prefs.resource_packs.clear()
+            prefs.initial_auto_setup_done = False
+            with patch("MoziToolKit.utils.launcher_scan.scan_all_instances", return_value=[candidate]):
+                best = auto_configure_initial_asset_stack(prefs)
+                self.assertEqual(best, candidate)
+                self.assertTrue(prefs.initial_auto_setup_done)
+                self.assertEqual(len(prefs.resource_packs), 1)
+                self.assertEqual(prefs.resource_packs[0].pack_type, "VANILLA")
+                self.assertEqual(prefs.resource_packs[0].path, str(dummy_jar))
+
+                # Second run: must skip because initial_auto_setup_done is True
+                best2 = auto_configure_initial_asset_stack(prefs)
+                self.assertIsNone(best2)
+        finally:
+            # Restore original
+            prefs.resource_packs.clear()
+            for name, path, p_type, p_source, d_kind, enabled in orig_packs:
+                elem = prefs.resource_packs.add()
+                elem.name = name
+                elem.path = path
+                elem.pack_type = p_type
+                elem.pack_type_source = p_source
+                elem.detected_kind = d_kind
+                elem.enabled = enabled
+            prefs.initial_auto_setup_done = orig_done
 
 
 if __name__ == "__main__":

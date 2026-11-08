@@ -190,6 +190,16 @@ def can_execute_asset_pipeline(prefs=None) -> Tuple[bool, str]:
     When False, reason_message provides a clear, user-facing explanation suitable for UI tooltips or reports.
     """
     if not has_valid_vanilla_pack(prefs):
+        # Zero-configuration auto discovery fallback
+        try:
+            from ..launcher_scan import auto_configure_initial_asset_stack
+            if auto_configure_initial_asset_stack(prefs) is not None:
+                invalidate_guard_cache()
+                if has_valid_vanilla_pack(prefs):
+                    return True, ""
+        except Exception:
+            pass
+
         status = check_asset_cache_status(prefs)
         if status == "NO_PACKS":
             return False, tr("No Minecraft resource packs configured. Please configure a Vanilla Client JAR in Preferences.")
@@ -317,6 +327,16 @@ def run_task_with_asset_guard(
         target_kwargs = {}
 
     status = asset_context.get("status") if asset_context else check_asset_cache_status(prefs)
+
+    if status in ("NO_PACKS", "NO_VANILLA"):
+        # Zero-configuration auto discovery fallback
+        try:
+            from ..launcher_scan import auto_configure_initial_asset_stack
+            if auto_configure_initial_asset_stack(prefs) is not None:
+                invalidate_guard_cache()
+                status = check_asset_cache_status(prefs)
+        except Exception:
+            pass
 
     if status in ("NO_PACKS", "NO_VANILLA"):
         raise RuntimeError(

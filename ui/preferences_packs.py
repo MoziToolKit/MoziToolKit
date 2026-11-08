@@ -930,52 +930,14 @@ class MOZI_OT_import_instance_assets(bpy.types.Operator):
             self.report({'ERROR'}, "Selected game instance was not found. Please click 'Scan / Refresh'.")
             return {'CANCELLED'}
 
-        from ..utils.launcher_scan import filter_functional_mods
-
-        # Filter out functional mods on-demand during ingestion
-        asset_mods, skipped_mods = filter_functional_mods(inst.mods)
+        from ..utils.launcher_scan import apply_instance_to_preferences
 
         _set_is_probing(True)
         try:
-            coll = prefs.resource_packs
-            coll.clear()
-
-            # 1. Vanilla base JAR
-            if inst.client_jar and inst.client_jar.is_file():
-                elem = coll.add()
-                elem.name = f"Minecraft {inst.minecraft_version} Vanilla Client"
-                elem.path = str(inst.client_jar)
-                elem.pack_type = "VANILLA"
-                elem.pack_type_source = TYPE_SOURCE_MANUAL
-                elem.detected_kind = KIND_VANILLA_CLIENT
-                elem.enabled = True
-
-            # 2. Mod JARs (filtered for renderable block assets)
-            for mod_path in asset_mods:
-                elem = coll.add()
-                elem.name = mod_path.stem
-                elem.path = str(mod_path)
-                elem.pack_type = "MOD_JAR"
-                elem.pack_type_source = TYPE_SOURCE_MANUAL
-                elem.detected_kind = KIND_MOD
-                elem.enabled = True
-
-            # 3. Resource Packs
-            for pack_path in inst.resource_packs:
-                elem = coll.add()
-                elem.name = pack_path.stem
-                elem.path = str(pack_path)
-                elem.pack_type = "RESOURCE_PACK"
-                elem.pack_type_source = TYPE_SOURCE_MANUAL
-                elem.detected_kind = KIND_RESOURCE_PACK
-                elem.enabled = True
+            asset_mods, skipped_mods = apply_instance_to_preferences(inst, prefs)
         finally:
             _set_is_probing(False)
 
-        reorder_resource_packs_by_tier(prefs)
-        prefs.resource_packs_index = 0
-
-        get_config_manager().sync_from_preferences(prefs)
         refresh_ui_and_menus(context)
 
         summary = f"Imported '{inst.name}': "

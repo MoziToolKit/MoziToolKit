@@ -218,7 +218,18 @@ def ensure_world_materials(
     if active_atlas is None:
         atlas_data = load_atlas_mapping_from_cache(prefs)
 
-    if (active_atlas is not None or atlas_data is not None or (atlas_mapping_path is not None and atlas_mapping_path.exists())) and build_atlas_chunk_material is not None:
+    has_dynamic_only = (
+        target_chunk_ids is not None
+        and len(target_chunk_ids) > 0
+        and all(DYNAMIC_CHUNK_START <= cid <= DYNAMIC_CHUNK_END for cid in target_chunk_ids)
+    )
+
+    if (
+        has_dynamic_only
+        or active_atlas is not None
+        or atlas_data is not None
+        or (atlas_mapping_path is not None and atlas_mapping_path.exists())
+    ) and build_atlas_chunk_material is not None:
         try:
             # Query chunk metadata from BakedAtlas (Rust SSOT) or fallback to mapping JSON
             chunk_meta_map: dict[int, dict[str, Any]] = {}

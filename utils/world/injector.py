@@ -88,15 +88,17 @@ def apply_voxel_mesh_to_blender(
 
     # 3. Bind only used Atlas chunk materials & shaders
     t0_mat = time.perf_counter()
-    used_chunk_ids = mesh_data.used_materials() if hasattr(mesh_data, "used_materials") else None
-    _ensure_mat = ensure_materials_func or ensure_world_materials
-    _ensure_mat(
-        obj,
-        prefs=prefs,
-        atlas=atlas,
-        used_chunk_ids=used_chunk_ids,
-        dynamic_entity_atlases=dynamic_entity_atlases,
-    )
+    used_chunk_ids = None
+    if material_mode != "STANDALONE":
+        used_chunk_ids = mesh_data.used_materials() if hasattr(mesh_data, "used_materials") else None
+        _ensure_mat = ensure_materials_func or ensure_world_materials
+        _ensure_mat(
+            obj,
+            prefs=prefs,
+            atlas=atlas,
+            used_chunk_ids=used_chunk_ids,
+            dynamic_entity_atlases=dynamic_entity_atlases,
+        )
     mat_ms = (time.perf_counter() - t0_mat) * 1000.0
 
     # Voxel meshes always bake true 3D biomes; tag them so the biome panel's

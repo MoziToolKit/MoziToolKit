@@ -43,6 +43,11 @@ from .preferences_packs import (
     MOZI_OT_pack_remove,
     MOZI_OT_pack_move,
     MOZI_OT_pack_detect,
+    MOZI_OT_scan_instances,
+    MOZI_OT_pick_custom_instance_dir,
+    MOZI_OT_import_instance_assets,
+    get_detected_instances_enum_items,
+    _CACHED_DISCOVERED_INSTANCES,
     describe_detected_kind,
     detected_kind_warning,
     schedule_pending_pack_detection,
@@ -87,6 +92,9 @@ __all__ = [
     "MOZI_OT_pack_remove",
     "MOZI_OT_pack_move",
     "MOZI_OT_pack_detect",
+    "MOZI_OT_scan_instances",
+    "MOZI_OT_pick_custom_instance_dir",
+    "MOZI_OT_import_instance_assets",
     "schedule_pending_pack_detection",
     "MOZI_OT_menu_add_item",
     "MOZI_OT_menu_remove_item",
@@ -199,6 +207,32 @@ class MOZI_AddonPreferences(bpy.types.AddonPreferences):
 
     resource_packs: CollectionProperty(type=MOZI_PG_resource_pack_entry)
     resource_packs_index: IntProperty(default=0)
+
+    show_advanced_packs: BoolProperty(
+        name="Advanced Resource Pack & Stack Settings",
+        description="Expand or collapse the manual resource pack list, prioritization, and detailed controls",
+        default=False,
+    )
+
+    detected_instances_launcher_filter: EnumProperty(
+        name="Launcher Filter",
+        description="Filter detected instances by launcher type",
+        items=[
+            ("ALL", "All Launchers", "Show instances from all detected launchers"),
+            ("PRISM", "Prism Launcher", "Show Prism Launcher instances"),
+            ("OFFICIAL", "Official Launcher", "Show official Minecraft / HMCL instances"),
+            ("MODRINTH", "Modrinth App", "Show Modrinth App profiles"),
+            ("CURSEFORGE", "CurseForge", "Show CurseForge instances"),
+            ("CUSTOM", "Custom / External", "Show instances imported from custom directories"),
+        ],
+        default="ALL",
+    )
+
+    detected_instance_id: EnumProperty(
+        name="Game Instance",
+        description="Select a locally discovered Minecraft instance",
+        items=get_detected_instances_enum_items,
+    )
 
     material_mode: EnumProperty(
         name="Material Mode",
@@ -370,106 +404,74 @@ class MOZI_AddonPreferences(bpy.types.AddonPreferences):
 
     def draw_resource_packs(self, layout, context):
         from ..i18n import tr
-        # Information Banner
-        info_box = layout.box()
-        banner_row = info_box.row(align=True)
-        banner_row.label(text=tr("Resource Pack & Base JAR Stack (Prioritized Resolution):"), icon="PACKAGE")
-        info_col = info_box.column(align=True)
-        info_col.scale_y = 0.85
-        info_col.label(text=tr("Packs are checked from top to bottom. Higher entries override lower entries."))
-        info_col.label(text=tr("Add custom/PBR packs at top, Mod JARs in middle, and Vanilla Minecraft JAR at bottom as base fallback."))
 
-        if not has_valid_vanilla_pack(self):
-            warn_box = layout.box()
-            warn_box.alert = True
-            w_row = warn_box.row(align=True)
-            w_row.label(text=tr("Minecraft Vanilla Client JAR Required!"), icon="ERROR")
-            w_col = warn_box.column(align=True)
-            w_col.scale_y = 0.85
-            w_col.label(text=tr("Please add and enable a Minecraft Vanilla Client JAR (.jar) at the bottom tier."))
-            w_col.label(text=tr("Without a vanilla client JAR, meshing, material replacement, and precompilation are disabled."))
+        # -------------------------------------------------------------------
+        # 1. Primary Streamlined Instance Selector (核心启动器与实例选择)
+        # -------------------------------------------------------------------
+        inst_box = layout.box()
+        h_row = inst_box.row(align=True)
+        h_row.label(text=tr("Game Instance & Auto-Ingestion:"), icon="CONSOLE")
+        h_row.operator("mozi.scan_instances", text=tr("Scan / Refresh"), icon="FILE_REFRESH")
+        h_row.operator("mozi.pick_custom_instance_dir", text=tr("Add Folder..."), icon="FILE_FOLDER")
+
+        sel_col = inst_box.column(align=False)
+        r_filter = sel_col.row(align=True)
+        r_filter.prop(self, "detected_instances_launcher_filter", text=tr("Launcher"))
+        r_filter.prop(self, "detected_instance_id", text=tr("Instance"))
+
+        # Inspect current selected instance details
+        curr_inst = None
+        try:
+            from .preferences_packs import _CACHED_DISCOVERED_INSTANCES
+            target_id = getattr(self, "detected_instance_id", "NONE")
+            if target_id != "NONE" and _CACHED_DISCOVERED_INSTANCES:
+                curr_inst = next((i for i in _CACHED_DISCOVERED_INSTANCES if i.instance_id == target_id), None)
+                if curr_inst is None:
+                    try:
+                        idx = int(target_id)
+                        if 0 <= idx < len(_CACHED_DISCOVERED_INSTANCES):
+                            curr_inst = _CACHED_DISCOVERED_INSTANCES[idx]
+                    except Exception:
+                        pass
+        except Exception:
+            curr_inst = None
+
+        if curr_inst:
+            info_sub = inst_box.box()
+            i_row = info_sub.row(align=True)
+            iso_label = tr("Isolated Instance") if curr_inst.is_isolated else tr("Global Shared")
+            mods_info = f"{tr('Mods')}: {len(curr_inst.mods)}"
+            if getattr(curr_inst, "skipped_functional_mods", None):
+                mods_info += f" ({tr('Filtered')}: {len(curr_inst.skipped_functional_mods)})"
+            i_row.label(
+                text=f"{tr('Version')}: {curr_inst.minecraft_version} ({curr_inst.loader}) | {iso_label} | {mods_info} | {tr('Packs')}: {len(curr_inst.resource_packs)}",
+                icon="CHECKMARK" if curr_inst.has_client_jar else "INFO",
+            )
+            if not curr_inst.has_client_jar:
+                w_row = info_sub.row(align=True)
+                w_row.alert = True
+                w_row.label(text=tr("Client JAR not found in instance. Run the game once or add manual JAR."), icon="ERROR")
+
+            act_row = inst_box.row(align=True)
+            act_row.scale_y = 1.2
+            act_row.operator(
+                "mozi.import_instance_assets",
+                text=f"{tr('Import & Apply Instance Assets')}: {curr_inst.name}",
+                icon="IMPORT",
+            )
+        else:
+            act_row = inst_box.row(align=True)
+            act_row.scale_y = 1.2
+            act_row.operator("mozi.scan_instances", text=tr("Scan System for Minecraft Instances"), icon="VIEWZOOM")
 
         layout.separator()
 
-        # Split Layout: UIList + Up/Down/Add/Remove Tools
-        list_row = layout.row(align=False)
-
-        # Left List Box
-        list_box = list_row.box()
-        list_box.template_list(
-            "MOZI_UL_resource_packs_list",
-            "",
-            self,
-            "resource_packs",
-            self,
-            "resource_packs_index",
-            rows=6,
-        )
-
-        # Right Action Buttons Column
-        idx = self.resource_packs_index
-        can_move_up = False
-        can_move_down = False
-        if 0 <= idx < len(self.resource_packs):
-            curr_tier = self.resource_packs[idx].pack_type
-            if idx > 0 and self.resource_packs[idx - 1].pack_type == curr_tier:
-                can_move_up = True
-            if idx < len(self.resource_packs) - 1 and self.resource_packs[idx + 1].pack_type == curr_tier:
-                can_move_down = True
-
-        btn_col = list_row.column(align=True)
-        btn_col.operator("mozi.pack_add", text="", icon="ADD")
-        btn_col.operator("mozi.pack_remove", text="", icon="REMOVE")
-        btn_col.separator(factor=2)
-
-        up_col = btn_col.column(align=True)
-        up_col.enabled = can_move_up
-        op_up = up_col.operator("mozi.pack_move", text="", icon="TRIA_UP")
-        op_up.direction = "UP"
-
-        down_col = btn_col.column(align=True)
-        down_col.enabled = can_move_down
-        op_down = down_col.operator("mozi.pack_move", text="", icon="TRIA_DOWN")
-        op_down.direction = "DOWN"
-
-        # Selected Pack Detail & Properties Box
-        idx = self.resource_packs_index
-        if 0 <= idx < len(self.resource_packs):
-            item = self.resource_packs[idx]
-            detail_box = layout.box()
-            d_header = detail_box.row(align=True)
-            d_header.label(text=f"{tr('Pack Details')}: {item.name}", icon="PREFERENCES")
-            d_header.prop(item, "enabled", text=tr("Enabled"))
-
-            d_col = detail_box.column(align=False)
-            row1 = d_col.row(align=True)
-            row1.prop(item, "name", text=tr("Name"))
-            row1.prop(item, "pack_type", text=tr("Type"))
-
-            row2 = d_col.row(align=True)
-            row2.prop(item, "path", text=tr("Path"))
-
-            p_val = item.path.strip()
-            if not p_val:
-                st_row = d_col.row(align=True)
-                st_row.alert = True
-                st_row.label(text=tr("Path is empty. Please select a .zip, .jar, or assets folder."), icon="INFO")
-            elif not Path(p_val).exists():
-                st_row = d_col.row(align=True)
-                st_row.alert = True
-                st_row.label(text=f"{tr('File not found')}: '{p_val}'", icon="ERROR")
-
-            kind_warning = detected_kind_warning(item)
-            if kind_warning:
-                warn_row = d_col.row(align=True)
-                warn_row.alert = True
-                warn_row.label(text=kind_warning, icon="ERROR")
-
-        # Stack cache maintenance (material replacement defaults live in the Material tab).
-        layout.separator()
+        # -------------------------------------------------------------------
+        # 2. Stack Precompilation & Cache (紧凑轻量缓存状态与一键烘焙)
+        # -------------------------------------------------------------------
         cache_box = layout.box()
         c_head = cache_box.row(align=True)
-        c_head.label(text=tr("Stack Precompilation & Cache:"), icon="FILE_CACHE")
+        c_head.label(text=tr("Asset Prebake & Cache:"), icon="FILE_CACHE")
 
         try:
             from ..utils.assets import check_asset_cache_status
@@ -496,6 +498,98 @@ class MOZI_AddonPreferences(bpy.types.AddonPreferences):
         cache_row = cache_box.row(align=True)
         cache_row.operator("mozi.precompile_cache", text=tr("Precompile / Rebuild Stack Caches"), icon="FILE_REFRESH")
         cache_row.operator("mozi.open_cache_folder", text=tr("Open Cache Folder"), icon="FOLDER_REDIRECT")
+        cache_row.operator("mozi.clear_cache", text=tr("Clear Cache"), icon="TRASH")
+
+        layout.separator()
+
+        # -------------------------------------------------------------------
+        # 3. Advanced Collapsible Manual Stack (收敛折叠原有复杂菜单)
+        # -------------------------------------------------------------------
+        adv_box = layout.box()
+        adv_row = adv_box.row(align=True)
+        is_advanced_open = bool(getattr(self, "show_advanced_packs", False))
+        icon_tria = "TRIA_DOWN" if is_advanced_open else "TRIA_RIGHT"
+        adv_row.prop(self, "show_advanced_packs", icon=icon_tria, text=tr("Advanced: Manual Resource Pack & JAR Stack"))
+
+        if is_advanced_open:
+            # Detailed controls only shown when explicitly expanded
+            if not has_valid_vanilla_pack(self):
+                warn_box = adv_box.box()
+                warn_box.alert = True
+                w_row = warn_box.row(align=True)
+                w_row.label(text=tr("Minecraft Vanilla Client JAR Required!"), icon="ERROR")
+                w_col = warn_box.column(align=True)
+                w_col.scale_y = 0.85
+                w_col.label(text=tr("Please add and enable a Minecraft Vanilla Client JAR (.jar) at the bottom tier."))
+
+            list_row = adv_box.row(align=False)
+            list_b = list_row.box()
+            list_b.template_list(
+                "MOZI_UL_resource_packs_list",
+                "",
+                self,
+                "resource_packs",
+                self,
+                "resource_packs_index",
+                rows=5,
+            )
+
+            idx = self.resource_packs_index
+            can_move_up = False
+            can_move_down = False
+            if 0 <= idx < len(self.resource_packs):
+                curr_tier = self.resource_packs[idx].pack_type
+                if idx > 0 and self.resource_packs[idx - 1].pack_type == curr_tier:
+                    can_move_up = True
+                if idx < len(self.resource_packs) - 1 and self.resource_packs[idx + 1].pack_type == curr_tier:
+                    can_move_down = True
+
+            btn_col = list_row.column(align=True)
+            btn_col.operator("mozi.pack_add", text="", icon="ADD")
+            btn_col.operator("mozi.pack_remove", text="", icon="REMOVE")
+            btn_col.separator(factor=2)
+
+            up_col = btn_col.column(align=True)
+            up_col.enabled = can_move_up
+            op_up = up_col.operator("mozi.pack_move", text="", icon="TRIA_UP")
+            op_up.direction = "UP"
+
+            down_col = btn_col.column(align=True)
+            down_col.enabled = can_move_down
+            op_down = down_col.operator("mozi.pack_move", text="", icon="TRIA_DOWN")
+            op_down.direction = "DOWN"
+
+            # Selected Pack Detail
+            if 0 <= idx < len(self.resource_packs):
+                item = self.resource_packs[idx]
+                detail_box = adv_box.box()
+                d_header = detail_box.row(align=True)
+                d_header.label(text=f"{tr('Pack Details')}: {item.name}", icon="PREFERENCES")
+                d_header.prop(item, "enabled", text=tr("Enabled"))
+
+                d_col = detail_box.column(align=False)
+                row1 = d_col.row(align=True)
+                row1.prop(item, "name", text=tr("Name"))
+                row1.prop(item, "pack_type", text=tr("Type"))
+
+                row2 = d_col.row(align=True)
+                row2.prop(item, "path", text=tr("Path"))
+
+                p_val = item.path.strip()
+                if not p_val:
+                    st_row = d_col.row(align=True)
+                    st_row.alert = True
+                    st_row.label(text=tr("Path is empty. Please select a .zip, .jar, or assets folder."), icon="INFO")
+                elif not Path(p_val).exists():
+                    st_row = d_col.row(align=True)
+                    st_row.alert = True
+                    st_row.label(text=f"{tr('File not found')}: '{p_val}'", icon="ERROR")
+
+                kind_warning = detected_kind_warning(item)
+                if kind_warning:
+                    warn_row = d_col.row(align=True)
+                    warn_row.alert = True
+                    warn_row.label(text=kind_warning, icon="ERROR")
 
     def draw_material(self, layout, context):
         from ..i18n import tr

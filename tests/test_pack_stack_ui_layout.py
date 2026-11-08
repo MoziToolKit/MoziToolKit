@@ -42,10 +42,11 @@ class _RecordingLayout:
         self.calls.append(("label", text, icon))
 
     def prop(self, data, name, **kwargs):
-        self.calls.append(("prop", name, kwargs.get("text", "")))
+        self.calls.append(("prop", name, kwargs.get("text", ""), kwargs.get("icon", "NONE")))
 
     def operator(self, idname, **kwargs):
-        self.calls.append(("operator", idname))
+        icon = kwargs.get("icon", "NONE")
+        self.calls.append(("operator", idname, icon))
         return types.SimpleNamespace()
 
     def separator(self, factor=1.0):
@@ -148,6 +149,9 @@ class TestMaterialSettingsPlacement(unittest.TestCase):
         return types.SimpleNamespace(
             resource_packs=[_pack("A", "/packs/A.zip")],
             resource_packs_index=0,
+            show_advanced_packs=False,
+            detected_instances_launcher_filter="ALL",
+            detected_instance_id="NONE",
             pack_textures=True,
             enable_ctm=True,
             enable_animated_textures=True,
@@ -177,6 +181,63 @@ class TestMaterialSettingsPlacement(unittest.TestCase):
         MOZI_AddonPreferences.draw_resource_packs(self._prefs(), layout, None)
         self.assertIn("mozi.precompile_cache", layout.operators())
         self.assertIn("mozi.open_cache_folder", layout.operators())
+
+
+class TestStreamlinedInstanceUI(unittest.TestCase):
+    def _prefs(self, show_advanced=False):
+        return types.SimpleNamespace(
+            resource_packs=[_pack("A", "/packs/A.zip")],
+            resource_packs_index=0,
+            show_advanced_packs=show_advanced,
+            detected_instances_launcher_filter="ALL",
+            detected_instance_id="NONE",
+            pack_textures=True,
+            enable_ctm=True,
+            enable_animated_textures=True,
+            material_render_engine="AUTO",
+            material_subsurface_method="BURLEY",
+            material_disable_subsurface=False,
+        )
+
+    def test_top_level_has_instance_and_launcher_controls(self) -> None:
+        layout = _RecordingLayout()
+        MOZI_AddonPreferences.draw_resource_packs(self._prefs(show_advanced=False), layout, None)
+        self.assertIn("detected_instances_launcher_filter", layout.prop_names())
+        self.assertIn("detected_instance_id", layout.prop_names())
+        self.assertIn("mozi.scan_instances", layout.operators())
+        self.assertIn("mozi.pick_custom_instance_dir", layout.operators())
+
+    def test_manual_stack_is_folded_by_default(self) -> None:
+        layout = _RecordingLayout()
+        MOZI_AddonPreferences.draw_resource_packs(self._prefs(show_advanced=False), layout, None)
+        template_lists = [call[1] for call in layout.calls if call[0] == "template_list"]
+        self.assertEqual(template_lists, [])
+        self.assertNotIn("mozi.pack_add", layout.operators())
+        self.assertNotIn("mozi.pack_remove", layout.operators())
+
+    def test_manual_stack_appears_when_expanded(self) -> None:
+        layout = _RecordingLayout()
+        MOZI_AddonPreferences.draw_resource_packs(self._prefs(show_advanced=True), layout, None)
+        template_lists = [call[1] for call in layout.calls if call[0] == "template_list"]
+        self.assertIn("MOZI_UL_resource_packs_list", template_lists)
+        self.assertIn("mozi.pack_add", layout.operators())
+        self.assertIn("mozi.pack_remove", layout.operators())
+
+    def test_all_layout_icons_are_valid_in_blender(self) -> None:
+        import bpy
+        valid_icons = set(bpy.types.UILayout.bl_rna.functions['label'].parameters['icon'].enum_items.keys())
+        layout = _RecordingLayout()
+        MOZI_AddonPreferences.draw_resource_packs(self._prefs(show_advanced=True), layout, None)
+        for call in layout.calls:
+            if call[0] == "label":
+                icon = call[2]
+                self.assertIn(icon, valid_icons, f"Invalid label icon '{icon}'")
+            elif call[0] == "operator":
+                icon = call[2]
+                self.assertIn(icon, valid_icons, f"Invalid operator icon '{icon}'")
+            elif call[0] == "prop":
+                icon = call[3]
+                self.assertIn(icon, valid_icons, f"Invalid prop icon '{icon}'")
 
 
 if __name__ == "__main__":

@@ -131,9 +131,22 @@ def get_cache_stats(prefs=None, force_refresh: bool = False) -> Dict[str, Any]:
 def clear_cache(prefs=None, on_invalidate_callback=None) -> int:
     """Empties all compiled caches in the cache directory and returns the total bytes freed."""
     global _cached_cache_stats, _cached_cache_stats_path
+
     try:
         from ...bridge.assets import invalidate_asset_cache_memory
         invalidate_asset_cache_memory()
+    except Exception:
+        pass
+
+    try:
+        from .guard import invalidate_guard_cache
+        invalidate_guard_cache()
+    except Exception:
+        pass
+
+    try:
+        from ...bridge.debug import clear_debug_world_cache
+        clear_debug_world_cache()
     except Exception:
         pass
 
@@ -142,6 +155,7 @@ def clear_cache(prefs=None, on_invalidate_callback=None) -> int:
             on_invalidate_callback()
         except Exception:
             pass
+
     cache_path = get_cache_dir(prefs)
     freed_bytes = 0
 
@@ -168,7 +182,7 @@ def clear_cache(prefs=None, on_invalidate_callback=None) -> int:
             size = _item_size(item)
             try:
                 if item.is_dir():
-                    shutil.rmtree(item)
+                    shutil.rmtree(item, ignore_errors=False)
                 else:
                     item.unlink()
                 freed_bytes += size

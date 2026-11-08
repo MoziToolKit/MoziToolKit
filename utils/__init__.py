@@ -14,6 +14,8 @@ from . import async_task
 import bpy
 
 from . import node_groups
+from . import pack_detect
+from . import launcher_scan
 
 __all__ = [
     "system",
@@ -21,6 +23,8 @@ __all__ = [
     "progress",
     "async_task",
     "node_groups",
+    "pack_detect",
+    "launcher_scan",
 ]
 
 

@@ -102,6 +102,8 @@ class PackProbe:
     elapsed_ms: float = 0.0
     entry_count: int = 0
     cached: bool = False
+    has_renderable_assets: bool = False
+    has_block_assets: bool = False
 
     @property
     def is_known(self) -> bool:
@@ -125,6 +127,8 @@ class PackProbe:
             "elapsed_ms": round(self.elapsed_ms, 3),
             "entry_count": self.entry_count,
             "cached": self.cached,
+            "has_renderable_assets": self.has_renderable_assets,
+            "has_block_assets": self.has_block_assets,
         }
 
 
@@ -209,6 +213,8 @@ def _pack_probe_from_dict(res: Dict[str, Any]) -> PackProbe:
         details=dict(res.get("details", {})),
         error=res.get("error"),
         entry_count=int(res.get("entry_count", 0)),
+        has_renderable_assets=bool(res.get("has_renderable_assets", False)),
+        has_block_assets=bool(res.get("has_block_assets", False)),
     )
 
 

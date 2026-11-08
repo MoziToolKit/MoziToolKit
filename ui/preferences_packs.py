@@ -68,6 +68,37 @@ _probe_scheduled: Dict[str, float] = {}
 _probe_inflight: Dict[str, float] = {}
 _probe_results: "queue.Queue[Tuple[str, PackProbe]]" = queue.Queue()
 
+# Discovered Minecraft instances cache and user-supplied directories
+_CACHED_DISCOVERED_INSTANCES: List[Any] = []
+_CUSTOM_DIRECTORIES: List[Path] = []
+
+
+def get_detected_instances_enum_items(self, context) -> List[Tuple[str, str, str, str, int]]:
+    """Dynamic callback providing the list of discovered Minecraft instances (reads memory cache only, zero disk I/O)."""
+    global _CACHED_DISCOVERED_INSTANCES
+
+    if not _CACHED_DISCOVERED_INSTANCES:
+        return [("NONE", "No instances loaded (Click 'Scan / Refresh')", "Click 'Scan / Refresh' above to discover local Minecraft instances", "INFO", 0)]
+
+    filter_kind = getattr(self, "detected_instances_launcher_filter", "ALL")
+    items: List[Tuple[str, str, str, str, int]] = []
+    num = 0
+    for inst in _CACHED_DISCOVERED_INSTANCES:
+        if filter_kind != "ALL" and inst.launcher_kind != filter_kind:
+            continue
+        ident = inst.instance_id
+        iso_tag = " [Isolated]" if inst.is_isolated else " [Shared]"
+        name = f"[{inst.launcher_kind}] {inst.name} ({inst.minecraft_version}){iso_tag}"
+        desc = f"Dir: {inst.game_dir} | Loader: {inst.loader} | Mods: {len(inst.mods)} | Packs: {len(inst.resource_packs)}"
+        icon = "WORLD_DATA" if inst.is_isolated else "WORLD"
+        items.append((ident, name, desc, icon, num))
+        num += 1
+
+    if not items:
+        return [("NONE", f"No instances for {filter_kind}", "Try selecting 'All Launchers' or scanning", "INFO", 0)]
+
+    return items
+
 
 # ---------------------------------------------------------------------------
 # Update-callback guards
@@ -801,6 +832,163 @@ class MOZI_OT_pack_detect(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class MOZI_OT_scan_instances(bpy.types.Operator):
+    """Scan local launchers for Minecraft game instances"""
+
+    bl_idname = "mozi.scan_instances"
+    bl_label = "Scan Local Instances"
+    bl_description = "Scan system directories for Official, Prism, Modrinth, and CurseForge game instances"
+    bl_options = {"REGISTER"}
+
+    def execute(self, context):
+        global _CACHED_DISCOVERED_INSTANCES
+        from ..utils.launcher_scan import scan_all_instances
+
+        try:
+            _CACHED_DISCOVERED_INSTANCES = scan_all_instances(_CUSTOM_DIRECTORIES)
+            self.report({'INFO'}, f"Discovered {len(_CACHED_DISCOVERED_INSTANCES)} game instances")
+        except Exception as e:
+            self.report({'ERROR'}, f"Failed scanning instances: {e}")
+            return {'CANCELLED'}
+        refresh_ui_and_menus(context)
+        return {'FINISHED'}
+
+
+class MOZI_OT_pick_custom_instance_dir(bpy.types.Operator):
+    """Pick a custom game directory (e.g. HMCL or portable folder)"""
+
+    bl_idname = "mozi.pick_custom_instance_dir"
+    bl_label = "Add Custom Game Folder"
+    bl_description = "Pick an external or portable Minecraft game directory to discover its instances"
+    bl_options = {"REGISTER"}
+
+    directory: StringProperty(
+        name="Game Directory",
+        subtype="DIR_PATH",
+        description="Select a folder containing .minecraft, versions/, or instance.cfg",
+    )
+
+    def invoke(self, context, event):
+        context.window_manager.fileselect_add(self)
+        return {'RUNNING_MODAL'}
+
+    def execute(self, context):
+        if not self.directory or not Path(self.directory).is_dir():
+            self.report({'WARNING'}, "Please select a valid directory")
+            return {'CANCELLED'}
+
+        global _CACHED_DISCOVERED_INSTANCES, _CUSTOM_DIRECTORIES
+        target = Path(self.directory)
+        if target not in _CUSTOM_DIRECTORIES:
+            _CUSTOM_DIRECTORIES.append(target)
+
+        from ..utils.launcher_scan import scan_custom_directory
+
+        found = scan_custom_directory(target)
+        if not found:
+            self.report({'WARNING'}, f"No valid Minecraft instances found in '{target.name}'")
+            return {'CANCELLED'}
+
+        for inst in found:
+            if not any(i.instance_id == inst.instance_id for i in _CACHED_DISCOVERED_INSTANCES):
+                _CACHED_DISCOVERED_INSTANCES.append(inst)
+
+        self.report({'INFO'}, f"Added {len(found)} instance(s) from '{target.name}'")
+        refresh_ui_and_menus(context)
+        return {'FINISHED'}
+
+
+class MOZI_OT_import_instance_assets(bpy.types.Operator):
+    """Import selected game instance into the asset and prebake stack"""
+
+    bl_idname = "mozi.import_instance_assets"
+    bl_label = "Import Instance Assets"
+    bl_description = "Configure the fallback stack with the selected instance's Vanilla Client JAR, mods, and resource packs"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        prefs = _safe_get_prefs(context)
+        if prefs is None:
+            return {'CANCELLED'}
+
+        target_id = getattr(prefs, "detected_instance_id", "NONE")
+        if target_id == "NONE" or not _CACHED_DISCOVERED_INSTANCES:
+            self.report({'WARNING'}, "Please select a valid game instance first")
+            return {'CANCELLED'}
+
+        inst = next((i for i in _CACHED_DISCOVERED_INSTANCES if i.instance_id == target_id), None)
+        if inst is None:
+            # Fallback for numerical index if any
+            try:
+                idx = int(target_id)
+                if 0 <= idx < len(_CACHED_DISCOVERED_INSTANCES):
+                    inst = _CACHED_DISCOVERED_INSTANCES[idx]
+            except Exception:
+                pass
+
+        if inst is None:
+            self.report({'ERROR'}, "Selected game instance was not found. Please click 'Scan / Refresh'.")
+            return {'CANCELLED'}
+
+        from ..utils.launcher_scan import filter_functional_mods
+
+        # Filter out functional mods on-demand during ingestion
+        asset_mods, skipped_mods = filter_functional_mods(inst.mods)
+
+        _set_is_probing(True)
+        try:
+            coll = prefs.resource_packs
+            coll.clear()
+
+            # 1. Vanilla base JAR
+            if inst.client_jar and inst.client_jar.is_file():
+                elem = coll.add()
+                elem.name = f"Minecraft {inst.minecraft_version} Vanilla Client"
+                elem.path = str(inst.client_jar)
+                elem.pack_type = "VANILLA"
+                elem.pack_type_source = TYPE_SOURCE_MANUAL
+                elem.detected_kind = KIND_VANILLA_CLIENT
+                elem.enabled = True
+
+            # 2. Mod JARs (filtered for renderable block assets)
+            for mod_path in asset_mods:
+                elem = coll.add()
+                elem.name = mod_path.stem
+                elem.path = str(mod_path)
+                elem.pack_type = "MOD_JAR"
+                elem.pack_type_source = TYPE_SOURCE_MANUAL
+                elem.detected_kind = KIND_MOD
+                elem.enabled = True
+
+            # 3. Resource Packs
+            for pack_path in inst.resource_packs:
+                elem = coll.add()
+                elem.name = pack_path.stem
+                elem.path = str(pack_path)
+                elem.pack_type = "RESOURCE_PACK"
+                elem.pack_type_source = TYPE_SOURCE_MANUAL
+                elem.detected_kind = KIND_RESOURCE_PACK
+                elem.enabled = True
+        finally:
+            _set_is_probing(False)
+
+        reorder_resource_packs_by_tier(prefs)
+        prefs.resource_packs_index = 0
+
+        get_config_manager().sync_from_preferences(prefs)
+        refresh_ui_and_menus(context)
+
+        summary = f"Imported '{inst.name}': "
+        if inst.client_jar:
+            summary += "Vanilla Client JAR, "
+        summary += f"{len(asset_mods)} mods"
+        if skipped_mods:
+            summary += f" (filtered {len(skipped_mods)} functional mods)"
+        summary += f", {len(inst.resource_packs)} resource packs."
+        self.report({'INFO'}, summary)
+        return {'FINISHED'}
+
+
 PACKS_CLASSES = (
     MOZI_PG_resource_pack_entry,
     MOZI_UL_resource_packs_list,
@@ -808,4 +996,7 @@ PACKS_CLASSES = (
     MOZI_OT_pack_remove,
     MOZI_OT_pack_move,
     MOZI_OT_pack_detect,
+    MOZI_OT_scan_instances,
+    MOZI_OT_pick_custom_instance_dir,
+    MOZI_OT_import_instance_assets,
 )

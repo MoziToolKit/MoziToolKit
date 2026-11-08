@@ -151,6 +151,27 @@ class MOZI_OT_clear_cache(bpy.types.Operator):
         prefs = get_prefs(context)
         try:
             cleared_bytes = clear_cache(prefs) or 0
+            try:
+                from ..utils.assets.guard import invalidate_guard_cache
+                invalidate_guard_cache()
+            except Exception:
+                pass
+            try:
+                from ..utils.assets.cache_utils import invalidate_cache_stats_memo
+                invalidate_cache_stats_memo()
+                get_cache_stats(prefs, force_refresh=True)
+            except Exception:
+                pass
+
+            if hasattr(context, "window_manager") and context.window_manager:
+                for window in getattr(context.window_manager, "windows", []):
+                    screen = getattr(window, "screen", None)
+                    if screen:
+                        for area in getattr(screen, "areas", []):
+                            area.tag_redraw()
+            elif hasattr(context, "area") and context.area:
+                context.area.tag_redraw()
+
             mb = cleared_bytes / (1024 * 1024)
             self.report({'INFO'}, f"Cleared {mb:.2f} MB of precompiled caches.")
             return {'FINISHED'}

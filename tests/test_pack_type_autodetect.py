@@ -366,6 +366,9 @@ class TestPanelDraw(unittest.TestCase):
             pack_textures=True,
             enable_ctm=True,
             enable_animated_textures=True,
+            show_advanced_packs=True,
+            detected_instances_launcher_filter="ALL",
+            detected_instance_id="NONE",
         )
 
     def test_draw_renders_detection_rows(self) -> None:

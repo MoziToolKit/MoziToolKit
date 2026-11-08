@@ -18,9 +18,11 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -31,23 +33,80 @@ for _stream in (sys.stdout, sys.stderr):
     if hasattr(_stream, "reconfigure"):
         _stream.reconfigure(encoding="utf-8", errors="replace")
 
-RETRIES = 3
+RETRIES = 5
 TIMEOUT_SECONDS = 180
+
+
+def _download_curl(url: str, dest: Path) -> bool:
+    """Attempt download using system curl with native retry and redirect handling."""
+    curl_bin = shutil.which("curl")
+    if not curl_bin:
+        return False
+
+    part = dest.with_suffix(dest.suffix + ".part")
+    if part.exists():
+        part.unlink(missing_ok=True)
+
+    cmd = [
+        curl_bin,
+        "-fL",
+        "--retry", "5",
+        "--retry-delay", "2",
+        "-sS",
+        "-o", str(part),
+        url,
+    ]
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=TIMEOUT_SECONDS, check=False)
+        if res.returncode == 0 and part.exists() and part.stat().st_size > 0:
+            part.replace(dest)
+            return True
+        part.unlink(missing_ok=True)
+        if res.stderr:
+            print(f"curl attempt failed for {url}: {res.stderr.strip()}")
+    except Exception as exc:
+        part.unlink(missing_ok=True)
+        print(f"curl invocation error for {url}: {exc}")
+    return False
+
+
+def _download_urllib(url: str, dest: Path) -> bool:
+    """Fallback download using urllib with backoff."""
+    part = dest.with_suffix(dest.suffix + ".part")
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; MoziToolKit-CI/1.0)",
+        "Accept": "*/*",
+    }
+    last_exc = None
+    for attempt in range(1, RETRIES + 1):
+        if part.exists():
+            part.unlink(missing_ok=True)
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as response, \
+                    open(part, "wb") as out_file:
+                shutil.copyfileobj(response, out_file, length=128 * 1024)
+            if part.exists() and part.stat().st_size > 0:
+                part.replace(dest)
+                return True
+        except Exception as exc:  # noqa: BLE001
+            last_exc = exc
+            if part.exists():
+                part.unlink(missing_ok=True)
+            sleep_time = min(15, 2 ** attempt)
+            print(f"Download attempt ({attempt}/{RETRIES}) failed for {url}: {exc}. Retrying in {sleep_time}s...")
+            time.sleep(sleep_time)
+
+    print(f"::warning::Download failed after {RETRIES} attempts {url}: {last_exc}")
+    return False
 
 
 def download(url: str, dest: Path) -> bool:
     """Download *url* to *dest*; returns False (with a warning) on failure."""
     dest.parent.mkdir(parents=True, exist_ok=True)
-    for attempt in range(1, RETRIES + 1):
-        try:
-            request = urllib.request.Request(url, headers={"User-Agent": "MoziToolKit-CI"})
-            with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response, \
-                    open(dest, "wb") as out_file:
-                shutil.copyfileobj(response, out_file)
-            return True
-        except Exception as exc:  # noqa: BLE001 - network failures are non-fatal
-            print(f"::warning::Download failed ({attempt}/{RETRIES}) {url}: {exc}")
-    return False
+    if _download_curl(url, dest):
+        return True
+    return _download_urllib(url, dest)
 
 
 def export_vars(values: dict[str, str]) -> None:

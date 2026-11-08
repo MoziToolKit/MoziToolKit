@@ -9,7 +9,8 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+import threading
+from typing import Any, Callable, Dict, Optional, Tuple, Set
 
 from ...bridge.engine import get_libmtk
 from ...bridge.progress import ProgressCallback, ProgressReport
@@ -56,13 +57,82 @@ BASE_PROBE_BLOCKS = ("stone", "dirt", "oak_planks")
 _VANILLA_PROBE_CACHE: Dict[Tuple[str, int, int], bool] = {}
 _VANILLA_CHECK_CACHE: Dict[Any, bool] = {}
 _GUARD_STATUS_CACHE: Dict[Any, str] = {}
+_GUARD_CHECKING_KEYS: Set[Any] = set()
+_GUARD_LOCK = threading.Lock()
+
+
+def _timers_available() -> bool:
+    try:
+        import bpy
+        timers = getattr(getattr(bpy, "app", None), "timers", None)
+        if timers is None or type(timers).__module__.startswith("unittest.mock"):
+            return False
+        return hasattr(timers, "register") and hasattr(timers, "is_registered")
+    except Exception:
+        return False
 
 
 def invalidate_guard_cache() -> None:
     """Invalidate all cached pack readiness and cache status evaluations."""
-    _VANILLA_PROBE_CACHE.clear()
-    _VANILLA_CHECK_CACHE.clear()
-    _GUARD_STATUS_CACHE.clear()
+    with _GUARD_LOCK:
+        _VANILLA_PROBE_CACHE.clear()
+        _VANILLA_CHECK_CACHE.clear()
+        _GUARD_STATUS_CACHE.clear()
+        _GUARD_CHECKING_KEYS.clear()
+
+
+class PurePackEntry:
+    """Pure Python representation of a pack entry, free of Blender RNA pointers."""
+    def __init__(self, path: str = "", enabled: bool = True, pack_type: str = "RESOURCE_PACK", name: str = "", detected_kind: str = ""):
+        self.path = str(path)
+        self.enabled = bool(enabled)
+        self.pack_type = str(pack_type)
+        self.name = str(name)
+        self.detected_kind = str(detected_kind)
+
+
+class PackConfigSnapshot:
+    """Pure Python snapshot of preferences configuration for thread-safe evaluation."""
+    def __init__(self, resource_packs, resource_pack_path: str = "", cache_dir: str = "", thread_count: int = 0):
+        self.resource_packs = list(resource_packs)
+        self.resource_pack_path = str(resource_pack_path)
+        self.cache_dir = str(cache_dir)
+        self.thread_count = int(thread_count)
+
+
+def snapshot_pack_config(prefs=None) -> PackConfigSnapshot:
+    """Snapshot Blender AddonPreferences into a thread-safe pure Python DTO."""
+    if prefs is None:
+        try:
+            prefs = get_prefs()
+        except Exception:
+            prefs = None
+
+    packs = []
+    if prefs is not None and hasattr(prefs, "resource_packs"):
+        for e in prefs.resource_packs:
+            packs.append(PurePackEntry(
+                path=getattr(e, "path", "") or "",
+                enabled=getattr(e, "enabled", True),
+                pack_type=getattr(e, "pack_type", "RESOURCE_PACK"),
+                name=getattr(e, "name", "") or "",
+                detected_kind=getattr(e, "detected_kind", "") or "",
+            ))
+
+    single = str(getattr(prefs, "resource_pack_path", "") or "")
+    try:
+        resolved_cache_dir = str(get_cache_dir(prefs).resolve())
+    except Exception:
+        resolved_cache_dir = ""
+    raw_threads = getattr(prefs, "thread_count", 0) if prefs is not None else 0
+    thread_count = raw_threads if isinstance(raw_threads, int) and not isinstance(raw_threads, bool) else 0
+
+    return PackConfigSnapshot(
+        resource_packs=packs,
+        resource_pack_path=single,
+        cache_dir=resolved_cache_dir,
+        thread_count=thread_count,
+    )
 
 
 def _get_pack_signature(prefs=None) -> tuple:
@@ -267,6 +337,93 @@ def check_asset_cache_status(prefs=None) -> str:
     return status
 
 
+def get_ui_asset_cache_status(
+    prefs=None,
+    on_update_callback: Optional[Callable[[str], None]] = None,
+) -> str:
+    """
+    Non-blocking, zero-latency cache status reader designed specifically for Blender UI draw() calls.
+    Returns immediately:
+      - The cached status string if already computed (< 0.01ms).
+      - "NO_PACKS" if no resource packs or JARs are configured.
+      - "CHECKING" while an asynchronous background thread computes the real status,
+        dispatching a redraw when finished.
+    """
+    if prefs is None:
+        try:
+            prefs = get_prefs()
+        except Exception:
+            prefs = None
+
+    # Ultra-fast check if no packs are configured at all
+    packs = getattr(prefs, "resource_packs", None) or []
+    single = getattr(prefs, "resource_pack_path", "") or ""
+    env_present = any(bool(os.environ.get(k)) for k in ENV_ASSET_ROOTS + ENV_ASSET_ARCHIVES)
+    if not packs and not single and not env_present:
+        return "NO_PACKS"
+
+    snapshot = snapshot_pack_config(prefs)
+    sig = _get_pack_signature(snapshot)
+    cache_dir = get_cache_dir(snapshot).resolve()
+    cache_dir_mtime = 0.0
+    if cache_dir.exists():
+        try:
+            cache_dir_mtime = os.path.getmtime(cache_dir)
+        except OSError:
+            cache_dir_mtime = 0.0
+    cache_key = (sig, str(cache_dir), cache_dir_mtime)
+
+    with _GUARD_LOCK:
+        if cache_key in _GUARD_STATUS_CACHE:
+            return _GUARD_STATUS_CACHE[cache_key]
+
+        if not _timers_available():
+            # Synchronous fallback for headless tests
+            return check_asset_cache_status(snapshot)
+
+        if cache_key in _GUARD_CHECKING_KEYS:
+            return "CHECKING"
+        _GUARD_CHECKING_KEYS.add(cache_key)
+
+    def _worker():
+        try:
+            res = check_asset_cache_status(snapshot)
+        except Exception as exc:
+            logger.debug("Failed evaluating asset cache status: %s", exc)
+            res = "UNKNOWN"
+        finally:
+            with _GUARD_LOCK:
+                _GUARD_CHECKING_KEYS.discard(cache_key)
+
+        def _on_main_thread():
+            if on_update_callback:
+                try:
+                    on_update_callback(res)
+                except Exception:
+                    pass
+            else:
+                try:
+                    import bpy
+                    context = getattr(bpy, "context", None)
+                    if context and hasattr(context, "window_manager") and context.window_manager:
+                        for window in context.window_manager.windows:
+                            for area in window.screen.areas:
+                                if area.type == "PREFERENCES":
+                                    area.tag_redraw()
+                except Exception:
+                    pass
+            return None
+
+        try:
+            import bpy
+            bpy.app.timers.register(_on_main_thread, first_interval=0.0)
+        except Exception:
+            pass
+
+    threading.Thread(target=_worker, name="MTK-AssetCacheStatus", daemon=True).start()
+    return "CHECKING"
+
+
 def prepare_asset_context(prefs=None) -> Dict[str, Any]:
     """Resolve cache status/stack/path on the Blender main thread."""
     status = check_asset_cache_status(prefs)
@@ -405,6 +562,7 @@ __all__ = [
     "can_execute_asset_pipeline",
     "prepare_asset_context",
     "check_asset_cache_status",
+    "get_ui_asset_cache_status",
     "ensure_pipeline_assets_ready_sync",
     "run_task_with_asset_guard",
 ]

@@ -71,14 +71,107 @@ _probe_results: "queue.Queue[Tuple[str, PackProbe]]" = queue.Queue()
 # Discovered Minecraft instances cache and user-supplied directories
 _CACHED_DISCOVERED_INSTANCES: List[Any] = []
 _CUSTOM_DIRECTORIES: List[Path] = []
+_INSTANCE_SCAN_STATE: str = "IDLE"  # "IDLE", "SCANNING", "DONE", "ERROR"
+_INSTANCE_SCAN_LOCK = threading.Lock()
+
+
+def schedule_background_instance_scan(
+    force: bool = False,
+    custom_dirs: Optional[List[Path]] = None,
+    on_complete: Optional[Callable[[List[Any]], None]] = None,
+) -> bool:
+    """
+    Asynchronously scans system directories for Minecraft instances on a daemon background thread.
+    Zero main thread blocking. Automatically selects the latest vanilla instance if none is selected,
+    and requests an asynchronous UI redraw upon completion.
+    """
+    global _INSTANCE_SCAN_STATE, _CACHED_DISCOVERED_INSTANCES
+    with _INSTANCE_SCAN_LOCK:
+        if _INSTANCE_SCAN_STATE == "SCANNING" and not force:
+            return False
+        if _INSTANCE_SCAN_STATE == "DONE" and _CACHED_DISCOVERED_INSTANCES and not force:
+            return False
+        _INSTANCE_SCAN_STATE = "SCANNING"
+
+    dirs_to_scan = list(custom_dirs if custom_dirs is not None else _CUSTOM_DIRECTORIES)
+
+    if not _timers_available():
+        # Headless testing mode / synchronous fallback
+        try:
+            from ..utils.launcher_scan import scan_all_instances
+            instances = scan_all_instances(dirs_to_scan)
+            with _INSTANCE_SCAN_LOCK:
+                _CACHED_DISCOVERED_INSTANCES = instances
+                _INSTANCE_SCAN_STATE = "DONE"
+            if on_complete:
+                on_complete(instances)
+            return True
+        except Exception as exc:
+            logger.warning("Synchronous instance scan failed: %s", exc)
+            with _INSTANCE_SCAN_LOCK:
+                _INSTANCE_SCAN_STATE = "ERROR"
+            return False
+
+    def _worker():
+        global _CACHED_DISCOVERED_INSTANCES, _INSTANCE_SCAN_STATE
+        try:
+            from ..utils.launcher_scan import scan_all_instances, find_latest_vanilla_instance
+            instances = scan_all_instances(dirs_to_scan)
+            with _INSTANCE_SCAN_LOCK:
+                _CACHED_DISCOVERED_INSTANCES = instances
+                _INSTANCE_SCAN_STATE = "DONE"
+        except Exception as exc:
+            logger.warning("Background instance scan failed: %s", exc)
+            with _INSTANCE_SCAN_LOCK:
+                _INSTANCE_SCAN_STATE = "ERROR"
+            return
+
+        def _on_main_thread():
+            try:
+                context = getattr(bpy, "context", None)
+                prefs = _safe_get_prefs(context)
+                if prefs is not None and _CACHED_DISCOVERED_INSTANCES:
+                    target_id = getattr(prefs, "detected_instance_id", "NONE")
+                    if target_id in ("NONE", "SCANNING") or not any(i.instance_id == target_id for i in _CACHED_DISCOVERED_INSTANCES):
+                        from ..utils.launcher_scan import find_latest_vanilla_instance
+                        best = find_latest_vanilla_instance(_CACHED_DISCOVERED_INSTANCES)
+                        if best is None and _CACHED_DISCOVERED_INSTANCES:
+                            best = _CACHED_DISCOVERED_INSTANCES[0]
+                        if best is not None:
+                            try:
+                                prefs.detected_instance_id = best.instance_id
+                            except Exception:
+                                pass
+                refresh_ui_and_menus(context)
+                if on_complete:
+                    on_complete(_CACHED_DISCOVERED_INSTANCES)
+            except Exception as e:
+                logger.debug("Failed updating preferences after instance scan: %s", e)
+            return None
+
+        try:
+            bpy.app.timers.register(_on_main_thread, first_interval=0.0)
+        except Exception:
+            pass
+
+    threading.Thread(target=_worker, name="MTK-InstanceScan", daemon=True).start()
+    return True
 
 
 def get_detected_instances_enum_items(self, context) -> List[Tuple[str, str, str, str, int]]:
     """Dynamic callback providing the list of discovered Minecraft instances (reads memory cache only, zero disk I/O)."""
-    global _CACHED_DISCOVERED_INSTANCES
+    global _CACHED_DISCOVERED_INSTANCES, _INSTANCE_SCAN_STATE
 
     if not _CACHED_DISCOVERED_INSTANCES:
-        return [("NONE", "No instances loaded (Click 'Scan / Refresh')", "Click 'Scan / Refresh' above to discover local Minecraft instances", "INFO", 0)]
+        if _INSTANCE_SCAN_STATE == "IDLE":
+            schedule_background_instance_scan()
+
+        if _INSTANCE_SCAN_STATE == "SCANNING":
+            return [("SCANNING", "Scanning for Minecraft instances...", "Searching system launchers in background", "TIME", 0)]
+        elif _INSTANCE_SCAN_STATE == "ERROR":
+            return [("NONE", "Scan failed (Click 'Scan / Refresh')", "Error occurred while scanning instances", "ERROR", 0)]
+        else:
+            return [("NONE", "No instances found (Click 'Scan / Refresh')", "No Minecraft instances detected in default locations", "INFO", 0)]
 
     filter_kind = getattr(self, "detected_instances_launcher_filter", "ALL")
     items: List[Tuple[str, str, str, str, int]] = []
@@ -842,8 +935,13 @@ class MOZI_OT_scan_instances(bpy.types.Operator):
 
     def execute(self, context):
         global _CACHED_DISCOVERED_INSTANCES
-        from ..utils.launcher_scan import scan_all_instances
+        if _timers_available():
+            schedule_background_instance_scan(force=True)
+            self.report({'INFO'}, "Scanning local Minecraft instances in background...")
+            refresh_ui_and_menus(context)
+            return {'FINISHED'}
 
+        from ..utils.launcher_scan import scan_all_instances
         try:
             _CACHED_DISCOVERED_INSTANCES = scan_all_instances(_CUSTOM_DIRECTORIES)
             self.report({'INFO'}, f"Discovered {len(_CACHED_DISCOVERED_INSTANCES)} game instances")
@@ -912,7 +1010,7 @@ class MOZI_OT_import_instance_assets(bpy.types.Operator):
             return {'CANCELLED'}
 
         target_id = getattr(prefs, "detected_instance_id", "NONE")
-        if target_id == "NONE" or not _CACHED_DISCOVERED_INSTANCES:
+        if target_id in ("NONE", "SCANNING") or not _CACHED_DISCOVERED_INSTANCES:
             self.report({'WARNING'}, "Please select a valid game instance first")
             return {'CANCELLED'}
 

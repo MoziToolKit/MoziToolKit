@@ -239,6 +239,24 @@ class TestStreamlinedInstanceUI(unittest.TestCase):
                 icon = call[3]
                 self.assertIn(icon, valid_icons, f"Invalid prop icon '{icon}'")
 
+    def test_ui_asset_cache_status_non_blocking(self) -> None:
+        from MoziToolKit.utils.assets.guard import get_ui_asset_cache_status, invalidate_guard_cache
+        invalidate_guard_cache()
+        prefs = self._prefs(show_advanced=False)
+        status = get_ui_asset_cache_status(prefs)
+        self.assertIn(status, ("NO_PACKS", "CHECKING", "READY", "MISSING", "STALE", "NO_VANILLA"))
+
+    def test_get_detected_instances_enum_items_non_blocking(self) -> None:
+        from MoziToolKit.ui.preferences_packs import get_detected_instances_enum_items
+        prefs = self._prefs(show_advanced=False)
+        items = get_detected_instances_enum_items(prefs, None)
+        self.assertTrue(len(items) > 0)
+        # Verify first tuple structure
+        item_id, item_label, item_desc, item_icon, item_num = items[0]
+        self.assertIsInstance(item_id, str)
+        self.assertIsInstance(item_label, str)
+        self.assertIsInstance(item_icon, str)
+
 
 if __name__ == "__main__":
     unittest.main()

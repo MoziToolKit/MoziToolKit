@@ -970,6 +970,13 @@ def schedule_background_auto_setup() -> None:
                     return
 
                 instances = scan_all_instances()
+                try:
+                    from ..ui import preferences_packs
+                    with preferences_packs._INSTANCE_SCAN_LOCK:
+                        preferences_packs._CACHED_DISCOVERED_INSTANCES = instances
+                        preferences_packs._INSTANCE_SCAN_STATE = "DONE"
+                except Exception:
+                    pass
                 best = find_latest_vanilla_instance(instances)
                 if best is None:
                     def _mark_done():

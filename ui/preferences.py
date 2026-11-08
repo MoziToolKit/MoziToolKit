@@ -428,10 +428,12 @@ class MOZI_AddonPreferences(bpy.types.AddonPreferences):
 
         # Inspect current selected instance details
         curr_inst = None
+        scan_state = "IDLE"
         try:
-            from .preferences_packs import _CACHED_DISCOVERED_INSTANCES
+            from .preferences_packs import _CACHED_DISCOVERED_INSTANCES, _INSTANCE_SCAN_STATE
+            scan_state = _INSTANCE_SCAN_STATE
             target_id = getattr(self, "detected_instance_id", "NONE")
-            if target_id != "NONE" and _CACHED_DISCOVERED_INSTANCES:
+            if target_id not in ("NONE", "SCANNING") and _CACHED_DISCOVERED_INSTANCES:
                 curr_inst = next((i for i in _CACHED_DISCOVERED_INSTANCES if i.instance_id == target_id), None)
                 if curr_inst is None:
                     try:
@@ -466,6 +468,10 @@ class MOZI_AddonPreferences(bpy.types.AddonPreferences):
                 text=f"{tr('Import & Apply Instance Assets')}: {curr_inst.name}",
                 icon="IMPORT",
             )
+        elif scan_state == "SCANNING":
+            info_sub = inst_box.box()
+            i_row = info_sub.row(align=True)
+            i_row.label(text=tr("Scanning local Minecraft launchers in background..."), icon="TIME")
         else:
             act_row = inst_box.row(align=True)
             act_row.scale_y = 1.2
@@ -481,14 +487,16 @@ class MOZI_AddonPreferences(bpy.types.AddonPreferences):
         c_head.label(text=tr("Asset Prebake & Cache:"), icon="FILE_CACHE")
 
         try:
-            from ..utils.assets import check_asset_cache_status
-            status = check_asset_cache_status(self)
+            from ..utils.assets import get_ui_asset_cache_status
+            status = get_ui_asset_cache_status(self)
         except Exception:
             status = "UNKNOWN"
 
         st_row = cache_box.row(align=True)
         st_row.scale_y = 0.9
-        if status == "READY":
+        if status == "CHECKING":
+            st_row.label(text=tr("Cache Status: Checking freshness..."), icon="TIME")
+        elif status == "READY":
             st_row.label(text=tr("Cache Status: Ready and up-to-date"), icon="CHECKMARK")
         elif status == "STALE":
             st_row.alert = True
@@ -520,7 +528,8 @@ class MOZI_AddonPreferences(bpy.types.AddonPreferences):
 
         if is_advanced_open:
             # Detailed controls only shown when explicitly expanded
-            if not has_valid_vanilla_pack(self):
+            has_vanilla = status not in ("NO_VANILLA", "NO_PACKS") if status != "CHECKING" else has_valid_vanilla_pack(self)
+            if not has_vanilla:
                 warn_box = adv_box.box()
                 warn_box.alert = True
                 w_row = warn_box.row(align=True)

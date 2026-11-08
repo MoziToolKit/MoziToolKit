@@ -392,6 +392,15 @@ class MOZI_AddonPreferences(bpy.types.AddonPreferences):
             # Lazily classify pre-existing entries (non-blocking, debounced off the main thread).
             schedule_pending_pack_detection(self)
 
+        if len(self.resource_packs) == 0:
+            try:
+                from ..utils.launcher_scan import auto_configure_initial_asset_stack
+                from .preferences_packs import _CACHED_DISCOVERED_INSTANCES
+                if _CACHED_DISCOVERED_INSTANCES:
+                    auto_configure_initial_asset_stack(self)
+            except Exception:
+                pass
+
         layout = self.layout
 
         # Primary Category Tabs

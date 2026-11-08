@@ -293,6 +293,9 @@ class TestLauncherScan(unittest.TestCase):
         # Backup existing prefs
         orig_packs = [(p.name, p.path, p.pack_type, p.pack_type_source, p.detected_kind, p.enabled) for p in prefs.resource_packs]
         orig_done = prefs.initial_auto_setup_done
+        from MoziToolKit.ui.preferences_packs import _CACHED_DISCOVERED_INSTANCES
+        orig_cached = list(_CACHED_DISCOVERED_INSTANCES)
+        _CACHED_DISCOVERED_INSTANCES.clear()
         try:
             prefs.resource_packs.clear()
             prefs.initial_auto_setup_done = False
@@ -304,10 +307,21 @@ class TestLauncherScan(unittest.TestCase):
                 self.assertEqual(prefs.resource_packs[0].pack_type, "VANILLA")
                 self.assertEqual(prefs.resource_packs[0].path, str(dummy_jar))
 
-                # Second run: must skip because initial_auto_setup_done is True
+                # Second run: must skip because resource_packs already has valid entries
                 best2 = auto_configure_initial_asset_stack(prefs)
                 self.assertIsNone(best2)
+
+                # Reset resource_packs simulating user deleting config.json:
+                # Even if initial_auto_setup_done is True, zero-config state must trigger auto-setup!
+                prefs.resource_packs.clear()
+                self.assertTrue(prefs.initial_auto_setup_done)
+                best3 = auto_configure_initial_asset_stack(prefs)
+                self.assertEqual(best3, candidate)
+                self.assertEqual(len(prefs.resource_packs), 1)
+                self.assertEqual(prefs.resource_packs[0].path, str(dummy_jar))
         finally:
+            _CACHED_DISCOVERED_INSTANCES.clear()
+            _CACHED_DISCOVERED_INSTANCES.extend(orig_cached)
             # Restore original
             prefs.resource_packs.clear()
             for name, path, p_type, p_source, d_kind, enabled in orig_packs:

@@ -44,6 +44,8 @@ class JsonConfigBackend(ConfigBackend):
         env_dir = os.environ.get("MOZI_CONFIG_DIR")
         if env_dir:
             config_dir = Path(env_dir)
+        elif os.environ.get("MTK_TEST_SANDBOX") == "1":
+            config_dir = Path(tempfile.gettempdir()) / "mozi_test_sandbox_config"
         else:
             try:
                 config_dir = Path(bpy.utils.user_resource("CONFIG")) / "MoziToolKit"

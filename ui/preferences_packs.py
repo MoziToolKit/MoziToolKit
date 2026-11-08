@@ -131,17 +131,33 @@ def schedule_background_instance_scan(
                 context = getattr(bpy, "context", None)
                 prefs = _safe_get_prefs(context)
                 if prefs is not None and _CACHED_DISCOVERED_INSTANCES:
+                    from ..utils.launcher_scan import find_latest_vanilla_instance
+                    best = find_latest_vanilla_instance(_CACHED_DISCOVERED_INSTANCES)
+                    if best is None and _CACHED_DISCOVERED_INSTANCES:
+                        best = _CACHED_DISCOVERED_INSTANCES[0]
+
                     target_id = getattr(prefs, "detected_instance_id", "NONE")
                     if target_id in ("NONE", "SCANNING") or not any(i.instance_id == target_id for i in _CACHED_DISCOVERED_INSTANCES):
-                        from ..utils.launcher_scan import find_latest_vanilla_instance
-                        best = find_latest_vanilla_instance(_CACHED_DISCOVERED_INSTANCES)
-                        if best is None and _CACHED_DISCOVERED_INSTANCES:
-                            best = _CACHED_DISCOVERED_INSTANCES[0]
                         if best is not None:
                             try:
                                 prefs.detected_instance_id = best.instance_id
                             except Exception:
                                 pass
+
+                    # Auto-populate resource_packs only if in zero-configuration state
+                    existing_packs = getattr(prefs, "resource_packs", None) or []
+                    has_any_valid = any(
+                        bool(getattr(p, "path", "")) and Path(getattr(p, "path", "")).exists()
+                        for p in existing_packs
+                    )
+                    if not has_any_valid and best is not None:
+                        from ..utils.launcher_scan import apply_instance_to_preferences
+                        apply_instance_to_preferences(best, prefs)
+                        try:
+                            from ..utils.assets.guard import invalidate_guard_cache
+                            invalidate_guard_cache()
+                        except Exception:
+                            pass
                 refresh_ui_and_menus(context)
                 if on_complete:
                     on_complete(_CACHED_DISCOVERED_INSTANCES)

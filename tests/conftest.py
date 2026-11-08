@@ -10,10 +10,14 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 from pathlib import Path
 import pytest
 
 os.environ.setdefault("MTK_TEST_SANDBOX", "1")
+_SANDBOX_CONFIG_DIR = Path(tempfile.gettempdir()) / "mozi_test_sandbox_config"
+_SANDBOX_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+os.environ.setdefault("MOZI_CONFIG_DIR", str(_SANDBOX_CONFIG_DIR))
 
 # 1. Enforce real Blender host environment gate
 try:

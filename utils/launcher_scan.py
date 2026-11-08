@@ -844,9 +844,17 @@ def apply_instance_to_preferences(inst: DiscoveredInstance, prefs: Any) -> Tuple
     coll = prefs.resource_packs
     coll.clear()
 
+    def _add_elem():
+        if hasattr(coll, "add"):
+            return coll.add()
+        import types
+        elem = types.SimpleNamespace()
+        coll.append(elem)
+        return elem
+
     # 1. Vanilla base JAR
     if inst.client_jar and inst.client_jar.is_file():
-        elem = coll.add()
+        elem = _add_elem()
         elem.name = f"Minecraft {inst.minecraft_version} Vanilla Client"
         elem.path = str(inst.client_jar)
         elem.pack_type = "VANILLA"
@@ -856,7 +864,7 @@ def apply_instance_to_preferences(inst: DiscoveredInstance, prefs: Any) -> Tuple
 
     # 2. Mod JARs (filtered for renderable block assets)
     for mod_path in asset_mods:
-        elem = coll.add()
+        elem = _add_elem()
         elem.name = mod_path.stem
         elem.path = str(mod_path)
         elem.pack_type = "MOD_JAR"
@@ -866,7 +874,7 @@ def apply_instance_to_preferences(inst: DiscoveredInstance, prefs: Any) -> Tuple
 
     # 3. Resource Packs
     for pack_path in inst.resource_packs:
-        elem = coll.add()
+        elem = _add_elem()
         elem.name = pack_path.stem
         elem.path = str(pack_path)
         elem.pack_type = "RESOURCE_PACK"
@@ -920,23 +928,48 @@ def auto_configure_initial_asset_stack(prefs=None) -> Optional[DiscoveredInstanc
     if prefs is None:
         return None
 
-    # Strictly gate: Only run if user has NOT configured any packs or JARs yet
-    if len(getattr(prefs, "resource_packs", [])) > 0:
+    existing_packs = getattr(prefs, "resource_packs", None) or []
+    has_any_existing_file = any(
+        bool(getattr(p, "path", "")) and Path(getattr(p, "path", "")).exists()
+        for p in existing_packs
+    )
+    if has_any_existing_file and len(existing_packs) > 0:
         return None
 
-    # Check if auto-setup already executed once (to respect intentional empty list)
-    if getattr(prefs, "initial_auto_setup_done", False):
-        return None
+    # Use memory cache if available to avoid duplicate scans
+    instances = None
+    try:
+        from ..ui.preferences_packs import _CACHED_DISCOVERED_INSTANCES
+        if _CACHED_DISCOVERED_INSTANCES:
+            instances = _CACHED_DISCOVERED_INSTANCES
+    except Exception:
+        pass
 
-    # Scan all instances
-    instances = scan_all_instances()
+    if instances is None:
+        instances = scan_all_instances()
+
     best = find_latest_vanilla_instance(instances)
     if best is None:
-        prefs.initial_auto_setup_done = True
+        if hasattr(prefs, "initial_auto_setup_done"):
+            try:
+                prefs.initial_auto_setup_done = True
+            except Exception:
+                pass
         return None
 
     apply_instance_to_preferences(best, prefs)
-    prefs.initial_auto_setup_done = True
+    if hasattr(prefs, "initial_auto_setup_done"):
+        try:
+            prefs.initial_auto_setup_done = True
+        except Exception:
+            pass
+
+    try:
+        from ..utils.assets.guard import invalidate_guard_cache
+        invalidate_guard_cache()
+    except Exception:
+        pass
+
     logger.info(
         "MoziToolKit: Automatically configured Minecraft %s (%s) as default asset stack.",
         best.minecraft_version,
@@ -956,49 +989,40 @@ def schedule_background_auto_setup() -> None:
     except ImportError:
         return
 
-    if not hasattr(bpy, "app") or not hasattr(bpy.app, "timers"):
-        return
+    import threading
 
-    def _timer_callback():
-        import threading
-
-        def _bg_worker():
+    def _bg_worker():
+        try:
+            instances = scan_all_instances()
             try:
-                from .system import get_prefs
-                prefs = get_prefs()
-                if prefs is None or len(getattr(prefs, "resource_packs", [])) > 0 or getattr(prefs, "initial_auto_setup_done", False):
-                    return
+                from ..ui import preferences_packs
+                with preferences_packs._INSTANCE_SCAN_LOCK:
+                    preferences_packs._CACHED_DISCOVERED_INSTANCES = instances
+                    preferences_packs._INSTANCE_SCAN_STATE = "DONE"
+            except Exception:
+                pass
 
-                instances = scan_all_instances()
+            best = find_latest_vanilla_instance(instances)
+            if best is None:
+                return
+
+            def _apply_on_main():
                 try:
-                    from ..ui import preferences_packs
-                    with preferences_packs._INSTANCE_SCAN_LOCK:
-                        preferences_packs._CACHED_DISCOVERED_INSTANCES = instances
-                        preferences_packs._INSTANCE_SCAN_STATE = "DONE"
-                except Exception:
-                    pass
-                best = find_latest_vanilla_instance(instances)
-                if best is None:
-                    def _mark_done():
-                        try:
-                            p = get_prefs()
-                            if p:
-                                p.initial_auto_setup_done = True
-                        except Exception:
-                            pass
-                        return None
-                    try:
-                        bpy.app.timers.register(_mark_done, first_interval=0.1)
-                    except Exception:
-                        pass
-                    return
-
-                def _apply_on_main():
-                    try:
-                        p = get_prefs()
-                        if p and len(getattr(p, "resource_packs", [])) == 0 and not getattr(p, "initial_auto_setup_done", False):
+                    from .system import get_prefs
+                    p = get_prefs()
+                    if p is not None:
+                        existing_packs = getattr(p, "resource_packs", None) or []
+                        has_any_valid = any(
+                            bool(getattr(x, "path", "")) and Path(getattr(x, "path", "")).exists()
+                            for x in existing_packs
+                        )
+                        if not has_any_valid:
                             apply_instance_to_preferences(best, p)
-                            p.initial_auto_setup_done = True
+                            try:
+                                from ..utils.assets.guard import invalidate_guard_cache
+                                invalidate_guard_cache()
+                            except Exception:
+                                pass
                             logger.info(
                                 "MoziToolKit: Automatically configured Minecraft %s (%s) as default asset stack.",
                                 best.minecraft_version,
@@ -1009,22 +1033,18 @@ def schedule_background_auto_setup() -> None:
                                 refresh_ui_and_menus(bpy.context)
                             except Exception:
                                 pass
-                    except Exception as e:
-                        logger.debug("Failed applying auto-configured instance on main thread: %s", e)
-                    return None
+                except Exception as e:
+                    logger.debug("Failed applying auto-configured instance on main thread: %s", e)
+                return None
 
-                try:
-                    bpy.app.timers.register(_apply_on_main, first_interval=0.1)
-                except Exception:
-                    pass
-            except Exception as e:
-                logger.debug("Background instance auto-setup scan failed: %s", e)
+            try:
+                if hasattr(bpy, "app") and hasattr(bpy.app, "timers"):
+                    bpy.app.timers.register(_apply_on_main, first_interval=0.0)
+                else:
+                    _apply_on_main()
+            except Exception:
+                pass
+        except Exception as e:
+            logger.debug("Background instance auto-setup scan failed: %s", e)
 
-        threading.Thread(target=_bg_worker, name="Mozi_Initial_AutoSetup", daemon=True).start()
-        return None
-
-    # Delay 1.5 seconds after Blender startup to ensure UI and window manager are idle
-    try:
-        bpy.app.timers.register(_timer_callback, first_interval=1.5)
-    except Exception:
-        pass
+    threading.Thread(target=_bg_worker, name="Mozi_Initial_AutoSetup", daemon=True).start()

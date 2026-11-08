@@ -169,7 +169,8 @@ def get_active_cache_package_path(prefs=None, compute_fingerprint: bool = True) 
                     if candidates:
                         return candidates[0]
 
-                invalidate_asset_cache_memory()
+                if _ACTIVE_ASSET_CACHE is not None or _ACTIVE_CACHE_PKG_PATH is not None:
+                    invalidate_asset_cache_memory()
                 return None
 
     # Fallback when compute_fingerprint=False or no pack stack configured
@@ -196,7 +197,8 @@ def open_active_asset_cache(prefs=None) -> Optional[Any]:
 
     cache_dir = get_cache_dir(prefs).resolve()
     if not cache_dir.exists():
-        invalidate_asset_cache_memory()
+        if _ACTIVE_ASSET_CACHE is not None or _ACTIVE_CACHE_PKG_PATH is not None:
+            invalidate_asset_cache_memory()
         return None
 
     # O(1) Fast-path: return currently cached instance if path & mtime still match on disk
@@ -215,7 +217,8 @@ def open_active_asset_cache(prefs=None) -> Optional[Any]:
 
     pkg = get_active_cache_package_path(prefs, compute_fingerprint=True)
     if pkg is None or not pkg.exists():
-        invalidate_asset_cache_memory()
+        if _ACTIVE_ASSET_CACHE is not None or _ACTIVE_CACHE_PKG_PATH is not None:
+            invalidate_asset_cache_memory()
         return None
 
     pkg_str = str(pkg.resolve())

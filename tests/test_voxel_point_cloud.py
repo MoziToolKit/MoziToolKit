@@ -226,8 +226,41 @@ class TestVoxelPointCloudBridge:
 
     def test_ingest_and_user_carving_remesh_flow(self):
         """Simulates end-to-end user carving workflow in Blender."""
+        import json
+        import os
+        import shutil
+        import tempfile
         from MoziToolKit.utils.world import ingest_voxel_world
         from MoziToolKit.bridge.point_cloud import extract_voxel_point_cloud, inject_voxel_point_cloud
+        from MoziToolKit.bridge.assets import invalidate_asset_cache_memory
+
+        tmp_cache = Path(tempfile.mkdtemp(prefix="mozi_test_carving_cache_"))
+        atlas_dir = tmp_cache / "atlas"
+        atlas_dir.mkdir(parents=True, exist_ok=True)
+        # 1x1 valid PNG
+        png_1x1 = (
+            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+            b"\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\xff\xff"
+            b"?'\x05\xfe\x02\xfe\xa74e\x00\x00\x00\x00IEND\xaeB`\x82"
+        )
+        (atlas_dir / "blocks_chunk_001.png").write_bytes(png_1x1)
+        atlas_mapping = {
+            "chunks": [
+                {
+                    "chunk_id": 0,
+                    "category": "blocks",
+                    "is_animated": False,
+                    "category_chunk_index": 1,
+                    "width": 16,
+                    "height": 16,
+                }
+            ],
+            "sprites": {},
+        }
+        (atlas_dir / "atlas_mapping.json").write_text(json.dumps(atlas_mapping), encoding="utf-8")
+        orig_cache = os.environ.get("MOZI_CACHE_DIR")
+        os.environ["MOZI_CACHE_DIR"] = str(tmp_cache)
+        invalidate_asset_cache_memory()
 
         # 1. Ingest a 3x3x3 solid stone cube
         storage = libmtk_py.VoxelStorage()
@@ -305,7 +338,7 @@ class TestVoxelPointCloudBridge:
             mod_name = "MoziToolKit.operators.mesh.op_rebuild_mesh"
             with patch(f"{mod_name}.can_execute_asset_pipeline", return_value=(True, "")), \
                  patch(f"{mod_name}.check_asset_cache_status", return_value="READY"):
-                res = bpy.ops.mozi.rebuild_mesh(run_async=False)
+                res = bpy.ops.mozi.rebuild_mesh(run_async=False, force=True)
             assert res == {"FINISHED"}
 
             # After removing center block, the 6 interior cavity faces are newly exposed!
@@ -320,6 +353,12 @@ class TestVoxelPointCloudBridge:
                 bpy.data.objects.remove(bpy.data.objects[cloud_name], do_unlink=True)
             if obj.name in bpy.data.objects:
                 bpy.data.objects.remove(obj, do_unlink=True)
+            if orig_cache is not None:
+                os.environ["MOZI_CACHE_DIR"] = orig_cache
+            else:
+                os.environ.pop("MOZI_CACHE_DIR", None)
+            invalidate_asset_cache_memory()
+            shutil.rmtree(tmp_cache, ignore_errors=True)
 
     def test_fast_palette_point_cloud_large_batch_roundtrip(self):
         """Verifies fast palette-based bulk injection and reconstruction for large point clouds."""

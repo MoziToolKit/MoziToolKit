@@ -49,10 +49,99 @@ LOADER_FORGE = "forge"
 LOADER_QUILT = "quilt"
 LOADER_UNKNOWN = "unknown"
 
+RESOURCE_PACK_DIR_NAMES = ("resourcepacks", "texturepacks", "ResourcePacks", "resource_packs")
+
 
 # ---------------------------------------------------------------------------
-# Data Container
+# Data Containers
 # ---------------------------------------------------------------------------
+
+
+@dataclass
+class DiscoveredResourcePack:
+    """Represents a discovered resource pack file or directory."""
+
+    path: Path
+    name: str = ""
+    enabled: bool = True
+    priority: int = 0  # Lower index = higher priority in resolution stack
+
+    def __post_init__(self) -> None:
+        if not self.name:
+            self.name = self.path.name
+
+    @property
+    def display_name(self) -> str:
+        clean = self.path.name
+        if clean.lower().endswith(".disabled"):
+            clean = clean[:-9]
+        return Path(clean).stem
+
+    @property
+    def stem(self) -> str:
+        return self.path.stem
+
+    @property
+    def suffix(self) -> str:
+        return self.path.suffix
+
+    def __fspath__(self) -> str:
+        return str(self.path)
+
+    def __str__(self) -> str:
+        return str(self.path)
+
+    def exists(self) -> bool:
+        return self.path.exists()
+
+    def is_file(self) -> bool:
+        return self.path.is_file()
+
+    def is_dir(self) -> bool:
+        return self.path.is_dir()
+
+
+@dataclass
+class DiscoveredMod:
+    """Represents a discovered mod JAR archive."""
+
+    path: Path
+    name: str = ""
+    enabled: bool = True
+
+    def __post_init__(self) -> None:
+        if not self.name:
+            self.name = self.path.name
+
+    @property
+    def display_name(self) -> str:
+        clean = self.path.name
+        if clean.lower().endswith(".disabled"):
+            clean = clean[:-9]
+        return Path(clean).stem
+
+    @property
+    def stem(self) -> str:
+        return self.path.stem
+
+    @property
+    def suffix(self) -> str:
+        return self.path.suffix
+
+    def __fspath__(self) -> str:
+        return str(self.path)
+
+    def __str__(self) -> str:
+        return str(self.path)
+
+    def exists(self) -> bool:
+        return self.path.exists()
+
+    def is_file(self) -> bool:
+        return self.path.is_file()
+
+    def is_dir(self) -> bool:
+        return self.path.is_dir()
 
 
 @dataclass
@@ -66,9 +155,9 @@ class DiscoveredInstance:
     minecraft_version: str
     loader: str = LOADER_VANILLA
     client_jar: Optional[Path] = None
-    resource_packs: List[Path] = field(default_factory=list)
-    mods: List[Path] = field(default_factory=list)
-    skipped_functional_mods: List[Path] = field(default_factory=list)
+    resource_packs: List[Any] = field(default_factory=list)
+    mods: List[Any] = field(default_factory=list)
+    skipped_functional_mods: List[Any] = field(default_factory=list)
     icon_key: Optional[str] = None
     extra: Dict[str, Any] = field(default_factory=dict)
 
@@ -79,6 +168,14 @@ class DiscoveredInstance:
     @property
     def has_client_jar(self) -> bool:
         return self.client_jar is not None and self.client_jar.is_file()
+
+    @property
+    def enabled_resource_packs(self) -> List[Any]:
+        return [p for p in self.resource_packs if getattr(p, "enabled", True)]
+
+    @property
+    def enabled_mods(self) -> List[Any]:
+        return [m for m in self.mods if getattr(m, "enabled", True)]
 
     @property
     def instance_id(self) -> str:
@@ -97,7 +194,9 @@ class DiscoveredInstance:
             "loader": self.loader,
             "client_jar": str(self.client_jar) if self.client_jar else None,
             "resource_pack_count": len(self.resource_packs),
+            "enabled_resource_pack_count": len(self.enabled_resource_packs),
             "mod_count": len(self.mods),
+            "enabled_mod_count": len(self.enabled_mods),
             "skipped_functional_mods_count": len(self.skipped_functional_mods),
             "icon_key": self.icon_key,
             "extra": self.extra,
@@ -123,7 +222,10 @@ def get_default_search_roots() -> Dict[str, List[Path]]:
 
     if system == "Darwin":
         app_support = home / "Library" / "Application Support"
-        roots[LAUNCHER_OFFICIAL].append(app_support / "minecraft")
+        roots[LAUNCHER_OFFICIAL].extend([
+            app_support / "minecraft",
+            home / ".minecraft",
+        ])
         roots[LAUNCHER_PRISM].append(app_support / "PrismLauncher")
         roots[LAUNCHER_MULTIMC].append(app_support / "MultiMC")
         roots[LAUNCHER_MODRINTH].append(app_support / "com.modrinth.theseus")
@@ -149,71 +251,332 @@ def get_default_search_roots() -> Dict[str, List[Path]]:
     return roots
 
 
-def _scan_directory_packs(resourcepacks_dir: Path) -> List[Path]:
-    """Finds valid resource packs (.zip or directory with pack.mcmeta)."""
-    packs: List[Path] = []
-    if not resourcepacks_dir.is_dir():
-        return packs
+def parse_options_resource_packs(options_path: Optional[Path]) -> List[str]:
+    """
+    Parses resource pack entries from a Minecraft options.txt file.
+    Returns the list of raw pack identifiers in their written order
+    (in Minecraft options.txt, later items override earlier items).
+    """
+    if options_path is None or not options_path.is_file():
+        return []
 
     try:
-        for entry in resourcepacks_dir.iterdir():
-            if entry.name.startswith("."):
-                continue
-            if entry.is_file() and entry.suffix.lower() == ".zip":
-                packs.append(entry)
-            elif entry.is_dir() and (entry / "pack.mcmeta").is_file():
-                packs.append(entry)
+        content = options_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+
+    for line in content.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("resourcePacks:"):
+            raw_val = line[len("resourcePacks:"):].strip()
+            # Try JSON array parsing
+            try:
+                data = json.loads(raw_val)
+                if isinstance(data, list):
+                    return [str(item) for item in data]
+            except Exception:
+                pass
+
+            # Fallback parsing for bracketed comma-separated items
+            if raw_val.startswith("[") and raw_val.endswith("]"):
+                inner = raw_val[1:-1].strip()
+                if not inner:
+                    return []
+                import csv
+                try:
+                    reader = csv.reader([inner], quotechar='"', skipinitialspace=True)
+                    return [item.strip().strip("'\"") for item in next(reader) if item.strip()]
+                except Exception:
+                    return [item.strip().strip("'\"") for item in inner.split(",") if item.strip()]
+
+    return []
+
+
+def _collect_candidate_pack_dirs(game_dir: Path, fallback_roots: Optional[Sequence[Path]] = None) -> List[Path]:
+    """Finds all existing resource pack directories for a game directory and optional fallback roots."""
+    dirs: List[Path] = []
+    seen: Set[Path] = set()
+
+    all_roots: List[Path] = []
+    if game_dir and game_dir.is_dir():
+        all_roots.append(game_dir)
+    if fallback_roots:
+        for r in fallback_roots:
+            if r and r.is_dir() and r not in all_roots:
+                all_roots.append(r)
+
+    for root_candidate in all_roots:
+        for dname in RESOURCE_PACK_DIR_NAMES:
+            p = root_candidate / dname
+            if p.is_dir():
+                try:
+                    resolved = p.resolve()
+                except OSError:
+                    resolved = p
+                if resolved not in seen:
+                    seen.add(resolved)
+                    dirs.append(p)
+
+    return dirs
+
+
+def _scan_single_pack_dir(resourcepacks_dir: Path) -> List[Tuple[Path, bool]]:
+    """
+    Finds valid resource packs (.zip, .zip.disabled, or directory with pack.mcmeta/assets).
+    Returns a list of tuples: (pack_path, is_initially_enabled)
+    """
+    found: List[Tuple[Path, bool]] = []
+    if not resourcepacks_dir.is_dir():
+        return found
+
+    try:
+        entries = sorted(resourcepacks_dir.iterdir(), key=lambda p: p.name.lower())
     except OSError as e:
         logger.debug("Failed scanning resource packs in %s: %s", resourcepacks_dir, e)
+        return found
 
-    return sorted(packs, key=lambda p: p.name.lower())
+    for entry in entries:
+        if entry.name.startswith("."):
+            continue
+
+        lower_name = entry.name.lower()
+        is_disabled = (
+            lower_name.endswith(".disabled")
+            or lower_name.endswith(".disable")
+            or lower_name.endswith(".bak")
+            or lower_name.endswith(".off")
+        )
+
+        # 1. Zip archives
+        if entry.is_file():
+            if lower_name.endswith(".zip"):
+                found.append((entry, not is_disabled))
+            elif is_disabled and (".zip" in lower_name or entry.suffix.lower() == ".disabled"):
+                # E.g. Faithful.zip.disabled
+                found.append((entry, False))
+        # 2. Directory packs
+        elif entry.is_dir():
+            # Standard pack with pack.mcmeta or assets directory
+            if (entry / "pack.mcmeta").is_file() or (entry / "assets").is_dir():
+                found.append((entry, not is_disabled))
+            else:
+                # Check for single-layer nested pack directory (e.g. Faithful/Faithful/pack.mcmeta)
+                try:
+                    subdirs = [s for s in entry.iterdir() if s.is_dir() and not s.name.startswith(".")]
+                    nested_target = None
+                    if len(subdirs) == 1:
+                        sub = subdirs[0]
+                        if (sub / "pack.mcmeta").is_file() or (sub / "assets").is_dir():
+                            nested_target = sub
+                    if nested_target is not None:
+                        found.append((nested_target, not is_disabled))
+                except OSError:
+                    pass
+
+    return found
+
+
+def resolve_instance_resource_packs(
+    game_dir: Path,
+    fallback_roots: Optional[Sequence[Path]] = None,
+) -> List[DiscoveredResourcePack]:
+    """
+    Discovers all resource packs for a game instance across local and shared directories,
+    inspects options.txt for pack activation and stack priority, and returns an ordered list
+    of DiscoveredResourcePack instances.
+
+    Priority Ordering:
+    - Active packs are ordered in reverse order of options.txt resourcePacks
+      (in Minecraft, later items in the list override earlier ones; thus highest priority is at index 0).
+    - Inactive / unselected packs follow active packs.
+    """
+    # 1. Collect all candidate directories
+    pack_dirs = _collect_candidate_pack_dirs(game_dir, fallback_roots)
+    if not pack_dirs:
+        return []
+
+    # 2. Scan packs from all directories, deduplicating by normalized name
+    discovered_raw: List[Tuple[Path, bool]] = []
+    seen_names: Set[str] = set()
+
+    for p_dir in pack_dirs:
+        for p_path, initial_enabled in _scan_single_pack_dir(p_dir):
+            key = p_path.name.lower()
+            if key not in seen_names:
+                seen_names.add(key)
+                discovered_raw.append((p_path, initial_enabled))
+
+    if not discovered_raw:
+        return []
+
+    # 3. Locate options.txt
+    options_file: Optional[Path] = None
+    all_roots = [game_dir] + list(fallback_roots or [])
+    for cand_root in all_roots:
+        if cand_root and cand_root.is_dir():
+            opt = cand_root / "options.txt"
+            if opt.is_file():
+                options_file = opt
+                break
+
+    options_packs: List[str] = parse_options_resource_packs(options_file) if options_file else []
+
+    # 4. If options.txt has resourcePacks configured, match them
+    if options_packs:
+        import urllib.parse
+
+        enabled_matches: List[Tuple[int, DiscoveredResourcePack]] = []  # (options_index, pack)
+        unmatched_packs: List[DiscoveredResourcePack] = []
+
+        def _get_options_index(pack_path: Path) -> Optional[int]:
+            stem = pack_path.stem
+            name = pack_path.name
+            clean_name = name[:-9] if name.lower().endswith(".disabled") else name
+
+            for idx, opt_entry in enumerate(options_packs):
+                clean_opt = opt_entry
+                if clean_opt.startswith("file/"):
+                    clean_opt = clean_opt[5:]
+                unquoted_plus = urllib.parse.unquote_plus(clean_opt)
+                unquoted = urllib.parse.unquote(clean_opt)
+
+                candidates = {clean_opt.lower(), unquoted_plus.lower(), unquoted.lower()}
+                if clean_name.lower() in candidates or stem.lower() in candidates:
+                    return idx
+            return None
+
+        for p_path, _file_enabled in discovered_raw:
+            opt_idx = _get_options_index(p_path)
+            # If pack file explicitly ends with .disabled, respect it as disabled
+            if p_path.name.lower().endswith(".disabled"):
+                opt_idx = None
+
+            if opt_idx is not None:
+                pack_obj = DiscoveredResourcePack(
+                    path=p_path,
+                    name=p_path.name,
+                    enabled=True,
+                    priority=opt_idx,
+                )
+                enabled_matches.append((opt_idx, pack_obj))
+            else:
+                pack_obj = DiscoveredResourcePack(
+                    path=p_path,
+                    name=p_path.name,
+                    enabled=False,  # Not selected in options.txt
+                    priority=9999,
+                )
+                unmatched_packs.append(pack_obj)
+
+        # In Minecraft, later items in options.txt override earlier items.
+        # Top of the stack (highest priority, index 0 in MoziToolKit) corresponds to the highest options index!
+        enabled_matches.sort(key=lambda item: item[0], reverse=True)
+        unmatched_packs.sort(key=lambda p: p.name.lower())
+
+        return [item[1] for item in enabled_matches] + unmatched_packs
+
+    # 5. If no options.txt found, keep initial enabled status (disabled if .disabled), sorted by name
+    enabled_packs = [
+        DiscoveredResourcePack(path=p_path, name=p_path.name, enabled=True, priority=idx)
+        for idx, (p_path, is_en) in enumerate(discovered_raw)
+        if is_en
+    ]
+    disabled_packs = [
+        DiscoveredResourcePack(path=p_path, name=p_path.name, enabled=False, priority=9999)
+        for (p_path, is_en) in discovered_raw
+        if not is_en
+    ]
+    enabled_packs.sort(key=lambda p: p.name.lower())
+    disabled_packs.sort(key=lambda p: p.name.lower())
+    return enabled_packs + disabled_packs
+
+
+def _scan_directory_packs(resourcepacks_dir: Path) -> List[DiscoveredResourcePack]:
+    """Compatibility wrapper around resolve_instance_resource_packs for a single folder."""
+    if not resourcepacks_dir.is_dir():
+        return []
+    return resolve_instance_resource_packs(
+        resourcepacks_dir.parent if resourcepacks_dir.name in RESOURCE_PACK_DIR_NAMES else resourcepacks_dir
+    )
 
 
 def _scan_directory_mods(
     mods_dir: Path,
     *,
     filter_functional: bool = False,
-) -> Tuple[List[Path], List[Path]]:
+    disabled_mod_names: Optional[Set[str]] = None,
+) -> Tuple[List[DiscoveredMod], List[DiscoveredMod]]:
     """
-    Quickly finds mod files (.jar) in a mods directory without unpacking them.
+    Finds mod files (.jar, .jar.disabled) in a mods directory.
+    Identifies enabled vs disabled states from file extensions and launcher configurations.
     When filter_functional=True, separates mods with renderable block assets
     from pure functional mods (e.g. Sodium, Iris, Balm, Cloth Config).
     Returns: (asset_mods, functional_mods)
     """
-    asset_mods: List[Path] = []
-    functional_mods: List[Path] = []
+    discovered_mods: List[DiscoveredMod] = []
     if not mods_dir.is_dir():
-        return asset_mods, functional_mods
+        return [], []
+
+    disabled_set = {n.lower() for n in (disabled_mod_names or set())}
 
     try:
-        entries = sorted(
-            [e for e in mods_dir.iterdir() if e.is_file() and e.suffix.lower() == ".jar" and not e.name.startswith(".")],
-            key=lambda p: p.name.lower(),
-        )
+        entries = sorted(mods_dir.iterdir(), key=lambda p: p.name.lower())
     except OSError as e:
         logger.debug("Failed scanning mods in %s: %s", mods_dir, e)
-        return asset_mods, functional_mods
+        return [], []
+
+    for entry in entries:
+        if not entry.is_file() or entry.name.startswith("."):
+            continue
+
+        lower = entry.name.lower()
+        is_jar = lower.endswith(".jar")
+        is_disabled_ext = (
+            lower.endswith(".disabled")
+            or lower.endswith(".disable")
+            or lower.endswith(".bak")
+            or lower.endswith(".off")
+        )
+
+        if not is_jar and not (is_disabled_ext and ".jar" in lower):
+            continue
+
+        is_enabled = is_jar and not is_disabled_ext and lower not in disabled_set and entry.stem.lower() not in disabled_set
+
+        discovered_mods.append(
+            DiscoveredMod(
+                path=entry,
+                name=entry.name,
+                enabled=is_enabled,
+            )
+        )
+
+    # Sort: enabled mods first, then disabled mods
+    discovered_mods.sort(key=lambda m: (0 if m.enabled else 1, m.name.lower()))
 
     if not filter_functional:
-        return entries, []
+        return discovered_mods, []
 
-    return filter_functional_mods(entries)
+    return filter_functional_mods(discovered_mods)
 
 
 def filter_functional_mods(
-    mod_paths: Sequence[Path],
-) -> Tuple[List[Path], List[Path]]:
+    mod_paths: Sequence[Any],
+) -> Tuple[List[Any], List[Any]]:
     """
     Separates mods containing blockstates, models, or textures from purely functional mods
     (e.g. Sodium, Iris, Cloth Config). Evaluated on-demand when ingesting a specific instance.
     Returns: (asset_mods, functional_mods)
     """
-    asset_mods: List[Path] = []
-    functional_mods: List[Path] = []
+    asset_mods: List[Any] = []
+    functional_mods: List[Any] = []
 
     for entry in mod_paths:
+        p = entry.path if hasattr(entry, "path") else Path(entry)
         try:
-            probe = detect_pack_kind(entry)
+            probe = detect_pack_kind(p)
             # If the mod has blockstates, block models, or block textures, keep it!
             if probe.has_block_assets or probe.has_renderable_assets:
                 asset_mods.append(entry)
@@ -306,9 +669,7 @@ def _scan_single_prism_instance(
         game_dir = alt_game_dir if alt_game_dir.is_dir() else inst_dir
 
     # Resource packs and mods
-    packs = _scan_directory_packs(game_dir / "resourcepacks")
-    if not packs:
-        packs = _scan_directory_packs(game_dir / "texturepacks")
+    packs = resolve_instance_resource_packs(game_dir)
     mods, skipped_mods = _scan_directory_mods(game_dir / "mods")
 
     # Resolve client JAR
@@ -412,7 +773,7 @@ def scan_official_instances(root: Path) -> List[DiscoveredInstance]:
         return results
 
     # Global shared packs and mods
-    global_packs = _scan_directory_packs(root / "resourcepacks")
+    global_packs = resolve_instance_resource_packs(root)
     global_mods, global_skipped_mods = _scan_directory_mods(root / "mods")
 
     for ver_dir in sorted(versions_dir.iterdir()):
@@ -477,8 +838,11 @@ def scan_official_instances(root: Path) -> List[DiscoveredInstance]:
 
         # Scan resources for this instance
         if is_isolated:
-            packs = _scan_directory_packs(game_dir / "resourcepacks")
+            packs = resolve_instance_resource_packs(game_dir, fallback_roots=[root])
             mods, skipped_mods = _scan_directory_mods(game_dir / "mods")
+            # If isolated version has no mods directory at all, but root does, fallback to root mods
+            if not mods and not (game_dir / "mods").is_dir() and (root / "mods").is_dir():
+                mods, skipped_mods = _scan_directory_mods(root / "mods")
             isolation_mode = ISOLATION_ISOLATED
         else:
             packs = list(global_packs)
@@ -556,8 +920,18 @@ def scan_modrinth_instances(root: Path) -> List[DiscoveredInstance]:
         elif "quilt" in raw_loader:
             loader = LOADER_QUILT
 
-        packs = _scan_directory_packs(p_dir / "resourcepacks")
-        mods, skipped_mods = _scan_directory_mods(p_dir / "mods")
+        # Check for disabled mods in profile.json
+        disabled_mod_names: Set[str] = set()
+        files_list = data.get("files", [])
+        if isinstance(files_list, list):
+            for f_entry in files_list:
+                if isinstance(f_entry, dict) and f_entry.get("disabled") is True:
+                    f_path = str(f_entry.get("path", ""))
+                    if f_path:
+                        disabled_mod_names.add(Path(f_path).name.lower())
+
+        packs = resolve_instance_resource_packs(p_dir)
+        mods, skipped_mods = _scan_directory_mods(p_dir / "mods", disabled_mod_names=disabled_mod_names)
 
         # Client jar lookup in modrinth meta
         client_jar: Optional[Path] = None
@@ -624,7 +998,7 @@ def scan_curseforge_instances(instances_dir: Path) -> List[DiscoveredInstance]:
         elif "quilt" in raw_loader:
             loader = LOADER_QUILT
 
-        packs = _scan_directory_packs(inst_dir / "resourcepacks")
+        packs = resolve_instance_resource_packs(inst_dir)
         mods, skipped_mods = _scan_directory_mods(inst_dir / "mods")
 
         results.append(
@@ -686,7 +1060,7 @@ def scan_custom_directory(target_path: Path) -> List[DiscoveredInstance]:
         return scan_official_instances(path / ".minecraft")
 
     # 5. Is it a standalone game folder with mods/ or resourcepacks/?
-    packs = _scan_directory_packs(path / "resourcepacks")
+    packs = resolve_instance_resource_packs(path)
     mods, skipped_mods = _scan_directory_mods(path / "mods")
     if packs or mods or (path / "saves").is_dir():
         # Generic isolated instance
@@ -826,7 +1200,7 @@ def find_latest_vanilla_instance(
     )
 
 
-def apply_instance_to_preferences(inst: DiscoveredInstance, prefs: Any) -> Tuple[List[Path], List[Path]]:
+def apply_instance_to_preferences(inst: DiscoveredInstance, prefs: Any) -> Tuple[List[Any], List[Any]]:
     """
     Applies the given game instance assets (Vanilla Client JAR, filtered mods, resource packs)
     to Blender AddonPreferences, sorting them by standard tier hierarchy.
@@ -841,46 +1215,71 @@ def apply_instance_to_preferences(inst: DiscoveredInstance, prefs: Any) -> Tuple
 
     asset_mods, skipped_mods = filter_functional_mods(inst.mods)
 
-    coll = prefs.resource_packs
-    coll.clear()
+    try:
+        from ..ui.preferences_packs import _set_is_reordering
+        _set_is_reordering(True)
+    except Exception:
+        pass
+    if hasattr(prefs, "_mozi_is_syncing"):
+        setattr(prefs, "_mozi_is_syncing", True)
 
-    def _add_elem():
-        if hasattr(coll, "add"):
-            return coll.add()
-        import types
-        elem = types.SimpleNamespace()
-        coll.append(elem)
-        return elem
+    try:
+        coll = prefs.resource_packs
+        coll.clear()
 
-    # 1. Vanilla base JAR
-    if inst.client_jar and inst.client_jar.is_file():
-        elem = _add_elem()
-        elem.name = f"Minecraft {inst.minecraft_version} Vanilla Client"
-        elem.path = str(inst.client_jar)
-        elem.pack_type = "VANILLA"
-        elem.pack_type_source = TYPE_SOURCE_MANUAL
-        elem.detected_kind = KIND_VANILLA_CLIENT
-        elem.enabled = True
+        def _add_elem():
+            if hasattr(coll, "add"):
+                return coll.add()
+            import types
+            elem = types.SimpleNamespace()
+            coll.append(elem)
+            return elem
 
-    # 2. Mod JARs (filtered for renderable block assets)
-    for mod_path in asset_mods:
-        elem = _add_elem()
-        elem.name = mod_path.stem
-        elem.path = str(mod_path)
-        elem.pack_type = "MOD_JAR"
-        elem.pack_type_source = TYPE_SOURCE_MANUAL
-        elem.detected_kind = KIND_MOD
-        elem.enabled = True
+        # 1. Vanilla base JAR
+        if inst.client_jar and inst.client_jar.is_file():
+            elem = _add_elem()
+            elem.name = f"Minecraft {inst.minecraft_version} Vanilla Client"
+            elem.pack_type = "VANILLA"
+            elem.pack_type_source = TYPE_SOURCE_MANUAL
+            elem.detected_kind = KIND_VANILLA_CLIENT
+            elem.path = str(inst.client_jar)
+            elem.enabled = True
 
-    # 3. Resource Packs
-    for pack_path in inst.resource_packs:
-        elem = _add_elem()
-        elem.name = pack_path.stem
-        elem.path = str(pack_path)
-        elem.pack_type = "RESOURCE_PACK"
-        elem.pack_type_source = TYPE_SOURCE_MANUAL
-        elem.detected_kind = KIND_RESOURCE_PACK
-        elem.enabled = True
+        # 2. Mod JARs (filtered for renderable block assets)
+        for mod in asset_mods:
+            elem = _add_elem()
+            m_path = mod.path if hasattr(mod, "path") else Path(mod)
+            m_name = getattr(mod, "display_name", None) or m_path.stem
+            m_enabled = getattr(mod, "enabled", True)
+
+            elem.name = m_name
+            elem.pack_type = "MOD_JAR"
+            elem.pack_type_source = TYPE_SOURCE_MANUAL
+            elem.detected_kind = KIND_MOD
+            elem.path = str(m_path)
+            elem.enabled = m_enabled
+
+        # 3. Resource Packs (ordered by options.txt stack priority: highest priority first)
+        for pack in inst.resource_packs:
+            elem = _add_elem()
+            p_path = pack.path if hasattr(pack, "path") else Path(pack)
+            p_name = getattr(pack, "display_name", None) or p_path.stem
+            p_enabled = getattr(pack, "enabled", True)
+
+            elem.name = p_name
+            elem.pack_type = "RESOURCE_PACK"
+            elem.pack_type_source = TYPE_SOURCE_MANUAL
+            elem.detected_kind = KIND_RESOURCE_PACK
+            elem.path = str(p_path)
+            elem.enabled = p_enabled
+    finally:
+        if hasattr(prefs, "_mozi_is_syncing"):
+            setattr(prefs, "_mozi_is_syncing", False)
+        try:
+            from ..ui.preferences_packs import _set_is_reordering
+            _set_is_reordering(False)
+        except Exception:
+            pass
 
     try:
         from ..ui.preferences_packs import _CACHED_DISCOVERED_INSTANCES

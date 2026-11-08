@@ -458,11 +458,16 @@ class MOZI_AddonPreferences(bpy.types.AddonPreferences):
             info_sub = inst_box.box()
             i_row = info_sub.row(align=True)
             iso_label = tr("Isolated Instance") if curr_inst.is_isolated else tr("Global Shared")
-            mods_info = f"{tr('Mods')}: {len(curr_inst.mods)}"
+            en_mods = len(curr_inst.enabled_mods) if hasattr(curr_inst, "enabled_mods") else len(curr_inst.mods)
+            mods_info = f"{tr('Mods')}: {en_mods}/{len(curr_inst.mods)}" if en_mods != len(curr_inst.mods) else f"{tr('Mods')}: {len(curr_inst.mods)}"
             if getattr(curr_inst, "skipped_functional_mods", None):
                 mods_info += f" ({tr('Filtered')}: {len(curr_inst.skipped_functional_mods)})"
+
+            en_packs = len(curr_inst.enabled_resource_packs) if hasattr(curr_inst, "enabled_resource_packs") else len(curr_inst.resource_packs)
+            packs_info = f"{tr('Packs')}: {en_packs}/{len(curr_inst.resource_packs)}" if en_packs != len(curr_inst.resource_packs) else f"{tr('Packs')}: {len(curr_inst.resource_packs)}"
+
             i_row.label(
-                text=f"{tr('Version')}: {curr_inst.minecraft_version} ({curr_inst.loader}) | {iso_label} | {mods_info} | {tr('Packs')}: {len(curr_inst.resource_packs)}",
+                text=f"{tr('Version')}: {curr_inst.minecraft_version} ({curr_inst.loader}) | {iso_label} | {mods_info} | {packs_info}",
                 icon="CHECKMARK" if curr_inst.has_client_jar else "INFO",
             )
             if not curr_inst.has_client_jar:

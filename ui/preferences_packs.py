@@ -214,7 +214,11 @@ def get_detected_instances_enum_items(self, context) -> List[Tuple[str, str, str
         ident = inst.instance_id
         iso_tag = " [Isolated]" if inst.is_isolated else " [Shared]"
         name = f"[{inst.launcher_kind}] {inst.name} ({inst.minecraft_version}){iso_tag}"
-        desc = f"Dir: {inst.game_dir} | Loader: {inst.loader} | Mods: {len(inst.mods)} | Packs: {len(inst.resource_packs)}"
+        en_mods = len(inst.enabled_mods) if hasattr(inst, "enabled_mods") else len(inst.mods)
+        mods_str = f"{en_mods}/{len(inst.mods)}" if en_mods != len(inst.mods) else f"{len(inst.mods)}"
+        en_packs = len(inst.enabled_resource_packs) if hasattr(inst, "enabled_resource_packs") else len(inst.resource_packs)
+        packs_str = f"{en_packs}/{len(inst.resource_packs)}" if en_packs != len(inst.resource_packs) else f"{len(inst.resource_packs)}"
+        desc = f"Dir: {inst.game_dir} | Loader: {inst.loader} | Mods: {mods_str} | Packs: {packs_str}"
         icon = "WORLD_DATA" if inst.is_isolated else "WORLD"
         items.append((ident, name, desc, icon, num))
         num += 1

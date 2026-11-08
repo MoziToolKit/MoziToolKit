@@ -417,6 +417,214 @@ class TestLauncherScan(unittest.TestCase):
                 elem.detected_kind = d_kind
                 elem.enabled = enabled
 
+    def test_options_txt_resource_pack_priority_and_enabled_states(self):
+        """Tests that options.txt resourcePacks stack determines pack order and enabled status."""
+        from MoziToolKit.utils.launcher_scan import (
+            parse_options_resource_packs,
+            resolve_instance_resource_packs,
+        )
+
+        game_dir = self.root / "game_opt_test"
+        rp_dir = game_dir / "resourcepacks"
+        rp_dir.mkdir(parents=True)
+
+        (rp_dir / "pack_base.zip").write_bytes(b"dummy")
+        (rp_dir / "pack_overlay.zip").write_bytes(b"dummy")
+        (rp_dir / "pack_top.zip").write_bytes(b"dummy")
+        (rp_dir / "pack_unused.zip").write_bytes(b"dummy")
+        (rp_dir / "pack_explicit_disabled.zip.disabled").write_bytes(b"dummy")
+
+        # In Minecraft options.txt, pack_top overrides pack_overlay, which overrides pack_base.
+        # Order written in options.txt: ["vanilla", "file/pack_base.zip", "file/pack_overlay.zip", "file/pack_top.zip"]
+        options_content = (
+            'resourcePacks:["vanilla","file/pack_base.zip","file/pack_overlay.zip","file/pack_top.zip"]\n'
+        )
+        (game_dir / "options.txt").write_text(options_content, encoding="utf-8")
+
+        # 1. Test raw parser
+        parsed = parse_options_resource_packs(game_dir / "options.txt")
+        self.assertEqual(
+            parsed,
+            ["vanilla", "file/pack_base.zip", "file/pack_overlay.zip", "file/pack_top.zip"],
+        )
+
+        # 2. Test instance pack resolution and priority ordering
+        packs = resolve_instance_resource_packs(game_dir)
+        self.assertEqual(len(packs), 5)
+
+        # In MoziToolKit (resolution stack): index 0 must be the highest priority (pack_top)
+        self.assertEqual(packs[0].name, "pack_top.zip")
+        self.assertTrue(packs[0].enabled)
+        self.assertEqual(packs[1].name, "pack_overlay.zip")
+        self.assertTrue(packs[1].enabled)
+        self.assertEqual(packs[2].name, "pack_base.zip")
+        self.assertTrue(packs[2].enabled)
+
+        # Unselected packs are appended with enabled=False
+        self.assertEqual(packs[3].name, "pack_explicit_disabled.zip.disabled")
+        self.assertFalse(packs[3].enabled)
+        self.assertEqual(packs[4].name, "pack_unused.zip")
+        self.assertFalse(packs[4].enabled)
+
+    def test_version_isolated_inherits_and_merges_root_resource_packs(self):
+        """Tests that isolated versions without their own resourcepacks directory inherit root packs."""
+        mc_root = self.root / ".minecraft_merge_test"
+        (mc_root / "resourcepacks").mkdir(parents=True)
+        (mc_root / "resourcepacks" / "global_faithful.zip").write_bytes(b"dummy")
+
+        versions_dir = mc_root / "versions"
+        v_iso = versions_dir / "1.21.1-Iso"
+        v_iso.mkdir(parents=True)
+        (v_iso / ".hmcl").touch()
+        (v_iso / "mods").mkdir()
+        _make_block_mod_jar(v_iso / "mods" / "iso_mod.jar", "isomod")
+
+        results = scan_official_instances(mc_root)
+        self.assertEqual(len(results), 1)
+        inst = results[0]
+        self.assertEqual(inst.isolation_mode, ISOLATION_ISOLATED)
+        # Even though 1.21.1-Iso has no local resourcepacks/, it inherits global_faithful.zip!
+        self.assertEqual(len(inst.resource_packs), 1)
+        self.assertEqual(inst.resource_packs[0].stem, "global_faithful")
+
+    def test_mod_disabled_states_and_modrinth_profile(self):
+        """Tests detection of enabled vs disabled mods via filenames and Modrinth profile.json."""
+        modrinth_root = self.root / "modrinth_disabled_test"
+        profiles_dir = modrinth_root / "profiles"
+        p_dir = profiles_dir / "test_prof"
+        p_dir.mkdir(parents=True)
+
+        mods_dir = p_dir / "mods"
+        mods_dir.mkdir(parents=True)
+        _make_block_mod_jar(mods_dir / "enabled_mod.jar", "enabled_mod")
+        _make_block_mod_jar(mods_dir / "file_disabled_mod.jar.disabled", "disabled_mod1")
+        _make_block_mod_jar(mods_dir / "profile_disabled_mod.jar", "disabled_mod2")
+
+        p_data = {
+            "name": "Modrinth Disable Test",
+            "game_version": "1.21",
+            "loader": "fabric",
+            "files": [
+                {"path": "mods/profile_disabled_mod.jar", "disabled": True},
+            ],
+        }
+        (p_dir / "profile.json").write_text(json.dumps(p_data), encoding="utf-8")
+
+        results = scan_modrinth_instances(modrinth_root)
+        self.assertEqual(len(results), 1)
+        inst = results[0]
+        self.assertEqual(len(inst.mods), 3)
+
+        mods_by_name = {m.name: m for m in inst.mods}
+        self.assertTrue(mods_by_name["enabled_mod.jar"].enabled)
+        self.assertFalse(mods_by_name["file_disabled_mod.jar.disabled"].enabled)
+        self.assertFalse(mods_by_name["profile_disabled_mod.jar"].enabled)
+
+    def test_directory_packs_and_nested_folders(self):
+        """Tests standard directory packs and single-layer nested folders."""
+        game_dir = self.root / "dir_packs_test"
+        rp_dir = game_dir / "resourcepacks"
+        rp_dir.mkdir(parents=True)
+
+        # 1. Standard directory pack
+        p1 = rp_dir / "StandardPack"
+        p1.mkdir()
+        (p1 / "pack.mcmeta").write_text('{"pack": {"pack_format": 15, "description": "Test"}}', encoding="utf-8")
+
+        # 2. Single-layer nested pack directory (Faithful/Faithful/pack.mcmeta)
+        p2_outer = rp_dir / "NestedOuter"
+        p2_inner = p2_outer / "NestedInner"
+        p2_inner.mkdir(parents=True)
+        (p2_inner / "pack.mcmeta").write_text('{"pack": {"pack_format": 15, "description": "Nested"}}', encoding="utf-8")
+
+        # 3. Assets-only directory pack
+        p3 = rp_dir / "AssetsOnlyPack"
+        (p3 / "assets" / "minecraft" / "textures").mkdir(parents=True)
+
+        inst_list = scan_custom_directory(game_dir)
+        self.assertEqual(len(inst_list), 1)
+        inst = inst_list[0]
+        self.assertEqual(len(inst.resource_packs), 3)
+
+        pack_names = {p.stem for p in inst.resource_packs}
+        self.assertIn("StandardPack", pack_names)
+        self.assertIn("NestedInner", pack_names)
+        self.assertIn("AssetsOnlyPack", pack_names)
+
+    def test_apply_instance_to_preferences_full_tier_stack_integration(self):
+        """Tests that applying an instance to preferences populates enabled/disabled states and tier priority."""
+        from MoziToolKit.utils.system import get_prefs
+        from MoziToolKit.utils.launcher_scan import DiscoveredResourcePack, DiscoveredMod
+
+        prefs = get_prefs()
+        if prefs is None:
+            self.skipTest("AddonPreferences not available")
+
+        client_jar = self.root / "mc_client.jar"
+        client_jar.write_bytes(b"dummy_client")
+
+        rp_top = DiscoveredResourcePack(path=self.root / "top_pack.zip", name="Top Pack", enabled=True, priority=0)
+        rp_off = DiscoveredResourcePack(path=self.root / "off_pack.zip", name="Off Pack", enabled=False, priority=1)
+
+        mod_on_path = self.root / "mod_on.jar"
+        mod_off_path = self.root / "mod_off.jar.disabled"
+        _make_block_mod_jar(mod_on_path, "mod_on")
+        _make_block_mod_jar(mod_off_path, "mod_off")
+
+        mod_on = DiscoveredMod(path=mod_on_path, name="Mod On", enabled=True)
+        mod_off = DiscoveredMod(path=mod_off_path, name="Mod Off", enabled=False)
+
+        inst = DiscoveredInstance(
+            name="IntegrationTestInstance",
+            launcher_kind=LAUNCHER_CUSTOM,
+            isolation_mode=ISOLATION_ISOLATED,
+            game_dir=self.root,
+            minecraft_version="1.21.1",
+            client_jar=client_jar,
+            resource_packs=[rp_top, rp_off],
+            mods=[mod_on, mod_off],
+        )
+
+        orig_packs = [(p.name, p.path, p.pack_type, p.pack_type_source, p.detected_kind, p.enabled) for p in prefs.resource_packs]
+        try:
+            apply_instance_to_preferences(inst, prefs)
+
+            self.assertEqual(len(prefs.resource_packs), 5)
+
+            p0 = prefs.resource_packs[0]
+            self.assertEqual(p0.pack_type, "RESOURCE_PACK")
+            self.assertEqual(p0.name, "top_pack")
+            self.assertTrue(p0.enabled)
+
+            p1 = prefs.resource_packs[1]
+            self.assertEqual(p1.pack_type, "RESOURCE_PACK")
+            self.assertEqual(p1.name, "off_pack")
+            self.assertFalse(p1.enabled)
+
+            p2 = prefs.resource_packs[2]
+            self.assertEqual(p2.pack_type, "MOD_JAR")
+            self.assertEqual(p2.name, "mod_on")
+            self.assertTrue(p2.enabled)
+
+            p3 = prefs.resource_packs[3]
+            self.assertEqual(p3.pack_type, "MOD_JAR")
+            self.assertEqual(p3.name, "mod_off")
+            self.assertFalse(p3.enabled)
+
+            p4 = prefs.resource_packs[4]
+            self.assertEqual(p4.pack_type, "VANILLA")
+            self.assertTrue(p4.enabled)
+        finally:
+            prefs.resource_packs.clear()
+            for name, path, p_type, p_source, d_kind, enabled in orig_packs:
+                elem = prefs.resource_packs.add()
+                elem.name = name
+                elem.path = path
+                elem.pack_type = p_type
+                elem.pack_type_source = p_source
+                elem.detected_kind = d_kind
+                elem.enabled = enabled
+
 
 if __name__ == "__main__":
     unittest.main()

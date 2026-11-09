@@ -16,23 +16,18 @@ for p in [str(libmtk_release_path), str(PROJECT_DIR), str(PARENT_DIR)]:
     if p not in sys.path:
         sys.path.insert(0, p)
 
+import bpy
+
 from MoziToolKit.bridge.save import inspect_minecraft_save, load_and_mesh_minecraft_save
+from MoziToolKit.utils.save.hierarchy import apply_imported_save_to_blender
 from tests._assets import save_world
 
 
 class TestSavePaintingImport(unittest.TestCase):
     def test_user_save_detects_all_paintings(self):
-        user_save = save_world() or (
-            Path(
-                "/Users/jaxlocke/Library/Application Support/PrismLauncher/instances/26.2/minecraft/saves/新的世界 (1)"
-            )
-            if Path(
-                "/Users/jaxlocke/Library/Application Support/PrismLauncher/instances/26.2/minecraft/saves/新的世界 (1)"
-            ).exists()
-            else None
-        )
+        user_save = save_world()
         if user_save is None or not user_save.exists():
-            self.skipTest(f"Test save world not found")
+            self.skipTest("Test save world not found (set MTK_TEST_SAVE)")
 
         # 1. Metadata inspection
         meta = inspect_minecraft_save(user_save)
@@ -54,6 +49,9 @@ class TestSavePaintingImport(unittest.TestCase):
         self.assertGreater(mesh_data.face_count, 0)
         self.assertGreater(mesh_data.vertex_count, 0)
         self.assertGreater(mesh_data.triangle_count, 0)
+        quad_mv = mesh_data.quad_indices_memoryview()
+        self.assertIsNotNone(quad_mv)
+        self.assertEqual(len(quad_mv), mesh_data.face_count * 4)
 
         # 4. Storage remains pristine without fake painting blockstates
         # The space occupied by the hanging entity remains true air, decoupled from discrete voxels
@@ -64,3 +62,22 @@ class TestSavePaintingImport(unittest.TestCase):
         # 5. Point cloud extraction succeeds cleanly
         cloud = storage.to_point_cloud()
         self.assertGreater(cloud.len(), 0)
+
+        # 6. Full Blender scene injection & material binding verification
+        root_obj, stats = apply_imported_save_to_blender(
+            mesh_data=mesh_data,
+            meta=level_meta,
+            storage=storage,
+            elapsed_ms=elapsed_ms,
+            world_dir=user_save,
+            dimension="overworld",
+            min_block=min_block,
+            max_block=max_block,
+            context=bpy.context,
+        )
+        self.assertIsNotNone(root_obj)
+        self.assertEqual(stats["polygon_count"], mesh_data.face_count)
+        mesh_obj = bpy.data.objects.get(stats["mesh_name"])
+        self.assertIsNotNone(mesh_obj)
+        self.assertEqual(len(mesh_obj.data.polygons), mesh_data.face_count)
+        self.assertGreater(len(mesh_obj.data.materials), 0)

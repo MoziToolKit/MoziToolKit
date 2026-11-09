@@ -46,6 +46,7 @@ from .preferences_packs import (
     MOZI_OT_scan_instances,
     MOZI_OT_pick_custom_instance_dir,
     on_detected_instance_changed,
+    on_detected_instances_launcher_filter_changed,
     get_detected_instances_enum_items,
     _CACHED_DISCOVERED_INSTANCES,
     describe_detected_kind,
@@ -197,6 +198,7 @@ class MOZI_AddonPreferences(bpy.types.AddonPreferences):
             ("CUSTOM", "Custom / External", "Show instances imported from custom directories"),
         ],
         default="ALL",
+        update=on_detected_instances_launcher_filter_changed,
     )
 
     detected_instance_id: EnumProperty(

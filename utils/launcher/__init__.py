@@ -22,6 +22,7 @@ from .models import (
     DiscoveredInstance,
     DiscoveredMod,
     DiscoveredResourcePack,
+    matches_launcher_filter,
 )
 from .detector import (
     _collect_candidate_pack_dirs,
@@ -73,6 +74,7 @@ __all__ = [
     "DiscoveredInstance",
     "DiscoveredMod",
     "DiscoveredResourcePack",
+    "matches_launcher_filter",
     "_collect_candidate_pack_dirs",
     "_scan_directory_mods",
     "_scan_directory_packs",

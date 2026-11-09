@@ -19,6 +19,16 @@ logger = logging.getLogger("MoziToolKit.Utils.InstanceScan")
 # Discovered Minecraft instances cache and user-supplied directories
 _CACHED_DISCOVERED_INSTANCES: List[Any] = []
 _CUSTOM_DIRECTORIES: List[Path] = []
+_LAST_APPLIED_INSTANCE_ID: str = ""
+
+
+def get_last_applied_instance_id() -> str:
+    return _LAST_APPLIED_INSTANCE_ID
+
+
+def set_last_applied_instance_id(instance_id: str) -> None:
+    global _LAST_APPLIED_INSTANCE_ID
+    _LAST_APPLIED_INSTANCE_ID = str(instance_id or "")
 _INSTANCE_SCAN_STATE: str = "IDLE"  # "IDLE", "SCANNING", "DONE", "ERROR"
 _INSTANCE_SCAN_LOCK = threading.Lock()
 _ACTIVE_SCAN_THREAD: Optional[threading.Thread] = None
@@ -102,9 +112,16 @@ def schedule_background_instance_scan(
                 context = getattr(bpy, "context", None)
                 prefs = _safe_get_prefs(context)
                 if prefs is not None and _CACHED_DISCOVERED_INSTANCES:
-                    from ..launcher_scan import find_latest_vanilla_instance
-                    best = find_latest_vanilla_instance(_CACHED_DISCOVERED_INSTANCES)
-                    if best is None and _CACHED_DISCOVERED_INSTANCES:
+                    from ..launcher_scan import find_latest_vanilla_instance, matches_launcher_filter
+                    launcher_filter = getattr(prefs, "detected_instances_launcher_filter", "ALL")
+                    matching_instances = [
+                        i for i in _CACHED_DISCOVERED_INSTANCES
+                        if matches_launcher_filter(i.launcher_kind, launcher_filter)
+                    ]
+                    best = find_latest_vanilla_instance(matching_instances)
+                    if best is None and matching_instances:
+                        best = matching_instances[0]
+                    elif best is None and _CACHED_DISCOVERED_INSTANCES and launcher_filter == "ALL":
                         best = _CACHED_DISCOVERED_INSTANCES[0]
 
                     # Auto-populate resource_packs only if in zero-configuration state
@@ -123,7 +140,8 @@ def schedule_background_instance_scan(
                             pass
                     else:
                         target_id = getattr(prefs, "detected_instance_id", "NONE")
-                        if (target_id in ("NONE", "SCANNING") or not any(i.instance_id == target_id for i in _CACHED_DISCOVERED_INSTANCES)) and best is not None:
+                        candidate_pool = matching_instances if matching_instances else _CACHED_DISCOVERED_INSTANCES
+                        if (target_id in ("NONE", "SCANNING") or not any(i.instance_id == target_id for i in candidate_pool)) and best is not None:
                             set_is_updating_instance(True)
                             try:
                                 prefs.detected_instance_id = best.instance_id

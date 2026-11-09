@@ -71,6 +71,10 @@ def draw_resource_packs_tab(prefs: Any, layout: Any, context: Any) -> None:
         info_sub = inst_box.box()
         i_row = info_sub.row(align=True)
         i_row.label(text=tr("Scanning local Minecraft launchers in background..."), icon="TIME")
+    elif _CACHED_DISCOVERED_INSTANCES:
+        info_sub = inst_box.box()
+        i_row = info_sub.row(align=True)
+        i_row.label(text=tr("No instances found for selected launcher category."), icon="INFO")
     else:
         act_row = inst_box.row(align=True)
         act_row.scale_y = 1.2

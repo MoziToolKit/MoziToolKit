@@ -42,6 +42,23 @@ def inspect_minecraft_save(path: str | Path) -> Dict[str, Any]:
     }
 
 
+def load_minecraft_save_storage(
+    world_dir: str | Path,
+    dimension: str = "overworld",
+    min_block: Tuple[int, int, int] = (0, -64, 0),
+    max_block: Tuple[int, int, int] = (15, 64, 15),
+) -> Any:
+    """Loads a bounded 3D selection directly into a VoxelStorage object without requiring model meshing."""
+    mtk = require_libmtk("load_minecraft_save_storage")
+    target_path = str(Path(world_dir).resolve())
+    return mtk.load_minecraft_save_storage(
+        target_path,
+        dimension=dimension,
+        min_block=min_block,
+        max_block=max_block,
+    )
+
+
 def load_and_mesh_minecraft_save(
     world_dir: str | Path,
     dimension: str = "overworld",
@@ -204,5 +221,6 @@ def load_and_mesh_minecraft_save(
 
 __all__ = [
     "inspect_minecraft_save",
+    "load_minecraft_save_storage",
     "load_and_mesh_minecraft_save",
 ]

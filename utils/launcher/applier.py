@@ -169,6 +169,12 @@ def apply_instance_to_preferences(inst: DiscoveredInstance, prefs: Any) -> Tuple
         pass
 
     prefs.resource_packs_index = 0
+    try:
+        from ..assets.instance_scan import set_last_applied_instance_id
+        set_last_applied_instance_id(inst.instance_id)
+    except Exception:
+        pass
+
     if hasattr(prefs, "detected_instance_id"):
         try:
             from ..assets.instance_scan import is_updating_instance, set_is_updating_instance

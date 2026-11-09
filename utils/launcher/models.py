@@ -33,6 +33,17 @@ LOADER_UNKNOWN = "unknown"
 RESOURCE_PACK_DIR_NAMES = ("resourcepacks", "texturepacks", "ResourcePacks", "resource_packs")
 
 
+def matches_launcher_filter(launcher_kind: str, filter_val: str) -> bool:
+    """Checks whether a discovered instance launcher_kind matches a UI launcher filter."""
+    if not filter_val or filter_val == "ALL":
+        return True
+    if filter_val == LAUNCHER_OFFICIAL:
+        return launcher_kind in (LAUNCHER_OFFICIAL, LAUNCHER_HMCL)
+    if filter_val == LAUNCHER_PRISM:
+        return launcher_kind in (LAUNCHER_PRISM, LAUNCHER_MULTIMC)
+    return launcher_kind == filter_val
+
+
 # ---------------------------------------------------------------------------
 # Data Containers
 # ---------------------------------------------------------------------------

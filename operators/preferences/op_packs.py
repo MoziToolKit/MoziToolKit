@@ -256,7 +256,16 @@ class MOZI_OT_pick_custom_instance_dir(bpy.types.Operator):
         prefs = _get_ui_delegate("_safe_get_prefs", _safe_get_prefs)(context)
         if prefs is not None and found:
             try:
+                if hasattr(prefs, "detected_instances_launcher_filter") and prefs.detected_instances_launcher_filter not in ("ALL", "CUSTOM"):
+                    prefs.detected_instances_launcher_filter = "CUSTOM"
                 prefs.detected_instance_id = found[0].instance_id
+                from ...utils.launcher_scan import apply_instance_to_preferences
+                apply_instance_to_preferences(found[0], prefs)
+                try:
+                    from ...utils.assets.guard import invalidate_guard_cache
+                    invalidate_guard_cache()
+                except Exception:
+                    pass
             except Exception:
                 pass
 

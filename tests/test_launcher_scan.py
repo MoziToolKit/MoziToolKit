@@ -629,6 +629,174 @@ class TestLauncherScan(unittest.TestCase):
                 elem.detected_kind = d_kind
                 elem.enabled = enabled
 
+    def test_matches_launcher_filter(self):
+        from MoziToolKit.utils.launcher_scan import (
+            LAUNCHER_CURSEFORGE,
+            LAUNCHER_CUSTOM,
+            LAUNCHER_HMCL,
+            LAUNCHER_MODRINTH,
+            LAUNCHER_MULTIMC,
+            LAUNCHER_OFFICIAL,
+            LAUNCHER_PRISM,
+            matches_launcher_filter,
+        )
+
+        all_launchers = [
+            LAUNCHER_OFFICIAL,
+            LAUNCHER_PRISM,
+            LAUNCHER_MULTIMC,
+            LAUNCHER_MODRINTH,
+            LAUNCHER_CURSEFORGE,
+            LAUNCHER_HMCL,
+            LAUNCHER_CUSTOM,
+        ]
+
+        # "ALL" matches every launcher
+        for l in all_launchers:
+            self.assertTrue(matches_launcher_filter(l, "ALL"))
+            self.assertTrue(matches_launcher_filter(l, ""))
+
+        # "OFFICIAL" matches OFFICIAL and HMCL
+        self.assertTrue(matches_launcher_filter(LAUNCHER_OFFICIAL, "OFFICIAL"))
+        self.assertTrue(matches_launcher_filter(LAUNCHER_HMCL, "OFFICIAL"))
+        self.assertFalse(matches_launcher_filter(LAUNCHER_PRISM, "OFFICIAL"))
+
+        # "PRISM" matches PRISM and MULTIMC
+        self.assertTrue(matches_launcher_filter(LAUNCHER_PRISM, "PRISM"))
+        self.assertTrue(matches_launcher_filter(LAUNCHER_MULTIMC, "PRISM"))
+        self.assertFalse(matches_launcher_filter(LAUNCHER_OFFICIAL, "PRISM"))
+
+        # MODRINTH, CURSEFORGE, CUSTOM match specifically
+        self.assertTrue(matches_launcher_filter(LAUNCHER_MODRINTH, "MODRINTH"))
+        self.assertFalse(matches_launcher_filter(LAUNCHER_PRISM, "MODRINTH"))
+        self.assertTrue(matches_launcher_filter(LAUNCHER_CURSEFORGE, "CURSEFORGE"))
+        self.assertFalse(matches_launcher_filter(LAUNCHER_OFFICIAL, "CURSEFORGE"))
+        self.assertTrue(matches_launcher_filter(LAUNCHER_CUSTOM, "CUSTOM"))
+        self.assertFalse(matches_launcher_filter(LAUNCHER_PRISM, "CUSTOM"))
+
+    def test_launcher_filter_restricts_enum_items_and_switches_instance(self):
+        from MoziToolKit.utils.system import get_prefs
+        from MoziToolKit.ui.preferences_packs import (
+            _CACHED_DISCOVERED_INSTANCES,
+            wait_for_background_scan,
+            get_detected_instances_enum_items,
+            on_detected_instances_launcher_filter_changed,
+            on_detected_instance_changed,
+        )
+        import MoziToolKit.ui.preferences_packs as pref_packs
+
+        wait_for_background_scan()
+
+        jar_prism = self.root / "prism.jar"
+        jar_prism.write_bytes(b"prism")
+        jar_official = self.root / "official.jar"
+        jar_official.write_bytes(b"official")
+
+        inst_prism = DiscoveredInstance(
+            "Prism 1",
+            LAUNCHER_PRISM,
+            ISOLATION_ISOLATED,
+            self.root / "prism_inst",
+            "1.20.1",
+            client_jar=jar_prism,
+        )
+        inst_official = DiscoveredInstance(
+            "Official 1",
+            LAUNCHER_OFFICIAL,
+            ISOLATION_SHARED,
+            self.root / "official_inst",
+            "1.21.1",
+            client_jar=jar_official,
+        )
+
+        prefs = get_prefs()
+        if prefs is None:
+            self.skipTest("AddonPreferences not available")
+
+        orig_packs = [(p.name, p.path, p.pack_type, p.pack_type_source, p.detected_kind, p.enabled) for p in prefs.resource_packs]
+        orig_cached = list(_CACHED_DISCOVERED_INSTANCES)
+        orig_state = pref_packs._INSTANCE_SCAN_STATE
+        orig_filter = getattr(prefs, "detected_instances_launcher_filter", "ALL")
+        orig_id = getattr(prefs, "detected_instance_id", "NONE")
+
+        pref_packs._INSTANCE_SCAN_STATE = "DONE"
+        _CACHED_DISCOVERED_INSTANCES.clear()
+        _CACHED_DISCOVERED_INSTANCES.extend([inst_prism, inst_official])
+
+        try:
+            # 1. Filter = "ALL": both instances returned in enum items
+            prefs.detected_instances_launcher_filter = "ALL"
+            items_all = get_detected_instances_enum_items(prefs, None)
+            item_ids = [it[0] for it in items_all]
+            self.assertIn(inst_prism.instance_id, item_ids)
+            self.assertIn(inst_official.instance_id, item_ids)
+
+            # 2. Filter = "PRISM": only Prism instance returned
+            prefs.detected_instances_launcher_filter = "PRISM"
+            items_prism = get_detected_instances_enum_items(prefs, None)
+            item_ids_prism = [it[0] for it in items_prism]
+            self.assertEqual(len(item_ids_prism), 1)
+            self.assertEqual(item_ids_prism[0], inst_prism.instance_id)
+
+            # 3. Filter = "OFFICIAL": only Official instance returned
+            prefs.detected_instances_launcher_filter = "OFFICIAL"
+            items_off = get_detected_instances_enum_items(prefs, None)
+            item_ids_off = [it[0] for it in items_off]
+            self.assertEqual(len(item_ids_off), 1)
+            self.assertEqual(item_ids_off[0], inst_official.instance_id)
+
+            # 4. Filter = "CURSEFORGE": no instances exist -> fallback item
+            prefs.detected_instances_launcher_filter = "CURSEFORGE"
+            items_cf = get_detected_instances_enum_items(prefs, None)
+            self.assertEqual(len(items_cf), 1)
+            self.assertEqual(items_cf[0][0], "NONE")
+
+            # 5. Test automatic switching when changing filter
+            # Start on Prism
+            prefs.detected_instances_launcher_filter = "PRISM"
+            prefs.detected_instance_id = inst_prism.instance_id
+            on_detected_instance_changed(prefs, None)
+            self.assertTrue(any(p.path == str(jar_prism) for p in prefs.resource_packs))
+
+            # Switch filter to OFFICIAL: current instance (Prism) is invalid, should auto-switch to Official
+            prefs.detected_instances_launcher_filter = "OFFICIAL"
+            on_detected_instances_launcher_filter_changed(prefs, None)
+            self.assertEqual(prefs.detected_instance_id, inst_official.instance_id)
+            self.assertTrue(any(p.path == str(jar_official) for p in prefs.resource_packs))
+
+            # Switch filter to CURSEFORGE: no instances -> detected_instance_id becomes NONE
+            prefs.detected_instances_launcher_filter = "CURSEFORGE"
+            on_detected_instances_launcher_filter_changed(prefs, None)
+            self.assertEqual(prefs.detected_instance_id, "NONE")
+
+            # Switch filter back to ALL: restores best instance (Official 1.21.1 > Prism 1.20.1)
+            prefs.detected_instances_launcher_filter = "ALL"
+            on_detected_instances_launcher_filter_changed(prefs, None)
+            self.assertEqual(prefs.detected_instance_id, inst_official.instance_id)
+        finally:
+            pref_packs._INSTANCE_SCAN_STATE = orig_state
+            _CACHED_DISCOVERED_INSTANCES.clear()
+            _CACHED_DISCOVERED_INSTANCES.extend(orig_cached)
+            prefs.detected_instances_launcher_filter = orig_filter
+            try:
+                if orig_id and any(i.instance_id == orig_id for i in orig_cached):
+                    prefs.detected_instance_id = orig_id
+            except Exception:
+                pass
+            pref_packs._set_is_reordering(True)
+            try:
+                prefs.resource_packs.clear()
+                for name, path, p_type, p_source, d_kind, enabled in orig_packs:
+                    elem = prefs.resource_packs.add()
+                    elem.name = name
+                    elem.path = path
+                    elem.pack_type = p_type
+                    elem.pack_type_source = p_source
+                    elem.detected_kind = d_kind
+                    elem.enabled = enabled
+            finally:
+                pref_packs._set_is_reordering(False)
+
 
 if __name__ == "__main__":
     unittest.main()

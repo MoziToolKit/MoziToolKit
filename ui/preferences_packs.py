@@ -96,6 +96,20 @@ def get_detected_instances_enum_items(self, context) -> List[Tuple[str, str, str
             return [("SCANNING", "Scanning Local Instances...", "Scanning background directories for installations", "TIME", 0)]
         return [("NONE", "No Instances Detected", "Click 'Scan Local Instances' to search for game directories", "QUESTION", 0)]
 
+    prefs = self if hasattr(self, "detected_instances_launcher_filter") else _safe_get_prefs(self or context)
+    launcher_filter = getattr(prefs, "detected_instances_launcher_filter", "ALL") if prefs else "ALL"
+
+    from ..utils.launcher.models import matches_launcher_filter
+    filtered_instances = [
+        inst for inst in _CACHED_DISCOVERED_INSTANCES
+        if matches_launcher_filter(inst.launcher_kind, launcher_filter)
+    ]
+
+    if not filtered_instances:
+        if _INSTANCE_SCAN_STATE == "SCANNING":
+            return [("SCANNING", "Scanning Local Instances...", "Scanning background directories for installations", "TIME", 0)]
+        return [("NONE", "No Instances in Category", "No instances found for the selected launcher filter", "QUESTION", 0)]
+
     items: List[Tuple[str, str, str, str, int]] = []
     _tr = tr
 
@@ -104,15 +118,15 @@ def get_detected_instances_enum_items(self, context) -> List[Tuple[str, str, str
         return order.get(launcher_kind, 5)
 
     sorted_instances = sorted(
-        _CACHED_DISCOVERED_INSTANCES,
+        filtered_instances,
         key=lambda inst: (launcher_sort_key(inst.launcher_kind), inst.name.lower())
     )
 
     for idx, inst in enumerate(sorted_instances):
         icon = "WINDOW"
-        if inst.launcher_kind == "OFFICIAL":
+        if inst.launcher_kind in ("OFFICIAL", "HMCL"):
             icon = "WORLD_DATA"
-        elif inst.launcher_kind == "PRISM":
+        elif inst.launcher_kind in ("PRISM", "MULTIMC"):
             icon = "COLOR"
         elif inst.launcher_kind == "MODRINTH":
             icon = "FILE_VOLUME"
@@ -134,6 +148,57 @@ def get_detected_instances_enum_items(self, context) -> List[Tuple[str, str, str
     return items
 
 
+def on_detected_instances_launcher_filter_changed(self, context) -> None:
+    """When the user explicitly changes the launcher filter dropdown in preferences."""
+    if is_updating_instance() or _callbacks_suppressed():
+        return
+
+    launcher_filter = getattr(self, "detected_instances_launcher_filter", "ALL")
+    from ..utils.launcher.models import matches_launcher_filter
+    filtered = [
+        inst for inst in _CACHED_DISCOVERED_INSTANCES
+        if matches_launcher_filter(inst.launcher_kind, launcher_filter)
+    ]
+
+    from ..utils.assets.instance_scan import get_last_applied_instance_id, set_last_applied_instance_id
+    last_applied = get_last_applied_instance_id()
+    is_current_valid = any(inst.instance_id == last_applied for inst in filtered)
+
+    if not is_current_valid:
+        if filtered:
+            from ..utils.launcher_scan import find_latest_vanilla_instance, apply_instance_to_preferences
+            best = find_latest_vanilla_instance(filtered) or filtered[0]
+            set_is_updating_instance(True)
+            try:
+                self.detected_instance_id = best.instance_id
+            finally:
+                set_is_updating_instance(False)
+            set_last_applied_instance_id(best.instance_id)
+            apply_instance_to_preferences(best, self)
+            try:
+                from ..utils.assets.guard import invalidate_guard_cache
+                invalidate_guard_cache()
+            except Exception:
+                pass
+            refresh_ui_and_menus(context)
+        else:
+            set_is_updating_instance(True)
+            try:
+                self.detected_instance_id = "NONE"
+            finally:
+                set_is_updating_instance(False)
+            set_last_applied_instance_id("NONE")
+            refresh_ui_and_menus(context)
+    else:
+        if last_applied and getattr(self, "detected_instance_id", "") != last_applied:
+            set_is_updating_instance(True)
+            try:
+                self.detected_instance_id = last_applied
+            finally:
+                set_is_updating_instance(False)
+        refresh_ui_and_menus(context)
+
+
 def on_detected_instance_changed(self, context) -> None:
     """When the user explicitly changes the detected instance dropdown in preferences."""
     if is_updating_instance() or _callbacks_suppressed():
@@ -151,6 +216,8 @@ def on_detected_instance_changed(self, context) -> None:
     try:
         from ..utils.launcher_scan import apply_instance_to_preferences
         apply_instance_to_preferences(target, self)
+        from ..utils.assets.instance_scan import set_last_applied_instance_id
+        set_last_applied_instance_id(target.instance_id)
         try:
             from ..utils.assets.guard import invalidate_guard_cache
             invalidate_guard_cache()

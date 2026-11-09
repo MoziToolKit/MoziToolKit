@@ -21,7 +21,6 @@ from .attributes import (
     inject_face_attribute_int,
     inject_face_attribute_string,
     inject_face_attribute_vector,
-    inject_face_source_texture_keys,
     inject_face_source_texture_palette,
     resolve_source_texture_keys,
     resolve_source_texture_keys_paletted,
@@ -90,15 +89,12 @@ def inject_mesh_data(
         bool: True if mesh data was successfully injected; False if validation failed
               or geometry/normal injection failed.
     """
-    if isinstance(getattr(mesh_or_obj, "vertex_count", None), int) and not isinstance(getattr(mesh_data, "vertex_count", None), int):
-        mesh_data, mesh_or_obj = mesh_or_obj, mesh_data
-
     mesh = get_mesh(mesh_or_obj)
     if mesh is None:
         logger.warning("inject_mesh_data: resolved mesh is None")
         return False
 
-    v_count = getattr(mesh_data, "vertex_count", 0)
+    v_count = mesh_data.vertex_count
     if v_count == 0:
         logger.debug("inject_mesh_data: mesh_data has 0 vertices; skipping injection")
         return False
@@ -107,8 +103,8 @@ def inject_mesh_data(
     needs_topology = update_topology or len(getattr(mesh, "vertices", [])) != v_count
 
     if needs_topology:
-        face_count = getattr(mesh_data, "face_count", 0)
-        tri_count = getattr(mesh_data, "triangle_count", 0)
+        face_count = mesh_data.face_count
+        tri_count = mesh_data.triangle_count
         total_indices = tri_count * 3
         is_quad = (
             total_indices > 0
@@ -221,7 +217,6 @@ __all__ = [
     "inject_face_attribute_string",
     "inject_face_attribute_vector",
     "inject_face_materials_dna",
-    "inject_face_source_texture_keys",
     "inject_face_source_texture_palette",
     "inject_mesh_data",
     "resolve_source_texture_keys",

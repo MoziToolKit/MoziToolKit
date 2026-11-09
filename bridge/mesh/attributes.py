@@ -126,48 +126,13 @@ def inject_face_source_texture_palette(
             logger.debug("Failed to remove retired provenance string: %s", exc)
 
 
-def inject_face_source_texture_keys(mesh: Any, values: Sequence[str]) -> None:
-    """
-    Inject face source texture keys via palette indexing (sub-millisecond throughput).
-    Creates:
-      - mesh["mtk_source_textures"]: List[str] palette
-      - "mtk_source_texture_idx": INT (FACE) attribute with mapped indices
-    """
-    if not hasattr(mesh, "attributes") or not hasattr(mesh, "polygons"):
-        return
-    num_polys = len(mesh.polygons)
-    if num_polys == 0 or len(values) != num_polys:
-        logger.warning(
-            "Source-texture keys not written: got %d keys for %d faces",
-            len(values),
-            num_polys,
-        )
-        return
-
-    # 1. Build palette and index mapping
-    palette = list(dict.fromkeys(values))
-    key_to_idx = {k: i for i, k in enumerate(palette)}
-    mesh[PROP_SOURCE_TEXTURES] = palette
-
-    # 2. Write INT attribute in bulk
-    attr_idx = get_or_create_attribute(mesh, "mtk_source_texture_idx", "INT", "FACE")
-    if attr_idx is not None and len(attr_idx.data) == num_polys:
-        np_indices = np.fromiter((key_to_idx[k] for k in values), dtype=np.int32, count=num_polys)
-        attr_idx.data.foreach_set("value", np_indices)
-
-    # Clean up retired per-face string attribute if left over
-    attr_str = mesh.attributes.get(ATTR_SOURCE_TEXTURE_KEY)
-    if attr_str is not None:
-        try:
-            mesh.attributes.remove(attr_str)
-        except Exception as exc:
-            logger.debug("Failed to remove retired provenance string: %s", exc)
-
-
 def inject_face_attribute_string(mesh: Any, name: str, values: List[str]) -> None:
     """Inject a Face-domain String attribute into Blender Mesh."""
     if name == ATTR_SOURCE_TEXTURE_KEY:
-        inject_face_source_texture_keys(mesh, values)
+        pal = list(dict.fromkeys(values))
+        k2i = {k: i for i, k in enumerate(pal)}
+        idx_arr = np.fromiter((k2i[k] for k in values), dtype=np.int32, count=len(values))
+        inject_face_source_texture_palette(mesh, pal, idx_arr)
         return
     attr = get_or_create_attribute(mesh, name, "STRING", "FACE")
     if attr and len(attr.data) == len(values):
@@ -299,7 +264,7 @@ def inject_custom_attributes(
     use_dna: bool = True,
 ) -> None:
     """Generic custom attributes synchronization into mesh.attributes."""
-    if not hasattr(mesh, "attributes") or not hasattr(mesh_data, "attribute_names"):
+    if not hasattr(mesh, "attributes") or mesh_data is None:
         return
 
     for attr_name in mesh_data.attribute_names():

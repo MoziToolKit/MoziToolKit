@@ -143,15 +143,15 @@ def _handle_cloud_success(
 
     t0_inj = time.perf_counter()
     inject_mesh_data(
-        world_mesh_obj.data,
         mesh_data,
+        world_mesh_obj.data,
         update_topology=True,
         update_normals=True,
     )
     inj_ms = (time.perf_counter() - t0_inj) * 1000.0
 
     t0_mat = time.perf_counter()
-    used_chunk_ids = mesh_data.used_materials() if hasattr(mesh_data, "used_materials") else None
+    used_chunk_ids = mesh_data.used_materials()
     dyn_entities = get_world_session_dynamic_entity_atlases(session_key) if session_key else None
     pkg_reader = ctx_data.get("package_reader")
 

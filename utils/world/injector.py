@@ -79,8 +79,8 @@ def apply_voxel_mesh_to_blender(
     t0_inject = time.perf_counter()
     _inject = inject_mesh_func or inject_mesh_data
     _inject(
-        b_mesh,
         mesh_data,
+        b_mesh,
         update_topology=True,
         update_normals=True,
     )
@@ -90,7 +90,7 @@ def apply_voxel_mesh_to_blender(
     t0_mat = time.perf_counter()
     used_chunk_ids = None
     if material_mode != "STANDALONE":
-        used_chunk_ids = mesh_data.used_materials() if hasattr(mesh_data, "used_materials") else None
+        used_chunk_ids = mesh_data.used_materials()
         _ensure_mat = ensure_materials_func or ensure_world_materials
         _ensure_mat(
             obj,

@@ -152,7 +152,7 @@ def inject_vertex_positions_dna(mesh: Any, mesh_data: Any) -> bool:
     if blender_dna is None or not is_dna_enabled():
         return False
 
-    v_count = getattr(mesh_data, "vertex_count", 0)
+    v_count = mesh_data.vertex_count
     if v_count == 0:
         return True
 
@@ -200,9 +200,9 @@ def inject_face_materials_dna(mesh: Any, mesh_data: Any) -> bool:
     if num_polys == 0:
         return True
 
-    mats_mv = getattr(mesh_data, "face_materials_memoryview", lambda: None)()
-    if mats_mv is None:
-        used = getattr(mesh_data, "used_materials", lambda: None)()
+    mats_mv = mesh_data.face_materials_memoryview()
+    if mats_mv is None or len(mats_mv) == 0:
+        used = mesh_data.used_materials()
         if used and len(used) == 1 and used[0] != 0:
             val = int(used[0])
             mats_mv = np.full(num_polys, val, dtype=np.int32)
@@ -295,7 +295,7 @@ def inject_color_attributes_dna(mesh: Any, mesh_data: Any) -> bool:
     if blender_dna is None or not is_dna_enabled():
         return False
 
-    col_mv = mesh_data.colors_memoryview() if hasattr(mesh_data, "colors_memoryview") else None
+    col_mv = mesh_data.colors_memoryview()
     if col_mv is None:
         if hasattr(mesh, "color_attributes"):
             col_attr = mesh.color_attributes.get("color")

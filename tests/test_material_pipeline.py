@@ -570,7 +570,8 @@ class TestMaterialPipeline(unittest.TestCase):
         import MoziToolKit.utils.materials.pipeline as pipe
         self.assertFalse(hasattr(pipe, "ATTR_MATERIAL_PROPS"))
         self.assertTrue(hasattr(pipe, "get_or_load_biome_resolver"))
-        self.assertTrue(hasattr(pipe, "compute_biome_tint_attributes"))
+        self.assertFalse(hasattr(pipe, "compute_biome_tint_attributes"))
+        self.assertTrue(hasattr(pipe, "compute_biome_tint_attributes_paletted"))
         self.assertTrue(hasattr(pipe, "apply_biome_tint_attributes"))
 
     def test_extract_face_material_palette_context(self):

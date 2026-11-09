@@ -13,7 +13,7 @@ from MoziToolKit.bridge.material import (
     GridAtlasSpec,
     MaterialResolver,
     clean_material_name,
-    compute_biome_tint_attributes,
+    compute_biome_tint_attributes_paletted,
     get_all_biomes,
     get_biome_meta,
     is_material_bridge_available,

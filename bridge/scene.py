@@ -144,7 +144,7 @@ def load_and_mesh_scene_package(
     total_ms = (time.perf_counter() - t0) * 1000.0
 
     dynamic_entity_slots = data.get("dynamic_entity_slots")
-    if hasattr(mesh_data, "dynamic_entity_slots") and getattr(mesh_data, "dynamic_entity_slots", None) is None and dynamic_entity_slots:
+    if mesh_data is not None and not mesh_data.dynamic_entity_slots and dynamic_entity_slots:
         try:
             mesh_data.dynamic_entity_slots = dynamic_entity_slots
         except Exception:
@@ -218,9 +218,7 @@ def export_scene_package(
     # no CTM rules but the live pack stack does, fall back to the live solver so a stale
     # cache does not silently strip working connected textures from the export.
     if resolved_enable_ctm and resolved_ctm_solver is None and prefs is not None:
-        cache_has_ctm = getattr(cache, "has_ctm_rules", None)
-        cache_is_missing_ctm = callable(cache_has_ctm) and not cache_has_ctm()
-        if cache_is_missing_ctm:
+        if not cache.has_ctm_rules():
             from .assets.pack import get_configured_ctm_solver
 
             resolved_ctm_solver = get_configured_ctm_solver(prefs, force=True)

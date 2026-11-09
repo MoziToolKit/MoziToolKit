@@ -51,7 +51,7 @@ def resolve_dynamic_entity_atlases(mesh_data: Any = None, session: Any = None) -
     single multi-chunk dictionary, so a lone byte blob is never a valid shape.
     """
     if mesh_data is not None:
-        atlases = getattr(mesh_data, "dynamic_entity_atlases", None)
+        atlases = mesh_data.dynamic_entity_atlases
         if atlases:
             return {int(chunk_id): data for chunk_id, data in atlases.items()}
     if session is not None:
@@ -77,7 +77,7 @@ def resolve_dynamic_entity_slots(mesh_data: Any = None, session: Any = None) -> 
     Canonical `{key: (chunk_id, slot_idx)}` dynamic entity slot map.
     """
     if mesh_data is not None:
-        slots = getattr(mesh_data, "dynamic_entity_slots", None)
+        slots = mesh_data.dynamic_entity_slots
         if slots:
             return {str(k): (int(v[0]), int(v[1])) for k, v in slots.items()}
     if session is not None:

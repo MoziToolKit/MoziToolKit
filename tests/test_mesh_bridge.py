@@ -32,7 +32,7 @@ from MoziToolKit.bridge.mesh import (
     extract_mesh_data,
     inject_mesh_data,
     resolve_source_texture_keys,
-    inject_face_source_texture_keys,
+    inject_face_source_texture_palette,
 )
 from MoziToolKit.utils.materials.matching.presets.registry import (
     build_matching_context,

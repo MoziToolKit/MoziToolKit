@@ -248,7 +248,11 @@ class TestSaveProperties(unittest.TestCase):
                 mode="OBJECT",
             )
 
-            mock_mesh = types.SimpleNamespace(used_materials=lambda: [])
+            mock_mesh = types.SimpleNamespace(
+                used_materials=lambda: [],
+                dynamic_entity_atlases={},
+                dynamic_entity_slots={},
+            )
             mock_meta = {
                 "level_name": "TestWorld",
                 "version_name": "1.21.4",

@@ -367,7 +367,7 @@ def get_cache_fingerprint(prefs=None) -> Optional[str]:
     """Returns active stack fingerprint recorded in package manifest or cache object."""
     cache = open_active_asset_cache(prefs)
     if cache is not None:
-        fp = getattr(cache, "fingerprint", None)
+        fp = cache.fingerprint
         if fp:
             return str(fp)
     manifest = get_cache_manifest(prefs)

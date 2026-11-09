@@ -235,8 +235,7 @@ class TestSceneInterchangeEndToEnd(unittest.TestCase):
         shutil.rmtree(cls.temp_dir, ignore_errors=True)
 
     def test_01_scene_package_reader_and_metadata_bindings(self):
-        """Verifies that native SceneMetadata and ScenePackageReader bindings are exposed."""
-        self.assertTrue(hasattr(self.mtk, "SceneMetadata"))
+        """Verifies that native ScenePackageReader and export_scene_package bindings are exposed."""
         self.assertTrue(hasattr(self.mtk, "ScenePackageReader"))
         self.assertTrue(hasattr(self.mtk, "export_scene_package"))
 

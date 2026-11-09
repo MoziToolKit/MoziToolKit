@@ -203,7 +203,7 @@ class MOZI_OT_adaptive_pixel_split(bpy.types.Operator):
                 # 5. Inject back into Blender mesh with vectorized batch buffers
                 import time
                 t0_inj = time.perf_counter()
-                inject_mesh_data(mesh, subdivided, update_topology=True, update_normals=True)
+                inject_mesh_data(subdivided, mesh, update_topology=True, update_normals=True)
                 mesh.update()
                 inj_ms = (time.perf_counter() - t0_inj) * 1000.0
 

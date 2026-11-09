@@ -16,7 +16,7 @@ from ....bridge.material import (
     BiomeResolver,
     get_biome_meta,
     get_all_biomes,
-    compute_biome_tint_attributes as bridge_compute_biome_tint_attributes,
+    compute_biome_tint_attributes_paletted as bridge_compute_biome_tint_attributes_paletted,
 )
 from ....bridge.engine import has_libmtk
 
@@ -171,44 +171,6 @@ def get_biome_colors(
     return meta
 
 
-def compute_biome_tint_attributes(
-    face_texture_keys: List[str],
-    biome_preset: Union[str, List[Tuple[str, float]]] = "PLAINS",
-    resolver: Optional[Any] = None,
-    custom_temp: Optional[float] = None,
-    custom_humidity: Optional[float] = None,
-    custom_grass: Optional[List[float]] = None,
-    custom_foliage: Optional[List[float]] = None,
-    custom_dry_foliage: Optional[List[float]] = None,
-    custom_water: Optional[List[float]] = None,
-    has_custom_grass: bool = False,
-    has_custom_foliage: bool = False,
-    has_custom_dry_foliage: bool = False,
-    face_biomes: Optional[List[str]] = None,
-) -> Tuple[List[List[float]], List[List[float]]]:
-    """
-    Compute packed tint weights and resolved Linear RGBA colors for mesh faces using Rust core.
-    Returns (packed_tint_data, tint_colors).
-    """
-    res = bridge_compute_biome_tint_attributes(
-        face_texture_keys=face_texture_keys,
-        biome_preset=biome_preset,
-        resolver=resolver,
-        custom_temp=custom_temp,
-        custom_humidity=custom_humidity,
-        custom_grass=custom_grass,
-        custom_foliage=custom_foliage,
-        custom_dry_foliage=custom_dry_foliage,
-        custom_water=custom_water,
-        has_custom_grass=has_custom_grass,
-        has_custom_foliage=has_custom_foliage,
-        has_custom_dry_foliage=has_custom_dry_foliage,
-        face_biomes=face_biomes,
-    )
-
-    return res["packed_tint_data"], res["tint_colors"]
-
-
 def compute_biome_tint_attributes_paletted(
     palette: List[str],
     face_indices: Any,
@@ -223,11 +185,10 @@ def compute_biome_tint_attributes_paletted(
     has_custom_grass: bool = False,
     has_custom_foliage: bool = False,
     has_custom_dry_foliage: bool = False,
+    face_biomes: Optional[List[str]] = None,
 ) -> Tuple[Any, Any]:
     """Palette-native biome tint computation; never expands per-face strings."""
-    from ....bridge.material import compute_biome_tint_attributes_paletted as _native
-
-    return _native(
+    return bridge_compute_biome_tint_attributes_paletted(
         palette,
         face_indices,
         biome_preset=biome_preset,
@@ -241,6 +202,7 @@ def compute_biome_tint_attributes_paletted(
         has_custom_grass=has_custom_grass,
         has_custom_foliage=has_custom_foliage,
         has_custom_dry_foliage=has_custom_dry_foliage,
+        face_biomes=face_biomes,
     )
 
 

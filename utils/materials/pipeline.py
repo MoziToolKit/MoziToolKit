@@ -26,7 +26,7 @@ from ...bridge.mesh import (
 )
 from .biome import (
     get_or_load_biome_resolver,
-    compute_biome_tint_attributes,
+    compute_biome_tint_attributes_paletted,
     apply_biome_tint_attributes,
 )
 from .cleaner import (
@@ -423,7 +423,16 @@ def restore_materials_from_provenance(
             pass
 
     # Step 4: Re-apply biome tint attributes
-    resolve_and_apply_biome_tint(mesh_or_obj, mesh, face_source_keys, effective_biome, base_cache, prefs)
+    resolve_and_apply_biome_tint(
+        mesh_or_obj,
+        mesh,
+        face_source_keys,
+        effective_biome,
+        base_cache,
+        prefs,
+        source_key_palette=face_source_palette or None,
+        source_key_indices=face_source_indices if len(face_source_indices) == num_polys else None,
+    )
 
     set_stored_layout_hash(mesh, current_layout_hash)
     mesh.update()

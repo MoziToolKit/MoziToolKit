@@ -265,6 +265,8 @@ class TestWorldBridgePipeline:
 
         mesh_data = SimpleNamespace(
             used_materials=lambda: [0],
+            dynamic_entity_atlases={},
+            dynamic_entity_slots={},
             vertex_count=0,
             polygon_count=0,
         )

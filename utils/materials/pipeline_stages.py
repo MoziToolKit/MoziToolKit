@@ -35,7 +35,6 @@ from ...bridge.assets import (
     ensure_atlas_textures_extracted,
 )
 from ...bridge.mesh import (
-    inject_face_attribute_string,
     inject_face_attribute_int,
     inject_face_attribute_float,
     inject_face_attribute_float4,
@@ -48,12 +47,10 @@ from .matching.presets.registry import build_matching_context
 from .cleaner import clean_obsolete_mesh_attributes
 from .biome import (
     get_or_load_biome_resolver,
-    compute_biome_tint_attributes,
     compute_biome_tint_attributes_paletted,
     apply_biome_tint_attributes,
 )
 from .constants import (
-    ATTR_SOURCE_TEXTURE_KEY,
     ATTR_ATLAS_CHUNK_ID,
     ATTR_UV_TRANSFORM,
     ATTR_UV_ROTATION,
@@ -351,7 +348,10 @@ def inject_mesh_provenance_attributes(
             mesh, face_source_key_palette, face_source_key_indices
         )
     elif face_source_keys is not None:
-        inject_face_attribute_string(mesh, ATTR_SOURCE_TEXTURE_KEY, face_source_keys)
+        pal = list(dict.fromkeys(face_source_keys))
+        k2i = {k: i for i, k in enumerate(pal)}
+        idx_arr = np.fromiter((k2i[k] for k in face_source_keys), dtype=np.int32, count=len(face_source_keys))
+        inject_face_source_texture_palette(mesh, pal, idx_arr)
 
     if face_chunk_ids is not None:
         inject_face_attribute_int(mesh, ATTR_ATLAS_CHUNK_ID, face_chunk_ids)
@@ -433,39 +433,30 @@ def resolve_and_apply_biome_tint(
         custom_temp, custom_humidity, custom_grass, custom_foliage, custom_dry_foliage, custom_water = None, None, None, None, None, None
         has_custom_grass, has_custom_foliage, has_custom_dry_foliage = False, False, False
 
-    if not is_world and source_key_palette is not None and source_key_indices is not None:
-        packed_tint_data, tint_colors = compute_biome_tint_attributes_paletted(
-            source_key_palette,
-            source_key_indices,
-            biome_preset=biome,
-            resolver=biome_resolver,
-            custom_temp=custom_temp,
-            custom_humidity=custom_humidity,
-            custom_grass=custom_grass,
-            custom_foliage=custom_foliage,
-            custom_dry_foliage=custom_dry_foliage,
-            custom_water=custom_water,
-            has_custom_grass=has_custom_grass,
-            has_custom_foliage=has_custom_foliage,
-            has_custom_dry_foliage=has_custom_dry_foliage,
-        )
-    else:
-        if face_source_keys is None:
+    if source_key_palette is None or source_key_indices is None:
+        if not face_source_keys:
             return
-        packed_tint_data, tint_colors = compute_biome_tint_attributes(
-            face_source_keys,
-            biome_preset=biome,
-            resolver=biome_resolver,
-            custom_temp=custom_temp,
-            custom_humidity=custom_humidity,
-            custom_grass=custom_grass,
-            custom_foliage=custom_foliage,
-            custom_dry_foliage=custom_dry_foliage,
-            custom_water=custom_water,
-            has_custom_grass=has_custom_grass,
-            has_custom_foliage=has_custom_foliage,
-            has_custom_dry_foliage=has_custom_dry_foliage,
+        source_key_palette = list(dict.fromkeys(face_source_keys))
+        k2i = {k: i for i, k in enumerate(source_key_palette)}
+        source_key_indices = np.fromiter(
+            (k2i[k] for k in face_source_keys), dtype=np.uint32, count=len(face_source_keys)
         )
+
+    packed_tint_data, tint_colors = compute_biome_tint_attributes_paletted(
+        list(source_key_palette),
+        source_key_indices,
+        biome_preset=biome,
+        resolver=biome_resolver,
+        custom_temp=custom_temp,
+        custom_humidity=custom_humidity,
+        custom_grass=custom_grass,
+        custom_foliage=custom_foliage,
+        custom_dry_foliage=custom_dry_foliage,
+        custom_water=custom_water,
+        has_custom_grass=has_custom_grass,
+        has_custom_foliage=has_custom_foliage,
+        has_custom_dry_foliage=has_custom_dry_foliage,
+    )
     apply_biome_tint_attributes(mesh, packed_tint_data, tint_colors)
 
     if hasattr(mesh_or_obj, "__setitem__"):

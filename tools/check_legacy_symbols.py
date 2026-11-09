@@ -48,6 +48,8 @@ PATTERNS = {
     "DIM-1": re.compile(r"\bDIM-1\b"),
     "DIM1": re.compile(r"\bDIM1\b"),
     "REPLAY_DELTAS": re.compile(r"\bREPLAY_DELTAS\b"),
+    "compute_biome_tint_attributes": re.compile(r"\bcompute_biome_tint_attributes\b"),
+    "inject_face_source_texture_keys": re.compile(r"\binject_face_source_texture_keys\b"),
 }
 
 SECTION_MESHER_ALLOWED = (

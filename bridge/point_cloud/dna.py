@@ -58,15 +58,8 @@ def inject_point_cloud_dna(
     bm_ptr = ptrs.get("biome_idx_ptr")
 
     # Check if point cloud contains biome data
-    has_biomes = False
-    biome_mv = None
-    if hasattr(cloud_data, "biome_indices_memoryview"):
-        try:
-            biome_mv = cloud_data.biome_indices_memoryview()
-            if len(biome_mv) == pt_count:
-                has_biomes = True
-        except Exception:
-            pass
+    biome_mv = cloud_data.biome_indices_memoryview()
+    has_biomes = len(biome_mv) == pt_count
 
     # Core spatial coordinates and blockstate indices are required.
     # Biome pointer is only required when the point cloud actually provides biome data.
@@ -115,7 +108,7 @@ def inject_point_cloud_dna(
                 pt_count,
                 max_bytes=pt_count * 4,
             )
-        if light_ptr and hasattr(cloud_data, "light_levels_memoryview"):
+        if light_ptr:
             light_mv = cloud_data.light_levels_memoryview()
             if len(light_mv) == pt_count:
                 blender_dna.copy_u8(
@@ -135,13 +128,9 @@ def inject_point_cloud_dna(
                 target_data[PROP_BIOME_PALETTE] = biome_palette
 
         # Block entities palette & indices
-        has_entities = False
-        if hasattr(cloud_data, "has_entities"):
-            has_entities = bool(cloud_data.has_entities())
-        elif hasattr(cloud_data, "get_entity_palette"):
-            has_entities = bool(cloud_data.get_entity_palette())
+        has_entities = bool(cloud_data.has_entities())
 
-        if has_entities and hasattr(cloud_data, "entity_indices_memoryview"):
+        if has_entities:
             ent_palette = cloud_data.get_entity_palette()
             if target_data.get(PROP_BLOCK_ENTITY_PALETTE) != ent_palette:
                 target_data[PROP_BLOCK_ENTITY_PALETTE] = ent_palette

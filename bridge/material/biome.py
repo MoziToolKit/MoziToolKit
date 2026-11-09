@@ -52,68 +52,6 @@ def get_all_biomes() -> List[Dict[str, Any]]:
     return mtk.get_all_biomes()
 
 
-def compute_biome_tint_attributes(
-    face_texture_keys: List[str],
-    biome_preset: Union[str, List[Tuple[str, float]]] = "PLAINS",
-    resolver: Optional[Any] = None,
-    custom_temp: Optional[float] = None,
-    custom_humidity: Optional[float] = None,
-    custom_grass: Optional[List[float]] = None,
-    custom_foliage: Optional[List[float]] = None,
-    custom_dry_foliage: Optional[List[float]] = None,
-    custom_water: Optional[List[float]] = None,
-    has_custom_grass: bool = False,
-    has_custom_foliage: bool = False,
-    has_custom_dry_foliage: bool = False,
-    face_biomes: Optional[List[str]] = None,
-    colormaps: Optional[Any] = None,
-) -> Dict[str, Any]:
-    """
-    Compute packed tint weights and resolved Linear RGBA colors using the Rust core.
-    Returns a dictionary with keys: 'packed_tint_data', 'tint_colors'.
-    """
-    mtk = require_libmtk("compute_biome_tint_attributes")
-
-    kwargs: Dict[str, Any] = {}
-    if colormaps is not None:
-        kwargs["colormaps"] = colormaps
-
-    if face_biomes is not None:
-        return mtk.compute_biome_tint_attributes(
-            face_texture_keys,
-            "PLAINS",
-            resolver=resolver,
-            face_biomes=face_biomes,
-            **kwargs,
-        )
-
-    if isinstance(biome_preset, list):
-        return mtk.compute_biome_tint_attributes(
-            face_texture_keys,
-            "PLAINS",
-            multi_biomes=biome_preset,
-            resolver=resolver,
-            **kwargs,
-        )
-
-    return mtk.compute_biome_tint_attributes(
-        face_texture_keys,
-        str(biome_preset),
-        multi_biomes=None,
-        resolver=resolver,
-        custom_temp=custom_temp,
-        custom_humidity=custom_humidity,
-        custom_grass=custom_grass,
-        custom_foliage=custom_foliage,
-        custom_dry_foliage=custom_dry_foliage,
-        custom_water=custom_water,
-        has_custom_grass=has_custom_grass,
-        has_custom_foliage=has_custom_foliage,
-        has_custom_dry_foliage=has_custom_dry_foliage,
-        **kwargs,
-    )
-
-
 def compute_biome_tint_attributes_paletted(
     palette: Sequence[str],
     face_indices: Sequence[int],
@@ -129,6 +67,7 @@ def compute_biome_tint_attributes_paletted(
     has_custom_foliage: bool = False,
     has_custom_dry_foliage: bool = False,
     colormaps: Optional[Any] = None,
+    face_biomes: Optional[List[str]] = None,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Palette-native biome tint computation returning zero-copy flat arrays."""
     mtk = require_libmtk("compute_biome_tint_attributes_paletted")
@@ -137,6 +76,8 @@ def compute_biome_tint_attributes_paletted(
     kwargs: Dict[str, Any] = {}
     if colormaps is not None:
         kwargs["colormaps"] = colormaps
+    if face_biomes is not None:
+        kwargs["face_biomes"] = list(face_biomes)
     packed, colors = mtk.compute_biome_tint_attributes_paletted(
         list(palette),
         face_indices,

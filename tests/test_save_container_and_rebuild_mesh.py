@@ -74,7 +74,11 @@ class TestSaveContainerAndRebuildMesh(unittest.TestCase):
             "data_version": 4189,
             "spawn": (0, 64, 0),
         }
-        mesh_data = types.SimpleNamespace(used_materials=lambda: [])
+        mesh_data = types.SimpleNamespace(
+            used_materials=lambda: [],
+            dynamic_entity_atlases={},
+            dynamic_entity_slots={},
+        )
         storage = object()
 
         context = bpy.context
@@ -415,7 +419,11 @@ class TestSaveContainerAndRebuildMesh(unittest.TestCase):
             "data_version": 4189,
             "spawn": (10, 70, 10),
         }
-        mesh_data = types.SimpleNamespace(used_materials=lambda: [])
+        mesh_data = types.SimpleNamespace(
+            used_materials=lambda: [],
+            dynamic_entity_atlases={},
+            dynamic_entity_slots={},
+        )
         storage = object()
 
         context = bpy.context
@@ -510,7 +518,11 @@ class TestSaveContainerAndRebuildMesh(unittest.TestCase):
                 mode="OBJECT",
             )
 
-            mock_mesh = types.SimpleNamespace(used_materials=lambda: [])
+            mock_mesh = types.SimpleNamespace(
+                used_materials=lambda: [],
+                dynamic_entity_atlases={},
+                dynamic_entity_slots={},
+            )
             mock_meta = {
                 "level_name": "RelinkWorld",
                 "version_name": "1.21.4",

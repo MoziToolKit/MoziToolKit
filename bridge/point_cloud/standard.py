@@ -95,13 +95,9 @@ def inject_point_cloud_standard(
                 _safe_set_prop(target_data, PROP_BIOME_PALETTE, b_palette)
 
     # 5. Block entities palette & indices
-    has_entities = False
-    if hasattr(cloud_data, "has_entities"):
-        has_entities = bool(cloud_data.has_entities())
-    elif hasattr(cloud_data, "get_entity_palette"):
-        has_entities = bool(cloud_data.get_entity_palette())
+    has_entities = bool(cloud_data.has_entities())
 
-    if has_entities and attr_entity_idx is not None and hasattr(cloud_data, "entity_indices_memoryview"):
+    if has_entities and attr_entity_idx is not None:
         ent_palette = cloud_data.get_entity_palette()
         ent_indices = cloud_data.entity_indices_memoryview()
         attr_entity_idx.data.foreach_set("value", ent_indices)

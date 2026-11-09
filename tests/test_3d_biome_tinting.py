@@ -1,7 +1,7 @@
 """
 Unit and integration tests for 3D Minecraft Biome Sampling, Tinting, and Smooth Blending (R=2).
 Covers:
-- Per-face biome array computation (`compute_biome_tint_attributes(..., face_biomes=...)`)
+- Per-face biome array computation (`compute_biome_tint_attributes_paletted(..., face_biomes=...)`)
 - 3D coordinate-based biome resolution from `VoxelStorage` (`compute_mesh_biome_attributes_from_storage`)
 - Caves & Cliffs vertical biome separation (`lush_caves` at y=2 vs `dark_forest` at y=14 in the same X/Z column)
 - Swamp 2D Perlin noise grass tint variation and `TINT_TYPE_HARDCODED` (4.0) shader routing
@@ -16,7 +16,7 @@ import bpy
 from MoziToolKit.bridge.engine import get_libmtk, has_libmtk
 from MoziToolKit.bridge.material import (
     BiomeResolver,
-    compute_biome_tint_attributes,
+    compute_biome_tint_attributes_paletted,
     compute_mesh_biome_attributes_from_storage,
 )
 from MoziToolKit.utils.materials.biome.biome import BIOME_ENUM_ITEMS
@@ -65,21 +65,21 @@ class Test3DBiomeTinting(unittest.TestCase):
         self.assertIn("WORLD", ids)
 
     def test_per_face_biome_tint_attributes(self):
-        """Verify compute_biome_tint_attributes supports per-face biome lists and custom tint routing."""
-        keys = [
-            "minecraft:block/grass_block_top",
-            "minecraft:block/grass_block_top",
-            "minecraft:block/grass_block_top",
-        ]
+        """Verify compute_biome_tint_attributes_paletted supports per-face biome lists and custom tint routing."""
+        import numpy as np
+
+        palette = ["minecraft:block/grass_block_top"]
+        indices = np.array([0, 0, 0], dtype=np.uint32)
         biomes = ["desert", "jungle", "badlands"]
-        res = compute_biome_tint_attributes(
-            keys,
+        packed_mv, colors_mv = compute_biome_tint_attributes_paletted(
+            palette,
+            indices,
             biome_preset="PLAINS",
             resolver=BiomeResolver(),
             face_biomes=biomes,
         )
-        packed = res["packed_tint_data"]
-        colors = res["tint_colors"]
+        packed = np.frombuffer(packed_mv, dtype=np.float32).reshape(-1, 4).tolist()
+        colors = np.frombuffer(colors_mv, dtype=np.float32).reshape(-1, 4).tolist()
 
         self.assertEqual(len(packed), 3)
         self.assertEqual(len(colors), 3)
@@ -93,32 +93,33 @@ class Test3DBiomeTinting(unittest.TestCase):
         self.assertAlmostEqual(packed[2][3], 4.0)
 
     def test_palette_biome_tint_matches_face_keys(self):
-        """Palette + indices must produce byte-identical flat buffers to per-face keys."""
+        """Palette + indices bridge and native bindings must produce byte-identical flat buffers."""
         import numpy as np
 
-        keys = [
-            "minecraft:block/grass_block_top",
-            "minecraft:block/dirt",
-            "minecraft:block/grass_block_top",
-        ]
         palette = ["minecraft:block/grass_block_top", "minecraft:block/dirt"]
         indices = np.array([0, 1, 0], dtype=np.uint32)
         resolver = BiomeResolver()
 
-        expected = compute_biome_tint_attributes(
-            keys,
+        expected_packed, expected_colors = compute_biome_tint_attributes_paletted(
+            palette,
+            indices,
             biome_preset="JUNGLE",
             resolver=resolver,
         )
-        expected = (expected["packed_tint_data"], expected["tint_colors"])
         packed, colors = self.lib.compute_biome_tint_attributes_paletted(
             palette,
             indices,
             "JUNGLE",
             resolver=resolver,
         )
-        np.testing.assert_allclose(np.frombuffer(packed, dtype=np.float32).reshape(-1, 4), expected[0])
-        np.testing.assert_allclose(np.frombuffer(colors, dtype=np.float32).reshape(-1, 4), expected[1])
+        np.testing.assert_allclose(
+            np.frombuffer(packed, dtype=np.float32).reshape(-1, 4),
+            np.frombuffer(expected_packed, dtype=np.float32).reshape(-1, 4),
+        )
+        np.testing.assert_allclose(
+            np.frombuffer(colors, dtype=np.float32).reshape(-1, 4),
+            np.frombuffer(expected_colors, dtype=np.float32).reshape(-1, 4),
+        )
 
     def test_3d_biome_attributes_from_storage(self):
         """Verify 3D vertical biome difference (lush_caves at y=2 vs dark_forest at y=14) in same X/Z column."""

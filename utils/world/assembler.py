@@ -202,8 +202,8 @@ def assemble_voxel_world(req: VoxelWorldAssemblyRequest) -> Dict[str, Any]:
     injector_fn = req.custom_injector or inject_mesh_data
     if req.mesh_data is not None and b_mesh is not None:
         injector_fn(
-            b_mesh,
             req.mesh_data,
+            b_mesh,
             update_topology=True,
             update_normals=True,
             skip_string_attributes=req.skip_string_attributes,
@@ -216,7 +216,7 @@ def assemble_voxel_world(req: VoxelWorldAssemblyRequest) -> Dict[str, Any]:
     if req.custom_material_binder is not None:
         materials = req.custom_material_binder(mesh_obj)
     elif req.mesh_data is not None and mesh_obj is not None:
-        used_chunk_ids = req.mesh_data.used_materials() if hasattr(req.mesh_data, "used_materials") else None
+        used_chunk_ids = req.mesh_data.used_materials()
         dyn_atlases = req.dynamic_entity_atlases
         if dyn_atlases is None:
             dyn_atlases = resolve_dynamic_entity_atlases(req.mesh_data)

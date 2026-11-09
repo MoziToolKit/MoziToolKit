@@ -64,7 +64,7 @@ def inject_voxel_point_cloud(
         if hasattr(target_data, "points") and hasattr(target_data, "resize"):
             is_pc = True
 
-    pt_count = len(cloud_data) if hasattr(cloud_data, "__len__") else cloud_data.len()
+    pt_count = len(cloud_data)
     if pt_count == 0:
         if hasattr(target_data, "clear_geometry"):
             target_data.clear_geometry()
@@ -97,11 +97,7 @@ def inject_voxel_point_cloud(
     attr_state_idx = ensure_attr(target_data, ATTR_BLOCK_STATE_IDX, "INT", "POINT")
     attr_biome_idx = ensure_attr(target_data, ATTR_BIOME_IDX, "INT", "POINT")
 
-    has_entities = False
-    if hasattr(cloud_data, "has_entities"):
-        has_entities = bool(cloud_data.has_entities())
-    elif hasattr(cloud_data, "get_entity_palette"):
-        has_entities = bool(cloud_data.get_entity_palette())
+    has_entities = bool(cloud_data.has_entities())
 
     attr_entity_idx = None
     if has_entities:

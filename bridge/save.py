@@ -182,7 +182,7 @@ def load_and_mesh_minecraft_save(
     t1 = time.perf_counter()
     elapsed_ms = (t1 - t0) * 1000.0
 
-    if getattr(mesh_data, "profile", None) is not None:
+    if mesh_data.profile is not None:
         from .diagnostics import record_operation_profile
 
         record_operation_profile(f"Import Save ({dimension})", mesh_data.profile)

@@ -163,7 +163,7 @@ def inject_uvs_standard(mesh: Any, mesh_data: Any, uv_layer_name: Optional[str] 
         return
 
     # Priority 1: Fast loop UVs memoryview
-    loop_uv_mv = getattr(mesh_data, "loop_uvs_memoryview", lambda: None)()
+    loop_uv_mv = mesh_data.loop_uvs_memoryview()
     if loop_uv_mv is not None and len(loop_uv_mv) == num_loops * 2:
         try:
             target_setter(attr_key, loop_uv_mv)
@@ -172,7 +172,7 @@ def inject_uvs_standard(mesh: Any, mesh_data: Any, uv_layer_name: Optional[str] 
             logger.debug("Standard loop_uvs foreach_set failed: %s", e)
 
     # Priority 2: Standard UV flat array
-    uv_mv = getattr(mesh_data, "uvs_memoryview", lambda: None)()
+    uv_mv = mesh_data.uvs_memoryview()
     if uv_mv is None:
         return
 
@@ -262,9 +262,9 @@ def inject_face_materials_standard(mesh: Any, mesh_data: Any) -> None:
     if num_polys == 0:
         return
 
-    mats_mv = getattr(mesh_data, "face_materials_memoryview", lambda: None)()
-    if mats_mv is None:
-        used = getattr(mesh_data, "used_materials", lambda: None)()
+    mats_mv = mesh_data.face_materials_memoryview()
+    if mats_mv is None or len(mats_mv) == 0:
+        used = mesh_data.used_materials()
         if used and len(used) == 1 and used[0] != 0:
             mesh.polygons.foreach_set("material_index", np.full(num_polys, int(used[0]), dtype=np.int32))
         return

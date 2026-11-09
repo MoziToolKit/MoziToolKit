@@ -2,22 +2,35 @@
 
 from __future__ import annotations
 
+import ast
 from datetime import datetime, timezone
 import json
 from pathlib import Path
 import sys
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PROJECT_DIR.parent))
 sys.path.insert(0, str(PROJECT_DIR / "dev" / "lib"))
 
 import libmtk_py  # noqa: E402
 import libmtk_blender_dna  # noqa: E402
 
-from MoziToolKit.bridge.engine import (  # noqa: E402
-    REQUIRED_API_VERSION,
-    REQUIRED_DNA_API_VERSION,
-)
+
+def _read_engine_constants() -> tuple[int, int]:
+    engine_py = PROJECT_DIR / "bridge" / "engine.py"
+    tree = ast.parse(engine_py.read_text(encoding="utf-8"), filename=str(engine_py))
+    values: dict[str, int] = {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Constant):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id in (
+                    "REQUIRED_API_VERSION",
+                    "REQUIRED_DNA_API_VERSION",
+                ):
+                    values[target.id] = int(node.value.value)
+    return values["REQUIRED_API_VERSION"], values["REQUIRED_DNA_API_VERSION"]
+
+
+REQUIRED_API_VERSION, REQUIRED_DNA_API_VERSION = _read_engine_constants()
 
 FIXTURES = PROJECT_DIR / "tests" / "fixtures"
 FIXTURES.mkdir(parents=True, exist_ok=True)
@@ -30,6 +43,7 @@ FORBIDDEN = (
     "get_block_states",
     "get_biomes",
     "compute_canonical_state_hash",
+    "compute_biome_tint_attributes",
     "PyBufferOwner",
     "ValidationReport",
     "clear_cached_colormaps",

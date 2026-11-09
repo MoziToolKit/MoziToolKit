@@ -198,11 +198,12 @@ def update_object_biome(
     num_polys = len(mesh.polygons) if hasattr(mesh, "polygons") else 0
     if num_polys > 0:
         from .biome import (
-            compute_biome_tint_attributes,
+            compute_biome_tint_attributes_paletted,
             apply_biome_tint_attributes,
             read_face_string_attribute,
             get_or_load_biome_resolver,
         )
+        from ....bridge.mesh import resolve_source_texture_keys_paletted
 
         if biome_name.upper() == "WORLD":
             source_keys = []
@@ -314,14 +315,21 @@ def update_object_biome(
                 fast_path_done = False
 
         if not fast_path_done:
-            source_keys = []
-            if ATTR_SOURCE_TEXTURE_KEY in mesh.attributes or ATTR_SOURCE_TEXTURE_IDX in mesh.attributes:
-                source_keys = read_face_string_attribute(mesh, ATTR_SOURCE_TEXTURE_KEY)
+            pal, pal_idx = resolve_source_texture_keys_paletted(mesh)
+            if not pal or len(pal_idx) != num_polys:
+                source_keys = []
+                if ATTR_SOURCE_TEXTURE_KEY in mesh.attributes or ATTR_SOURCE_TEXTURE_IDX in mesh.attributes:
+                    source_keys = read_face_string_attribute(mesh, ATTR_SOURCE_TEXTURE_KEY)
+                if any(source_keys):
+                    pal = list(dict.fromkeys(source_keys))
+                    k2i = {k: i for i, k in enumerate(pal)}
+                    pal_idx = np.fromiter((k2i[k] for k in source_keys), dtype=np.uint32, count=len(source_keys))
 
-            if any(source_keys):
+            if pal and len(pal_idx) == num_polys and any(pal):
                 biome_resolver = get_or_load_biome_resolver(pack_stack=effective_stack)
-                packed_tint_data, tint_colors = compute_biome_tint_attributes(
-                    source_keys,
+                packed_tint_data, tint_colors = compute_biome_tint_attributes_paletted(
+                    pal,
+                    pal_idx,
                     biome_preset=biome_name,
                     resolver=biome_resolver,
                     custom_temp=custom_temp,
@@ -349,9 +357,13 @@ def update_object_biome(
                     derived_keys.append(str(key))
 
                 if derived_keys and all(derived_keys):
+                    d_pal = list(dict.fromkeys(derived_keys))
+                    d_k2i = {k: i for i, k in enumerate(d_pal)}
+                    d_idx = np.fromiter((d_k2i[k] for k in derived_keys), dtype=np.uint32, count=len(derived_keys))
                     biome_resolver = get_or_load_biome_resolver(pack_stack=effective_stack)
-                    packed_tint_data, tint_colors = compute_biome_tint_attributes(
-                        derived_keys,
+                    packed_tint_data, tint_colors = compute_biome_tint_attributes_paletted(
+                        d_pal,
+                        d_idx,
                         biome_preset=biome_name,
                         resolver=biome_resolver,
                         custom_temp=custom_temp,

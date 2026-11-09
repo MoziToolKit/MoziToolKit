@@ -17,8 +17,6 @@ from ...bridge.scene import export_scene_package
 from ...bridge.world import (
     get_world_session_dynamic_entity_atlases,
     get_world_session_dynamic_entity_slots,
-    resolve_dynamic_entity_atlases,
-    resolve_dynamic_entity_slots,
 )
 from ...utils.mesh.ownership import find_voxel_cloud, is_point_cloud
 from ...utils.system.dependencies import get_prefs
@@ -48,20 +46,7 @@ def _resolve_export_dynamic_entities(active_obj: Any, cloud_obj: Any) -> Optiona
         if atlases:
             return atlases
 
-    # 2. Check mesh data on active or cloud object via bridge.world.resolve_dynamic_entity_atlases
-    mesh_data = getattr(active_obj, "data", None)
-    if mesh_data is not None:
-        atlases = resolve_dynamic_entity_atlases(mesh_data)
-        if atlases:
-            return atlases
-
-    cloud_data = getattr(cloud_obj, "data", None)
-    if cloud_data is not None:
-        atlases = resolve_dynamic_entity_atlases(cloud_data)
-        if atlases:
-            return atlases
-
-    # 3. Fallback: extract from resident Blender dynamic entity images
+    # 2. Fallback: extract from resident Blender dynamic entity images
     from ...utils.materials.builder.dynamic_entities import extract_resident_dynamic_entity_atlases
     return extract_resident_dynamic_entity_atlases()
 
@@ -132,18 +117,6 @@ def _resolve_export_dynamic_entity_slots(active_obj: Any, cloud_obj: Any) -> Opt
     grandparent = getattr(parent, "parent", None) if parent is not None else None
     for obj in (active_obj, cloud_obj, parent, grandparent):
         slots = _embedded_dynamic_entity_slots(obj)
-        if slots:
-            return slots
-
-    mesh_data = getattr(active_obj, "data", None)
-    if mesh_data is not None:
-        slots = resolve_dynamic_entity_slots(mesh_data)
-        if slots:
-            return slots
-
-    cloud_data = getattr(cloud_obj, "data", None)
-    if cloud_data is not None:
-        slots = resolve_dynamic_entity_slots(cloud_data)
         if slots:
             return slots
 

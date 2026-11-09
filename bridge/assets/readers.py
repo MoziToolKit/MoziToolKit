@@ -85,7 +85,7 @@ def load_baked_model_database_inner(
         stack = get_configured_pack_stack(prefs)
         if stack is not None:
             current_fp = stack.compute_stack_fingerprint()
-            if getattr(cache, "fingerprint", None) != current_fp:
+            if cache.fingerprint != current_fp:
                 return None, cached_pkg, cached_mtime
 
     if (

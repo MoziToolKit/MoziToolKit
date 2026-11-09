@@ -13,7 +13,6 @@ def test_required_native_symbols_exist():
         "VoxelWorld",
         "VoxelPointCloud",
         "MeshData",
-        "compute_biome_tint_attributes",
         "compute_biome_tint_attributes_paletted",
         "build_material_palette",
     ]
@@ -30,6 +29,7 @@ def test_removed_native_symbols_do_not_return():
         "process_random_extrude_mesh",
         "process_mesh_extrude_repair",
         "compute_canonical_state_hash",
+        "compute_biome_tint_attributes",
         "PyBufferOwner",
         "ValidationReport",
         "clear_cached_colormaps",

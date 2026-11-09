@@ -157,7 +157,7 @@ class DnaResolverV42(BaseDnaResolver):
         return None
 
     def resolve_point_cloud_ptrs(
-        self, cloud_data: Any, expected_count: Optional[int] = None
+        self, target_data: Any, expected_count: Optional[int] = None
     ) -> Dict[str, Optional[int]]:
         """Resolves pointers for standard voxel point cloud attributes."""
         res: Dict[str, Optional[int]] = {
@@ -170,10 +170,10 @@ class DnaResolverV42(BaseDnaResolver):
             "entity_idx_ptr": None,
             "light_ptr": None,
         }
-        if cloud_data is None or not hasattr(cloud_data, "attributes") or not hasattr(cloud_data.attributes, "get"):
+        if target_data is None or not hasattr(target_data, "attributes") or not hasattr(target_data.attributes, "get"):
             return res
 
-        attrs = cloud_data.attributes
+        attrs = target_data.attributes
         mapping = {
             "pos_ptr": ("position",),
             "block_x_ptr": ("mtk_block_x", "block_x"),

@@ -255,7 +255,7 @@ def mesh_voxel_storage(
             mesh_data = world.rebuild_all()
     t1 = time.perf_counter()
 
-    if getattr(mesh_data, "profile", None) is not None:
+    if mesh_data.profile is not None:
         from ..diagnostics import record_operation_profile
 
         record_operation_profile("Mesh Voxel Storage", mesh_data.profile)

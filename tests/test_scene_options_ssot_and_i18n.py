@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import unittest
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import bpy
 
@@ -112,8 +112,7 @@ class TestSceneOptionsSSOTAndI18n(unittest.TestCase):
 
         mock_point_cloud = SimpleNamespace(is_empty=lambda: False)
 
-        context = MagicMock()
-        context.active_object = mock_obj
+        context = SimpleNamespace(active_object=mock_obj)
 
         op_inst = SimpleNamespace(
             filepath="/tmp/test.mtkscene",

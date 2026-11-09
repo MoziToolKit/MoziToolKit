@@ -6,10 +6,8 @@ Updates mesh face attributes or material shader nodes in < 1ms without rerunning
 from __future__ import annotations
 
 import logging
-from pathlib import Path
-from typing import Optional, Any
+from typing import Any, Optional
 import bpy
-
 import numpy as np
 
 from ....bridge.material import get_biome_meta
@@ -20,285 +18,30 @@ from ..constants import (
     ATTR_BIOME_TINT_COLOR,
     ATTR_SOURCE_TEXTURE_KEY,
     ATTR_SOURCE_TEXTURE_IDX,
-    PROP_CREATED_BY,
     PROP_ATLAS_MAPPING,
-    PROP_PACK_HASH,
 )
 from .biome import (
     get_biome_colors,
-    BiomeResolver,
-    TINT_TYPE_NONE,
-    TINT_TYPE_GRASS,
-    TINT_TYPE_FOLIAGE,
-    TINT_TYPE_WATER,
     TINT_TYPE_HARDCODED,
-    TINT_TYPE_DRY_FOLIAGE,
 )
 
+from .registry import (
+    _MESH_BASE_TINT_TYPES,
+    _STORAGE_CACHE,
+    _COLORMAPS_CACHE,
+    clear_biome_updater_cache,
+    resolve_container_id,
+    register_object_colormaps,
+    get_object_colormaps,
+    register_object_storage,
+    get_object_storage,
+    mark_world_biome,
+    _rehydrate_storage_from_point_cloud,
+)
+from .base_tint import resolve_mesh_base_tint_types
+from .world_tint import resolve_and_apply_world_biome_tint
+
 logger = logging.getLogger("MoziToolKit.Materials.Biome.Updater")
-
-# In-memory cache for original face tint types (to prevent RNA allocation overhead and preserve base categories)
-_MESH_BASE_TINT_TYPES: dict[str, Any] = {}
-
-# In-memory storage registry to avoid serializing unpicklable native VoxelStorage into bpy properties
-_STORAGE_CACHE: dict[str, Any] = {}
-_COLORMAPS_CACHE: dict[str, Any] = {}
-
-
-def clear_biome_updater_cache() -> None:
-    """Clear in-memory caches for mesh tint types, voxel storage registry, and colormaps."""
-    _MESH_BASE_TINT_TYPES.clear()
-    _STORAGE_CACHE.clear()
-    _COLORMAPS_CACHE.clear()
-
-
-def resolve_container_id(obj: Any) -> Optional[str]:
-    """Resolves the immutable mtk:container_id UUID across object hierarchy with legacy fallbacks."""
-    if obj is None:
-        return None
-    curr = obj
-    depth = 0
-    while curr is not None and depth < 64:
-        if hasattr(curr, "get"):
-            c_id = curr.get("mtk:container_id") or curr.get("mozi_save_uuid") or curr.get("mozi_scene_uuid")
-            if c_id:
-                return str(c_id)
-        parent = getattr(curr, "parent", None)
-        if parent is None and hasattr(curr, "id_data") and curr.id_data != curr:
-            parent = getattr(curr.id_data, "parent", None)
-        curr = parent
-        depth += 1
-    return None
-
-
-def register_object_colormaps(key: str, colormaps: Any) -> None:
-    """Register native VanillaColormaps in memory for a given container UUID."""
-    if key and colormaps is not None:
-        _COLORMAPS_CACHE[str(key)] = colormaps
-
-
-def get_object_colormaps(key: str) -> Any:
-    """Retrieve native VanillaColormaps from memory cache."""
-    if not key:
-        return None
-    return _COLORMAPS_CACHE.get(str(key))
-
-
-def register_object_storage(key: str, storage: Any) -> None:
-    """Register native VoxelStorage in memory for a given container UUID."""
-    if key and storage is not None:
-        _STORAGE_CACHE[str(key)] = storage
-
-
-def get_object_storage(key: str) -> Any:
-    """Retrieve native VoxelStorage from memory cache."""
-    if not key:
-        return None
-    return _STORAGE_CACHE.get(str(key))
-
-
-def mark_world_biome(obj: Any, storage: Any = None, aliases: Any = ()) -> bool:
-    """
-    Tag an MTK voxel mesh as using true 3D World Biome tinting and cache its storage.
-
-    Every voxel-derived surface mesh (save import, Live Sync, rebuild) bakes real 3D
-    biome colors into its tint attributes. Tagging ``mtk:biome_preset`` here keeps the
-    biome panel from falling back to the uniform ``PLAINS`` default, while registering
-    the storage lets a later WORLD re-selection recompute colors without a live session.
-    """
-    if obj is None:
-        return False
-
-    try:
-        obj["mtk:biome_preset"] = "WORLD"
-    except (TypeError, AttributeError, KeyError):
-        try:
-            setattr(obj, "mtk:biome_preset", "WORLD")
-        except Exception:
-            pass
-
-    if storage is not None:
-        c_id = resolve_container_id(obj)
-        if c_id:
-            register_object_storage(c_id, storage)
-        for key in aliases:
-            if isinstance(key, str) and key:
-                register_object_storage(key, storage)
-        # Fallback for bare test mocks lacking container_id
-        if not c_id and not aliases:
-            for key in (getattr(obj, "name", ""), getattr(getattr(obj, "data", None), "name", "")):
-                if isinstance(key, str) and key:
-                    register_object_storage(key, storage)
-
-    return True
-
-
-def _rehydrate_storage_from_point_cloud(obj: Any, target_mesh: Any = None) -> Any:
-    """
-    Rebuild a VoxelStorage from the companion point cloud persisted in the .blend.
-
-    This is the offline fallback for save imports and disconnected Live Sync
-    containers: the point cloud keeps per-voxel block states and 3D biomes, so a
-    later WORLD selection can restore the exact tint instead of refusing or
-    repainting with the uniform Plains fallback.
-    """
-    if obj is None:
-        return None
-
-    from ....bridge.point_cloud import extract_voxel_point_cloud
-    from ....utils.point_cloud import get_associated_voxel_cloud
-    from ....bridge.point_cloud.constants import ATTR_BIOME, ATTR_BIOME_IDX, PROP_BIOME_PALETTE
-
-    try:
-        cloud = get_associated_voxel_cloud(obj)
-        if cloud is None:
-            return None
-
-        cloud_mesh = getattr(cloud, "data", None)
-        attrs = getattr(cloud_mesh, "attributes", None)
-        if attrs is None:
-            return None
-        has_biomes = ATTR_BIOME in attrs
-        if not has_biomes and ATTR_BIOME_IDX in attrs:
-            has_biomes = (
-                (hasattr(cloud_mesh, "__contains__") and PROP_BIOME_PALETTE in cloud_mesh)
-                or (hasattr(cloud_mesh, "get") and cloud_mesh.get(PROP_BIOME_PALETTE) is not None)
-                or (hasattr(cloud, "__contains__") and PROP_BIOME_PALETTE in cloud)
-                or (hasattr(cloud, "get") and cloud.get(PROP_BIOME_PALETTE) is not None)
-            )
-        if not has_biomes:
-            # Legacy point clouds without biome data would silently become Plains.
-            return None
-
-        cloud_data = extract_voxel_point_cloud(cloud)
-        if cloud_data is None:
-            return None
-        storage = cloud_data.to_storage()
-    except Exception:
-        return None
-
-    if storage is None:
-        return None
-
-    for target in (obj, cloud):
-        name = getattr(target, "name", "")
-        if isinstance(name, str) and name:
-            register_object_storage(name, storage)
-    if target_mesh is not None:
-        name = getattr(target_mesh, "name", "")
-        if isinstance(name, str) and name:
-            register_object_storage(name, storage)
-    if hasattr(obj, "get"):
-        for prop in ("mtk:container_id", "mozi_save_uuid"):
-            key = obj.get(prop)
-            if isinstance(key, str) and key:
-                register_object_storage(key, storage)
-
-    return storage
-
-
-def resolve_mesh_base_tint_types(
-    mesh: Any,
-    obj: Optional[Any] = None,
-    raw_tint_data_2d: Optional[Any] = None,
-    pack_stack: Optional[Any] = None,
-) -> Any:
-    """
-    Resolve intrinsic material base tint types (0=None, 1=Grass, 2=Foliage, 3=Water, 4=Hardcoded, 5=Dry Foliage)
-    for each face of the mesh, decoupling intrinsic material identity from biome-level hardcoded overrides.
-
-    Prevents faces from being permanently trapped in TINT_TYPE_HARDCODED (4.0) after imports from biomes
-    with custom colors (such as dark_forest or badlands).
-    """
-    if mesh is None:
-        return np.empty(0, dtype=np.int32)
-
-    num_polys = len(mesh.polygons) if hasattr(mesh, "polygons") else 0
-    if num_polys == 0:
-        return np.empty(0, dtype=np.int32)
-
-    mesh_name = getattr(mesh, "name", "")
-    cached = _MESH_BASE_TINT_TYPES.get(mesh_name)
-    if cached is not None and len(cached) == num_polys:
-        return cached
-
-    from .biome import get_or_load_biome_resolver, read_face_string_attribute
-    resolver = get_or_load_biome_resolver(pack_stack=pack_stack)
-
-    # Strategy A: Sub-millisecond INT Palette Indexing ('mtk_source_textures' + 'mtk_source_texture_idx')
-    palette = None
-    if hasattr(mesh, "get") and mesh.get("mtk_source_textures") is not None:
-        palette = list(mesh.get("mtk_source_textures"))
-    elif hasattr(mesh, "__contains__") and "mtk_source_textures" in mesh:
-        palette = list(mesh["mtk_source_textures"])
-    elif hasattr(mesh, "keys") and "mtk_source_textures" in mesh:
-        palette = list(mesh["mtk_source_textures"])
-    elif obj is not None and hasattr(obj, "get") and "mtk_source_textures" in obj:
-        palette = list(obj["mtk_source_textures"])
-
-    attr_idx = mesh.attributes.get(ATTR_SOURCE_TEXTURE_IDX) if hasattr(mesh, "attributes") else None
-    if palette is not None and attr_idx is not None and len(attr_idx.data) == num_polys:
-        if hasattr(attr_idx.data, "foreach_get"):
-            pal_tt = np.array([
-                resolver.get_tint_info(tex).get("tint_type", 0) if hasattr(resolver, "get_tint_info") else 0
-                for tex in palette
-            ], dtype=np.int32)
-            idx_arr = np.empty(num_polys, dtype=np.int32)
-            attr_idx.data.foreach_get("value", idx_arr)
-            valid_mask = (idx_arr >= 0) & (idx_arr < len(pal_tt))
-            base_tt = np.zeros(num_polys, dtype=np.int32)
-            base_tt[valid_mask] = pal_tt[idx_arr[valid_mask]]
-
-            # Refinement with raw_tint_data_2d:
-            # Faces that were untinted during meshing (e.g. dirt bottom/side of grass block) have raw_data == 0.0.
-            if raw_tint_data_2d is not None and len(raw_tint_data_2d) == num_polys:
-                raw_zero_mask = (raw_tint_data_2d[:, 3] == float(TINT_TYPE_NONE))
-                base_tt[raw_zero_mask] = TINT_TYPE_NONE
-
-            if np.any(base_tt > 0):
-                if mesh_name:
-                    _MESH_BASE_TINT_TYPES[mesh_name] = base_tt
-                return base_tt
-
-    # Strategy C: Material slots on object
-    if obj is not None and len(getattr(obj, "material_slots", [])) > 0:
-        slot_tt = []
-        for slot in obj.material_slots:
-            mat = slot.material
-            if mat:
-                key = str(mat.get("mtk_source_texture_key") or mat.get("mtk:material_id") or mat.name)
-                tt = resolver.get_tint_info(key).get("tint_type", 0) if hasattr(resolver, "get_tint_info") else 0
-            else:
-                tt = 0
-            slot_tt.append(tt)
-
-        slot_tt_arr = np.array(slot_tt, dtype=np.int32)
-        poly_mat_indices = np.empty(num_polys, dtype=np.int32)
-        mesh.polygons.foreach_get("material_index", poly_mat_indices)
-        valid_mask = (poly_mat_indices >= 0) & (poly_mat_indices < len(slot_tt_arr))
-        base_tt = np.zeros(num_polys, dtype=np.int32)
-        base_tt[valid_mask] = slot_tt_arr[poly_mat_indices[valid_mask]]
-        if raw_tint_data_2d is not None and len(raw_tint_data_2d) == num_polys:
-            raw_zero_mask = (raw_tint_data_2d[:, 3] == float(TINT_TYPE_NONE))
-            base_tt[raw_zero_mask] = TINT_TYPE_NONE
-
-        if np.any(base_tt > 0):
-            if mesh_name:
-                _MESH_BASE_TINT_TYPES[mesh_name] = base_tt
-            return base_tt
-
-    # Strategy D: Fallback to raw_tint_data_2d
-    if raw_tint_data_2d is not None and len(raw_tint_data_2d) == num_polys:
-        base_tt = np.round(raw_tint_data_2d[:, 3]).astype(np.int32)
-        if mesh_name:
-            _MESH_BASE_TINT_TYPES[mesh_name] = base_tt
-        return base_tt
-
-    base_tt = np.zeros(num_polys, dtype=np.int32)
-    if mesh_name:
-        _MESH_BASE_TINT_TYPES[mesh_name] = base_tt
-    return base_tt
-
 
 
 def is_mtk_object(obj: Optional[bpy.types.Object]) -> bool:
@@ -356,159 +99,6 @@ def detect_object_material_mode(obj: bpy.types.Object) -> str:
     if obj.type != "MESH" or not obj.data:
         return "UNKNOWN"
     return "ATLAS"
-
-def resolve_and_apply_world_biome_tint(
-    mesh_or_obj: Any,
-    mesh: Optional[Any] = None,
-    face_source_keys: Optional[List[str]] = None,
-    effective_stack: Optional[Any] = None,
-    prefs: Optional[Any] = None,
-    base_cache: Optional[Path] = None,
-) -> bool:
-    """
-    Resolve 3D World Biome tinting attributes from an associated VoxelStorage container
-    and apply packed tint data, colors, and colormap UVs to the mesh.
-    Returns True if world biome attributes were successfully computed or verified.
-    """
-    if mesh_or_obj is None and mesh is None:
-        return False
-
-    is_obj = hasattr(mesh_or_obj, "type") and getattr(mesh_or_obj, "type", "") == "MESH"
-    obj = mesh_or_obj if is_obj else None
-    target_mesh = mesh if mesh is not None else (getattr(mesh_or_obj, "data", mesh_or_obj) if is_obj else mesh_or_obj)
-
-    if not hasattr(target_mesh, "polygons"):
-        return False
-
-    from .biome import (
-        apply_biome_tint_attributes,
-        read_face_string_attribute,
-        get_or_load_biome_resolver,
-    )
-
-    storage = getattr(mesh_or_obj, "_storage", None) or getattr(target_mesh, "_storage", None)
-    if storage is None:
-        c_id = resolve_container_id(mesh_or_obj) or resolve_container_id(target_mesh)
-        if c_id:
-            storage = get_object_storage(c_id)
-    if storage is None and hasattr(mesh_or_obj, "name"):
-        storage = get_object_storage(mesh_or_obj.name)
-    if storage is None and hasattr(target_mesh, "name"):
-        storage = get_object_storage(target_mesh.name)
-    if storage is None and hasattr(mesh_or_obj, "get"):
-        storage = mesh_or_obj.get("mtk:storage", None)
-    if storage is None and hasattr(target_mesh, "get"):
-        storage = target_mesh.get("mtk:storage", None)
-    if storage is None:
-        # Fallback for a freshly opened file while a Live Sync session is still
-        # running: the in-memory storage has not been registered under the object
-        # names yet, but the active session owns the same 3D biomes.
-        try:
-            from ....bridge.sync import get_sync_bridge_session
-            session = get_sync_bridge_session()
-            if session is not None and getattr(session, "is_active", False):
-                storage = session.get_storage()
-        except Exception:
-            storage = None
-    if storage is None:
-        # Offline fallback: the .blend-persisted companion point cloud carries
-        # per-voxel 3D biomes for both save imports and disconnected sync worlds.
-        storage = _rehydrate_storage_from_point_cloud(obj, target_mesh)
-
-    source_keys = list(face_source_keys) if face_source_keys else []
-    if not any(source_keys) and hasattr(target_mesh, "attributes"):
-        if ATTR_SOURCE_TEXTURE_KEY in target_mesh.attributes or ATTR_SOURCE_TEXTURE_IDX in target_mesh.attributes:
-            source_keys = read_face_string_attribute(target_mesh, ATTR_SOURCE_TEXTURE_KEY)
-
-    if not any(source_keys) and obj and len(getattr(obj, "material_slots", [])) > 0:
-        derived = []
-        for poly in target_mesh.polygons:
-            m_idx = poly.material_index
-            mat = obj.material_slots[m_idx].material if m_idx < len(obj.material_slots) else None
-            key = (mat.get("mtk_source_texture_key") or mat.get("mtk:material_id") or "") if mat else ""
-            derived.append(str(key))
-        # Atlas chunk materials carry no source key. Falling back to their names
-        # would classify every face as "none" and permanently zero the tint types.
-        if derived and all(derived):
-            source_keys = derived
-
-    has_coords = (
-        hasattr(target_mesh, "attributes")
-        and "mtk_block_x" in target_mesh.attributes
-        and "mtk_block_y" in target_mesh.attributes
-        and "mtk_block_z" in target_mesh.attributes
-    )
-
-    if storage is not None and has_coords and any(source_keys):
-        from ....bridge.material import compute_mesh_biome_attributes_from_storage
-
-        biome_resolver = get_or_load_biome_resolver(cache_dir=base_cache, prefs=prefs, pack_stack=effective_stack)
-        num_polys = len(target_mesh.polygons)
-        attr_x = target_mesh.attributes.get("mtk_block_x")
-        attr_y = target_mesh.attributes.get("mtk_block_y")
-        attr_z = target_mesh.attributes.get("mtk_block_z")
-
-        if hasattr(attr_x.data, "foreach_get"):
-            xs = np.empty(num_polys, dtype=np.int32)
-            ys = np.empty(num_polys, dtype=np.int32)
-            zs = np.empty(num_polys, dtype=np.int32)
-            attr_x.data.foreach_get("value", xs)
-            attr_y.data.foreach_get("value", ys)
-            attr_z.data.foreach_get("value", zs)
-            coords_x, coords_y, coords_z = xs, ys, zs
-        else:
-            coords_x = [int(p.value) for p in attr_x.data]
-            coords_y = [int(p.value) for p in attr_y.data]
-            coords_z = [int(p.value) for p in attr_z.data]
-
-        # Resolve isolated scene colormaps if registered; otherwise Rust auto-resolves active resident colormaps
-        colormaps = getattr(mesh_or_obj, "_colormaps", None) or getattr(target_mesh, "_colormaps", None)
-        if colormaps is None:
-            c_uuid = resolve_container_id(mesh_or_obj) or resolve_container_id(target_mesh)
-            if c_uuid:
-                colormaps = get_object_colormaps(c_uuid)
-        if colormaps is None and hasattr(mesh_or_obj, "name"):
-            colormaps = get_object_colormaps(mesh_or_obj.name)
-
-        res = compute_mesh_biome_attributes_from_storage(
-            source_keys,
-            coords_x,
-            coords_y,
-            coords_z,
-            storage,
-            resolver=biome_resolver,
-            smooth=True,
-            colormaps=colormaps,
-        )
-        apply_biome_tint_attributes(target_mesh, res["packed_tint_data"], res["tint_colors"])
-        if hasattr(mesh_or_obj, "__setitem__"):
-            try:
-                mesh_or_obj["mtk:biome_preset"] = "WORLD"
-            except Exception:
-                pass
-        if hasattr(target_mesh, "update"):
-            target_mesh.update()
-        return True
-
-    if hasattr(target_mesh, "attributes") and ATTR_BIOME_TINT_DATA in target_mesh.attributes:
-        # Existing tint attributes are only trustworthy as 3D world data when no
-        # uniform preset has overwritten them. Without storage we cannot restore
-        # real biome colors, so refuse instead of silently relabeling Plains.
-        current_preset = None
-        if hasattr(mesh_or_obj, "get"):
-            current_preset = mesh_or_obj.get("mtk:biome_preset")
-        if isinstance(current_preset, str) and current_preset and current_preset.upper() != "WORLD":
-            return False
-        if hasattr(mesh_or_obj, "__setitem__"):
-            try:
-                mesh_or_obj["mtk:biome_preset"] = "WORLD"
-            except Exception:
-                pass
-        if hasattr(target_mesh, "update"):
-            target_mesh.update()
-        return True
-
-    return False
 
 
 def update_object_biome(
@@ -604,7 +194,7 @@ def update_object_biome(
         except Exception:
             effective_stack = None
 
-    # 1. Update mesh face attributes (Both ATLAS and STANDALONE modes use attribute drivers)
+    # Update mesh face attributes
     num_polys = len(mesh.polygons) if hasattr(mesh, "polygons") else 0
     if num_polys > 0:
         from .biome import (
@@ -626,8 +216,6 @@ def update_object_biome(
             ):
                 return True
 
-            # A uniform "WORLD" preset has no colormap entry and resolves to Plains
-            # in Rust. Refuse instead of silently repainting 3D-biome faces as Plains.
             logger.warning(
                 "Cannot restore WORLD biome for '%s': no voxel storage or source-texture "
                 "provenance. Rebuild the voxel mesh from its point cloud/storage.",
@@ -635,9 +223,7 @@ def update_object_biome(
             )
             return False
 
-        # FAST IN-PLACE VECTORIZED UPDATE PATH (< 1.5ms):
-        # When ATTR_BIOME_TINT_DATA is already present on the mesh, tint categories (grass/foliage/water/dry/hardcoded/none)
-        # and blending weights are already baked. Uniform presets and custom slider drag only alter colors & colormap UVs.
+        # FAST IN-PLACE VECTORIZED UPDATE PATH (< 1.5ms)
         tint_data_attr = mesh.attributes.get(ATTR_BIOME_TINT_DATA)
         has_tint_data = tint_data_attr is not None and len(tint_data_attr.data) == num_polys
         fast_path_done = False
@@ -647,7 +233,6 @@ def update_object_biome(
                 raw_data = np.empty(num_polys * 4, dtype=np.float32)
                 tint_data_attr.data.foreach_get("color", raw_data)
 
-                # Maintain cached base tint type (original 0..5 categories decoupled from biome hardcoded overrides)
                 base_tt = resolve_mesh_base_tint_types(
                     mesh, obj, raw_data.reshape(num_polys, 4), pack_stack=effective_stack
                 )
@@ -662,8 +247,6 @@ def update_object_biome(
                     water_col = biome_colors.get("water_linear", plains_meta["water_linear"])
                     dry_foliage_col = biome_colors.get("dry_foliage_linear", plains_meta["dry_foliage_linear"])
 
-                    # Rust owns the per-face category/color composition. Python only
-                    # reads/writes flat buffers, so slider drags stay memory-bandwidth bound.
                     from ....bridge.material import reapply_uniform_biome_tint
 
                     if reapply_uniform_biome_tint is not None and len(base_tt) == num_polys:
@@ -677,8 +260,6 @@ def update_object_biome(
                         is_corner_domain = getattr(attr_col, "domain", None) == "CORNER"
                         num_col_elems = len(attr_col.data) if attr_col is not None else 0
 
-                        # Only hardcoded faces need the previous colors. Avoid a
-                        # 4-byte-per-face read when the mesh has none.
                         needs_existing_colors = bool(np.any(base_tt == TINT_TYPE_HARDCODED))
                         if (
                             needs_existing_colors
@@ -721,7 +302,6 @@ def update_object_biome(
                             elif len(attr_col.data) == num_polys:
                                 attr_col.data.foreach_set("color", face_colors)
 
-                        # Purge retired legacy attributes (e.g. mtk_colormap_uv).
                         clean_obsolete_mesh_attributes(mesh)
 
                         if hasattr(mesh, "__setitem__"):
@@ -734,7 +314,6 @@ def update_object_biome(
                 fast_path_done = False
 
         if not fast_path_done:
-            # Fallback path: compute full biome tint attributes from source keys or materials
             source_keys = []
             if ATTR_SOURCE_TEXTURE_KEY in mesh.attributes or ATTR_SOURCE_TEXTURE_IDX in mesh.attributes:
                 source_keys = read_face_string_attribute(mesh, ATTR_SOURCE_TEXTURE_KEY)
@@ -769,8 +348,6 @@ def update_object_biome(
                     key = (mat.get("mtk_source_texture_key") or mat.get("mtk:material_id") or "") if mat else ""
                     derived_keys.append(str(key))
 
-                # Never derive provenance from atlas chunk material names: that
-                # would zero every face's tint type and break later presets.
                 if derived_keys and all(derived_keys):
                     biome_resolver = get_or_load_biome_resolver(pack_stack=effective_stack)
                     packed_tint_data, tint_colors = compute_biome_tint_attributes(
@@ -800,8 +377,22 @@ def update_object_biome(
             obj.parent["mtk:biome_preset"] = biome_name
         except Exception:
             pass
-    # Attribute writes via foreach_set already tag the mesh; update() is cheap and
-    # guarantees the evaluated mesh / shader Attribute nodes see the new buffers.
     if hasattr(mesh, "update"):
         mesh.update()
     return True
+
+
+__all__ = [
+    "clear_biome_updater_cache",
+    "resolve_container_id",
+    "register_object_colormaps",
+    "get_object_colormaps",
+    "register_object_storage",
+    "get_object_storage",
+    "mark_world_biome",
+    "resolve_mesh_base_tint_types",
+    "resolve_and_apply_world_biome_tint",
+    "is_mtk_object",
+    "detect_object_material_mode",
+    "update_object_biome",
+]

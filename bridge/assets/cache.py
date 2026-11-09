@@ -9,15 +9,20 @@ from __future__ import annotations
 import json
 import logging
 import os
-import shutil
-import subprocess
-import sys
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 from ..engine import get_libmtk
 from .pack import get_configured_pack_stack
-
+from .readers import (
+    get_cached_texture_f32 as _readers_get_cached_texture_f32,
+    get_cached_texture_rgba as _readers_get_cached_texture_rgba,
+    load_atlas_mapping_from_cache as _readers_load_atlas_mapping,
+    load_baked_atlas_inner,
+    load_baked_model_database_inner,
+    load_biome_resolver_inner,
+    load_colormaps_inner,
+)
 from ...utils.assets.cache_utils import (
     clear_cache as _utils_clear_cache,
     get_cache_dir,
@@ -28,8 +33,6 @@ from ...utils.assets.cache_utils import (
 clear_cache = _utils_clear_cache
 
 logger = logging.getLogger("MoziToolKit.Bridge.Assets.Cache")
-
-from ...utils.system import get_prefs
 
 # In-memory session memoization to eliminate redundant disk hashing & package reopening
 _ACTIVE_ASSET_CACHE: Optional[Any] = None
@@ -51,9 +54,6 @@ _CACHED_MODEL_DB_MTIME: float = 0.0
 _CACHED_COLORMAPS: Optional[Any] = None
 _CACHED_COLORMAPS_PKG_PATH: Optional[str] = None
 _CACHED_COLORMAPS_MTIME: float = 0.0
-
-
-# get_cache_dir is imported from utils.assets.cache_utils above
 
 
 def invalidate_asset_cache_memory() -> None:
@@ -247,51 +247,18 @@ def open_active_asset_cache(prefs=None) -> Optional[Any]:
 
 
 def load_atlas_mapping_from_cache(prefs=None) -> Optional[Dict[str, Any]]:
-    """
-    Loads precompiled atlas mapping table as dictionary directly from memory.
-    Reads from the canonical .mtkcache container.
-    """
-    cache = open_active_asset_cache(prefs)
-    if cache is not None:
-        try:
-            mapping_str = cache.load_atlas_mapping()
-            if mapping_str:
-                return json.loads(mapping_str)
-        except Exception as exc:
-            logger.warning("Failed loading atlas mapping from cache container %s: %s", _ACTIVE_CACHE_PKG_PATH, exc)
-    return None
-
-
+    """Loads precompiled atlas mapping table as dictionary directly from memory."""
+    return _readers_load_atlas_mapping(open_active_asset_cache, prefs)
 
 
 def get_cached_texture_rgba(chunk_id: str, prefs=None, flip_y: bool = True) -> Optional[Tuple[int, int, Any]]:
-    """
-    Reads and decodes a texture chunk directly from .mtkcache into memory as (width, height, memoryview).
-    `flip_y`: If True (default), row order is vertically flipped natively in Rust (bottom-to-top layout)
-              to match Blender's native Image.pixels coordinate system with zero Python overhead.
-    """
-    cache = open_active_asset_cache(prefs)
-    if cache is not None:
-        try:
-            return cache.read_texture_rgba(chunk_id, flip_v=flip_y)
-        except Exception:
-            return None
-    return None
+    """Reads and decodes a texture chunk directly from .mtkcache into memory as (width, height, memoryview)."""
+    return _readers_get_cached_texture_rgba(open_active_asset_cache, chunk_id, prefs, flip_y)
 
 
 def get_cached_texture_f32(chunk_id: str, prefs=None, flip_y: bool = True) -> Optional[Tuple[int, int, Any]]:
-    """
-    Reads and decodes a texture chunk directly into normalized float32 memoryview (width, height, memoryview).
-    `flip_y`: If True (default), row order is vertically flipped natively in Rust to match Blender Image.pixels.
-    Allows zero-copy / direct feeding into `img.pixels.foreach_set` without any Python numpy conversion.
-    """
-    cache = open_active_asset_cache(prefs)
-    if cache is not None:
-        try:
-            return cache.read_texture_f32(chunk_id, flip_v=flip_y)
-        except Exception:
-            pass
-    return None
+    """Reads and decodes a texture chunk directly into normalized float32 memoryview (width, height, memoryview)."""
+    return _readers_get_cached_texture_f32(open_active_asset_cache, chunk_id, prefs, flip_y)
 
 
 def ensure_atlas_textures_extracted(prefs=None) -> Path:
@@ -300,50 +267,23 @@ def ensure_atlas_textures_extracted(prefs=None) -> Path:
     return base_cache / "atlas"
 
 
-
-
 def load_baked_model_database(prefs=None, verify_fingerprint: bool = False) -> Optional[Any]:
-    """
-    Loads the precompiled binary model database from cache package into memory.
-    Optionally verifies that the package fingerprint matches active resource pack stack.
-    """
+    """Loads precompiled binary model database from cache package into memory."""
     global _CACHED_MODEL_DB, _CACHED_MODEL_DB_PKG_PATH, _CACHED_MODEL_DB_MTIME
-    mtk = get_libmtk()
-    if mtk is None:
-        return None
-
-    cache = open_active_asset_cache(prefs)
-    if cache is None:
-        return None
-
-    pkg_path = _ACTIVE_CACHE_PKG_PATH
-    mtime = _ACTIVE_CACHE_MTIME
-
-    if verify_fingerprint:
-        stack = get_configured_pack_stack(prefs)
-        if stack is not None:
-            current_fp = stack.compute_stack_fingerprint()
-            if getattr(cache, "fingerprint", None) != current_fp:
-                return None
-
-    if (
-        not verify_fingerprint
-        and _CACHED_MODEL_DB is not None
-        and _CACHED_MODEL_DB_PKG_PATH == pkg_path
-        and _CACHED_MODEL_DB_MTIME == mtime
-    ):
-        return _CACHED_MODEL_DB
-
-    try:
-        model_db = cache.load_models()
-        if model_db is not None:
-            _CACHED_MODEL_DB = model_db
-            _CACHED_MODEL_DB_PKG_PATH = pkg_path
-            _CACHED_MODEL_DB_MTIME = mtime
-        return model_db
-    except Exception as exc:
-        logger.warning("Failed loading baked model database from %s: %s", pkg_path, exc)
-        return None
+    db, pkg, mtime = load_baked_model_database_inner(
+        open_active_asset_cache,
+        _ACTIVE_CACHE_PKG_PATH,
+        _ACTIVE_CACHE_MTIME,
+        _CACHED_MODEL_DB,
+        _CACHED_MODEL_DB_PKG_PATH,
+        _CACHED_MODEL_DB_MTIME,
+        prefs,
+        verify_fingerprint,
+    )
+    _CACHED_MODEL_DB = db
+    _CACHED_MODEL_DB_PKG_PATH = pkg
+    _CACHED_MODEL_DB_MTIME = mtime
+    return db
 
 
 def load_model_database_from_cache(prefs=None, verify_fingerprint: bool = False) -> Optional[Any]:
@@ -354,31 +294,19 @@ def load_model_database_from_cache(prefs=None, verify_fingerprint: bool = False)
 def load_baked_atlas_from_cache(prefs=None) -> Optional[Any]:
     """Loads precompiled BakedAtlas from cache package into memory, reusing cached instance."""
     global _CACHED_ATLAS, _CACHED_ATLAS_PKG_PATH, _CACHED_ATLAS_MTIME
-    mtk = get_libmtk()
-    if mtk is None:
-        return None
-
-    cache = open_active_asset_cache(prefs)
-    if cache is not None:
-        pkg_path = _ACTIVE_CACHE_PKG_PATH
-        mtime = _ACTIVE_CACHE_MTIME
-        if (
-            _CACHED_ATLAS is not None
-            and _CACHED_ATLAS_PKG_PATH == pkg_path
-            and _CACHED_ATLAS_MTIME == mtime
-        ):
-            return _CACHED_ATLAS
-
-        try:
-            atlas = cache.load_atlas()
-            if atlas is not None:
-                _CACHED_ATLAS = atlas
-                _CACHED_ATLAS_PKG_PATH = pkg_path
-                _CACHED_ATLAS_MTIME = mtime
-                return atlas
-        except Exception as exc:
-            logger.warning("Failed loading baked atlas from %s: %s", pkg_path, exc)
-    return None
+    atlas, pkg, mtime = load_baked_atlas_inner(
+        open_active_asset_cache,
+        _ACTIVE_CACHE_PKG_PATH,
+        _ACTIVE_CACHE_MTIME,
+        _CACHED_ATLAS,
+        _CACHED_ATLAS_PKG_PATH,
+        _CACHED_ATLAS_MTIME,
+        prefs,
+    )
+    _CACHED_ATLAS = atlas
+    _CACHED_ATLAS_PKG_PATH = pkg
+    _CACHED_ATLAS_MTIME = mtime
+    return atlas
 
 
 load_atlas_from_cache = load_baked_atlas_from_cache
@@ -387,66 +315,37 @@ load_atlas_from_cache = load_baked_atlas_from_cache
 def load_biome_resolver_from_cache(prefs=None) -> Optional[Any]:
     """Loads precompiled BiomeResolver from cache package into memory, reusing cached instance."""
     global _CACHED_BIOME_RESOLVER, _CACHED_BIOME_RESOLVER_PKG_PATH, _CACHED_BIOME_RESOLVER_MTIME
-    mtk = get_libmtk()
-    if mtk is None:
-        return None
-
-    cache = open_active_asset_cache(prefs)
-    if cache is not None:
-        pkg_path = _ACTIVE_CACHE_PKG_PATH
-        mtime = _ACTIVE_CACHE_MTIME
-        if (
-            _CACHED_BIOME_RESOLVER is not None
-            and _CACHED_BIOME_RESOLVER_PKG_PATH == pkg_path
-            and _CACHED_BIOME_RESOLVER_MTIME == mtime
-        ):
-            return _CACHED_BIOME_RESOLVER
-
-        try:
-            resolver = cache.load_biome_resolver()
-            if resolver is not None:
-                _CACHED_BIOME_RESOLVER = resolver
-                _CACHED_BIOME_RESOLVER_PKG_PATH = pkg_path
-                _CACHED_BIOME_RESOLVER_MTIME = mtime
-                return resolver
-        except Exception as exc:
-            logger.warning("Failed loading biome resolver from %s: %s", pkg_path, exc)
-
-    try:
-        return mtk.BiomeResolver()
-    except Exception as exc:
-        logger.warning("Failed instantiating default BiomeResolver: %s", exc)
-    return None
+    res, pkg, mtime = load_biome_resolver_inner(
+        open_active_asset_cache,
+        _ACTIVE_CACHE_PKG_PATH,
+        _ACTIVE_CACHE_MTIME,
+        _CACHED_BIOME_RESOLVER,
+        _CACHED_BIOME_RESOLVER_PKG_PATH,
+        _CACHED_BIOME_RESOLVER_MTIME,
+        prefs,
+    )
+    _CACHED_BIOME_RESOLVER = res
+    _CACHED_BIOME_RESOLVER_PKG_PATH = pkg
+    _CACHED_BIOME_RESOLVER_MTIME = mtime
+    return res
 
 
 def load_colormaps_from_cache(prefs=None) -> Optional[Any]:
     """Loads precompiled VanillaColormaps from active cache package into memory, reusing cached instance."""
     global _CACHED_COLORMAPS, _CACHED_COLORMAPS_PKG_PATH, _CACHED_COLORMAPS_MTIME
-    mtk = get_libmtk()
-    if mtk is None:
-        return None
-
-    cache = open_active_asset_cache(prefs)
-    if cache is not None:
-        pkg_path = _ACTIVE_CACHE_PKG_PATH
-        mtime = _ACTIVE_CACHE_MTIME
-        if (
-            _CACHED_COLORMAPS is not None
-            and _CACHED_COLORMAPS_PKG_PATH == pkg_path
-            and _CACHED_COLORMAPS_MTIME == mtime
-        ):
-            return _CACHED_COLORMAPS
-
-        try:
-            colormaps = cache.load_colormaps()
-            if colormaps is not None:
-                _CACHED_COLORMAPS = colormaps
-                _CACHED_COLORMAPS_PKG_PATH = pkg_path
-                _CACHED_COLORMAPS_MTIME = mtime
-                return colormaps
-        except Exception as exc:
-                logger.warning("Failed loading colormaps from %s: %s", pkg_path, exc)
-    return None
+    cms, pkg, mtime = load_colormaps_inner(
+        open_active_asset_cache,
+        _ACTIVE_CACHE_PKG_PATH,
+        _ACTIVE_CACHE_MTIME,
+        _CACHED_COLORMAPS,
+        _CACHED_COLORMAPS_PKG_PATH,
+        _CACHED_COLORMAPS_MTIME,
+        prefs,
+    )
+    _CACHED_COLORMAPS = cms
+    _CACHED_COLORMAPS_PKG_PATH = pkg
+    _CACHED_COLORMAPS_MTIME = mtime
+    return cms
 
 
 def get_cache_manifest(prefs=None) -> Optional[Dict[str, Any]]:
@@ -537,4 +436,8 @@ __all__ = [
     "get_cache_fingerprint",
     "get_cache_timestamp",
     "check_cache_dirty",
+    "clear_cache",
+    "get_cache_dir",
+    "get_cache_stats",
+    "open_cache_folder",
 ]

@@ -5,6 +5,8 @@ Reconstructs voxel surface mesh with manifold topology, smooth AO, fluids, and a
 
 from __future__ import annotations
 
+import logging
+import time
 from typing import Any, Dict, List, Optional, Tuple
 import bpy
 
@@ -18,6 +20,8 @@ from ...bridge.world import (
     get_world_pipeline_assets,
     mesh_voxel_storage,
     prepare_world_mesh_context,
+    scan_unknown_blocks,
+    get_world_session_dynamic_entity_atlases,
 )
 from ...utils.materials.builder.world_binding import ensure_world_materials
 from ...bridge.mesh import inject_mesh_data
@@ -37,182 +41,254 @@ from ...utils.mesh.ownership import (
     classify_origin,
     stamp_geometry_origin,
 )
+from .rebuild_targets import (
+    _safe_set_custom_prop,
+    _resolve_mesh_rebuild_targets_from_root,
+    resolve_mesh_rebuild_targets,
+    _live_session_matches_container,
+    get_or_create_container_mesh,
+)
+from .rebuild_context import (
+    resolve_rebuild_flags,
+    prepare_rebuild_asset_context,
+    draw_unknown_blocks_dialog,
+    check_unknown_blocks,
+    unpack_cloud_rebuild_result,
+    apply_rebuilt_mesh_biomes,
+)
+
+logger = logging.getLogger("MoziToolKit.Operators.Mesh.Rebuild")
 
 
-def _safe_set_custom_prop(obj: Any, key: str, val: Any) -> None:
-    if obj is None:
+def _execute_live_rebuild(operator, context, prefs, status, session, root_container, world_mesh_obj):
+    from ...utils.world.sync_container import get_or_create_world_mesh_object, update_world_mesh
+
+    if status in ("MISSING", "STALE"):
+        ensure_pipeline_assets_ready_sync(prefs)
+        if hasattr(session, "check_and_reload_dirty_cache"):
+            session.check_and_reload_dirty_cache(prefs=prefs, force=True)
+    elif hasattr(session, "check_and_reload_dirty_cache"):
+        try:
+            session.check_and_reload_dirty_cache(prefs=prefs)
+        except Exception:
+            pass
+
+    def do_live_rebuild(progress_callback=None):
+        return session.get_world_mesh()
+
+    def on_live_success(mesh_data):
+        if not mesh_data or mesh_data.vertex_count == 0:
+            operator.report({"WARNING"}, "Voxel storage is empty or no geometry generated.")
+            return
+        target_root = root_container
+        world_obj = world_mesh_obj or get_or_create_world_mesh_object(context, root_container=target_root)
+        storage = session.get_storage()
+        v_count, f_count = update_world_mesh(world_obj, mesh_data, storage=storage, sync_point_cloud=True)
+        root_obj = target_root or world_obj
+        props = getattr(root_obj, "mozi_sync", None) or (getattr(context.scene, "mozi_sync", None) if hasattr(context, "scene") else None)
+        if props:
+            props.point_count = v_count
+            props.faces_count = f_count
+            props.last_update_info = f"Rebuilt World Mesh: {v_count:,} vertices, {f_count:,} faces"
+        operator.report({"INFO"}, f"Live Sync mesh rebuilt: {v_count:,} vertices, {f_count:,} faces")
+
+    if not getattr(operator, "run_async", True):
+        try:
+            data = do_live_rebuild()
+            on_live_success(data)
+            return {"FINISHED"}
+        except Exception as e:
+            operator.report({"ERROR"}, f"Failed rebuilding live sync mesh: {e}")
+            return {"CANCELLED"}
+
+    task = AsyncTask(target=do_live_rebuild)
+    reporter = BlenderProgressReporter(context=context, total=100, title="Rebuilding World Mesh")
+    operator._runner = ModalTaskRunner(
+        operator=operator,
+        context=context,
+        task=task,
+        reporter=reporter,
+        on_success=on_live_success,
+        title="Rebuilding World Mesh",
+    )
+    return operator._runner.start()
+
+
+def _handle_cloud_success(
+    operator,
+    result_tuple,
+    context,
+    prefs,
+    root_container,
+    world_mesh_obj,
+    ctx_data,
+    flags,
+    session_key,
+):
+    mesh_data, elapsed_ms, storage = unpack_cloud_rebuild_result(result_tuple, prefs)
+
+    if mesh_data is not None and getattr(mesh_data, "profile", None) is not None:
+        try:
+            from ...bridge.diagnostics import record_operation_profile
+            record_operation_profile("Rebuild World Mesh", mesh_data.profile)
+        except Exception:
+            pass
+
+    if world_mesh_obj is None and root_container is not None:
+        world_mesh_obj = get_or_create_container_mesh(context, root_container)
+
+    if not world_mesh_obj or not hasattr(world_mesh_obj, "data"):
+        operator.report({"WARNING"}, "No mesh object available to receive geometry.")
         return
+
+    t0_inj = time.perf_counter()
+    inject_mesh_data(
+        world_mesh_obj.data,
+        mesh_data,
+        update_topology=True,
+        update_normals=True,
+    )
+    inj_ms = (time.perf_counter() - t0_inj) * 1000.0
+
+    t0_mat = time.perf_counter()
+    used_chunk_ids = mesh_data.used_materials() if hasattr(mesh_data, "used_materials") else None
+    dyn_entities = get_world_session_dynamic_entity_atlases(session_key) if session_key else None
+    pkg_reader = ctx_data.get("package_reader")
+
+    if pkg_reader is not None:
+        from ...utils.scene.materials import bind_scene_materials
+        bind_scene_materials(
+            world_mesh_obj,
+            reader=pkg_reader,
+            scene_name=root_container.name if root_container else "Scene",
+            atlas=ctx_data["atlas"],
+            prefs=prefs,
+            used_chunk_ids=used_chunk_ids,
+            dynamic_entity_atlases=dyn_entities,
+        )
+    else:
+        ensure_world_materials(
+            world_mesh_obj,
+            prefs=prefs,
+            atlas=ctx_data["atlas"],
+            used_chunk_ids=used_chunk_ids,
+            dynamic_entity_atlases=dyn_entities,
+            clean_unused_slots=True,
+        )
+    mat_ms = (time.perf_counter() - t0_mat) * 1000.0
+
+    anim_tex = flags["anim_tex_enabled"]
+    _safe_set_custom_prop(world_mesh_obj, "mtk_enable_animated_textures", bool(anim_tex))
+    if root_container is not None:
+        _safe_set_custom_prop(root_container, "mtk_enable_animated_textures", bool(anim_tex))
+
     try:
-        obj[key] = val
+        from ...bridge.diagnostics import append_stage_to_last_profile
+        append_stage_to_last_profile("blender_mesh_injection", inj_ms, getattr(mesh_data, "vertex_count", None))
+        append_stage_to_last_profile("blender_material_binding", mat_ms, len(used_chunk_ids) if used_chunk_ids else None)
     except Exception:
         pass
 
+    apply_rebuilt_mesh_biomes(world_mesh_obj, root_container, storage)
 
-def _resolve_mesh_rebuild_targets_from_root(
-    root_container: bpy.types.Object,
-) -> Tuple[bpy.types.Object, Optional[bpy.types.Object], Optional[bpy.types.Object], str]:
-    """Helper to locate child mesh and child point cloud under an Empty root container."""
-    container_type = "SAVE"
-    if hasattr(root_container, "get"):
-        c_type = root_container.get("mtk:container_type")
-        if c_type:
-            container_type = str(c_type)
-        elif root_container.get("mtk:is_yefira_world") or root_container.name.startswith("Yefira_World"):
-            container_type = "SYNC"
-    elif root_container.name.startswith("Yefira_World"):
-        container_type = "SYNC"
-
-    mesh_child = None
-    cloud_child = None
-    children = getattr(root_container, "children", [])
-    for ch in children:
-        if getattr(ch, "type", "") == "MESH":
-            is_cloud = False
-            if hasattr(ch, "get"):
-                is_cloud = bool(ch.get("mtk_is_voxel_cloud"))
-            if not is_cloud and getattr(ch, "name", "").endswith("_VoxelCloud"):
-                is_cloud = True
-
-            if is_cloud:
-                cloud_child = ch
-            else:
-                # Prefer an MTK-generated mesh when a user has parented an
-                # external mesh under the same container.
-                if mesh_child is None:
-                    mesh_child = ch
-                elif (
-                    classify_origin(mesh_child) == ORIGIN_EXTERNAL
-                    and classify_origin(ch) != ORIGIN_EXTERNAL
-                ):
-                    mesh_child = ch
-
-    if mesh_child is None and hasattr(bpy, "data") and hasattr(bpy.data, "objects"):
-        cand = bpy.data.objects.get(f"{root_container.name}_Mesh")
-        if cand and getattr(cand, "type", "") == "MESH":
-            mesh_child = cand
-    if cloud_child is None and hasattr(bpy, "data") and hasattr(bpy.data, "objects"):
-        cand = bpy.data.objects.get(f"{root_container.name}_VoxelCloud")
-        if cand and getattr(cand, "type", "") == "MESH":
-            cloud_child = cand
-
-    return root_container, mesh_child, cloud_child, container_type
+    poly_cnt = len(world_mesh_obj.data.polygons) if hasattr(world_mesh_obj.data, "polygons") else 0
+    operator.report(
+        {"INFO"},
+        f"Rebuilt voxel mesh: {poly_cnt:,} faces in "
+        f"{format_timing(elapsed_ms, operation='Rebuild World Mesh')}",
+    )
 
 
-def resolve_mesh_rebuild_targets(
-    context: Optional[bpy.types.Context],
-) -> Tuple[Optional[bpy.types.Object], Optional[bpy.types.Object], Optional[bpy.types.Object], str]:
-    """
-    Resolves (root_container, world_mesh_obj, cloud_obj, source_type) from context selection.
-    source_type can be:
-      - "SYNC": Live Sync world container or section mesh
-      - "SAVE": Minecraft Save container or mesh
-      - "CLOUD": Standalone or companion Voxel Point Cloud
-      - "NONE": Unrecognized or non-voxel object
-    """
-    if context is None:
-        return None, None, None, "NONE"
+def _launch_cloud_rebuild(
+    operator,
+    context,
+    prefs,
+    cloud_data,
+    root_container,
+    world_mesh_obj,
+    cloud_obj,
+    flags,
+    ctx_data,
+    did_precompile,
+):
+    session_key = (
+        getattr(root_container, "name", None)
+        or (root_container.get("mozi_save_uuid") if root_container and hasattr(root_container, "get") else None)
+        or (getattr(world_mesh_obj, "name", None))
+        or (getattr(cloud_obj, "name", "global_cloud"))
+    )
 
-    active = getattr(context, "active_object", None)
-    if not active:
-        selected = getattr(context, "selected_objects", [])
-        active = selected[0] if selected else None
+    def do_cloud_rebuild(progress_callback=None):
+        storage = cloud_data.to_storage()
+        unknown_strat = getattr(prefs, "unknown_block_strategy", "FALLBACK_CUBE") if prefs is not None else "FALLBACK_CUBE"
+        mesh_data, elapsed_ms = mesh_voxel_storage(
+            storage=storage,
+            model_db=ctx_data["model_db"],
+            atlas=ctx_data["atlas"],
+            biome_resolver=ctx_data["biome_resolver"],
+            colormaps=ctx_data["colormaps"],
+            ctm_solver=ctx_data["ctm_solver"],
+            prefs=prefs,
+            enable_ao=flags["enable_ao"],
+            mesh_fluids=flags["mesh_fluids"],
+            weld_vertices=flags["weld_vertices"],
+            origin_centered=flags["origin_centered"],
+            num_threads=ctx_data["num_threads"],
+            progress_callback=progress_callback,
+            world_session_key=session_key,
+            force_rebuild=did_precompile,
+            enable_animated_textures=flags["anim_tex_enabled"],
+            skin_cache_dir=ctx_data["mesh_context"].get("skin_cache_dir"),
+            cache_fingerprint=ctx_data["cache_fingerprint"],
+            cache_timestamp=ctx_data["cache_timestamp"],
+            resolve_prefs=False,
+            resolve_ctm=False,
+            unknown_block_strategy=unknown_strat,
+        )
+        return mesh_data, elapsed_ms, storage
 
-    if not active:
-        return None, None, None, "NONE"
+    def on_cloud_success(result_tuple):
+        _handle_cloud_success(
+            operator=operator,
+            result_tuple=result_tuple,
+            context=context,
+            prefs=prefs,
+            root_container=root_container,
+            world_mesh_obj=world_mesh_obj,
+            ctx_data=ctx_data,
+            flags=flags,
+            session_key=session_key,
+        )
 
-    # 1. Target is an Empty container root (SYNC or SAVE)
-    if getattr(active, "type", "") == 'EMPTY':
-        return _resolve_mesh_rebuild_targets_from_root(active)
+    if not getattr(operator, "run_async", True):
+        try:
+            res = do_cloud_rebuild()
+            on_cloud_success(res)
+            return {"FINISHED"}
+        except Exception as e:
+            operator.report({"ERROR"}, f"Remeshing failed: {e}")
+            return {"CANCELLED"}
 
-    # 2. Target is a Mesh object
-    if getattr(active, "type", "") == "MESH":
-        # Check if parent is an Empty container
-        parent = getattr(active, "parent", None)
-        if parent and getattr(parent, "type", "") == 'EMPTY':
-            is_cont = False
-            if hasattr(parent, "get"):
-                is_cont = bool(parent.get("mtk:is_container") or parent.get("mtk:is_yefira_world"))
-            if is_cont or parent.name.startswith("Save_") or parent.name.startswith("Yefira_World") or parent.name.startswith("[Scene]"):
-                c_root, c_mesh, c_cloud, c_type = _resolve_mesh_rebuild_targets_from_root(parent)
-                if getattr(active, "name", "").endswith("_VoxelCloud") or (hasattr(active, "get") and active.get("mtk_is_voxel_cloud")):
-                    c_cloud = active
-                else:
-                    c_mesh = active
-                return c_root, c_mesh, c_cloud, c_type
-
-        # Check if active itself is a companion voxel point cloud
-        is_cloud = False
-        if hasattr(active, "get"):
-            is_cloud = bool(active.get("mtk_is_voxel_cloud"))
-        if not is_cloud and getattr(active, "name", "").endswith("_VoxelCloud"):
-            is_cloud = True
-
-        if is_cloud:
-            cloud_obj = active
-            world_mesh = None
-            if hasattr(active, "get"):
-                w_name = active.get("mtk_world_mesh")
-                if w_name and hasattr(bpy, "data") and hasattr(bpy.data, "objects"):
-                    world_mesh = bpy.data.objects.get(w_name)
-            if world_mesh is None and active.name.endswith("_VoxelCloud"):
-                base = active.name[:-11]
-                for cand_name in (f"{base}_Mesh", base):
-                    if hasattr(bpy, "data") and hasattr(bpy.data, "objects"):
-                        cand = bpy.data.objects.get(cand_name)
-                        if cand and getattr(cand, "type", "") == "MESH":
-                            world_mesh = cand
-                            break
-            return None, world_mesh, cloud_obj, "CLOUD"
-
-        # Check if active is a world mesh with companion point cloud or Live Sync mesh
-        cloud_obj = None
-        if hasattr(active, "get"):
-            c_name = active.get("mtk_voxel_cloud")
-            if c_name and hasattr(bpy, "data") and hasattr(bpy.data, "objects"):
-                cloud_obj = bpy.data.objects.get(c_name)
-        if cloud_obj is None and hasattr(bpy, "data") and hasattr(bpy.data, "objects"):
-            conv_name = f"{active.name}_VoxelCloud"
-            cand = bpy.data.objects.get(conv_name)
-            if cand and getattr(cand, "type", "") == "MESH":
-                cloud_obj = cand
-            elif active.name.endswith("_Mesh"):
-                base = active.name[:-5]
-                cand = bpy.data.objects.get(f"{base}_VoxelCloud")
-                if cand and getattr(cand, "type", "") == "MESH":
-                    cloud_obj = cand
-
-        is_sync = False
-        if hasattr(active, "get") and (active.get("mtk:is_yefira_mesh") or active.get("mtk:is_yefira_world")):
-            is_sync = True
-        elif active.name.startswith("Yefira_World"):
-            is_sync = True
-
-        if is_sync:
-            return None, active, cloud_obj, "SYNC"
-
-        if cloud_obj is not None:
-            return None, active, cloud_obj, "SAVE"
-
-    return None, None, None, "NONE"
-
-
-def _live_session_matches_container(
-    context: Optional[Any],
-    root_container: Optional[bpy.types.Object],
-) -> bool:
-    """Return True when an active Live Sync session owns this container."""
-    session = get_sync_bridge_session() if callable(get_sync_bridge_session) else None
-    if not session or not getattr(session, "is_active", False):
-        return False
-
-    scene = getattr(context, "scene", None) if context is not None else None
-    active_name = getattr(scene, "mozi_active_sync_container_name", "") if scene is not None else ""
-    if not isinstance(active_name, str):
-        active_name = ""
-
-    if root_container is not None and active_name:
-        return getattr(root_container, "name", "") == active_name
-    return True
+    task = AsyncTask(
+        target=run_task_with_asset_guard,
+        kwargs={
+            "target_func": do_cloud_rebuild,
+            "target_kwargs": {},
+            "prefs": prefs,
+            "task_title": "Rebuilding Voxel Mesh",
+            "asset_context": ctx_data["asset_context"],
+        },
+    )
+    reporter = BlenderProgressReporter(context=context, total=100, title="Rebuilding Voxel Mesh")
+    operator._runner = ModalTaskRunner(
+        operator=operator,
+        context=context,
+        task=task,
+        reporter=reporter,
+        on_success=on_cloud_success,
+        title="Rebuilding Voxel Mesh",
+    )
+    return operator._runner.start()
 
 
 @register_menu_item(views=["object", "mesh"], label="Rebuild Voxel Mesh")
@@ -277,29 +353,9 @@ class MOZI_OT_rebuild_mesh(bpy.types.Operator):
         self._unknown_blocks = []
 
     def draw(self, context):
-        from ...i18n import tr
-        layout = self.layout
+        prefs = get_prefs(context)
         unknown = getattr(self, "_unknown_blocks", [])
-        if unknown:
-            box = layout.box()
-            box.label(
-                text=tr("Detected {count} unknown block(s):").format(count=len(unknown)),
-                icon="ERROR",
-            )
-            col = box.column(align=True)
-            for block_id in unknown[:10]:
-                col.label(text=f"  • {block_id}")
-            if len(unknown) > 10:
-                col.label(
-                    text=tr("  ... and {count} more").format(count=len(unknown) - 10)
-                )
-
-            prefs = get_prefs(context)
-            strat = getattr(prefs, "unknown_block_strategy", "FALLBACK_CUBE") if prefs else "FALLBACK_CUBE"
-            strat_desc = tr("Magenta/Black Cube") if strat == "FALLBACK_CUBE" else tr("Ignore (Air)")
-            layout.separator()
-            layout.label(text=f"{tr('Handling Strategy')}: {strat_desc}")
-            layout.label(text=tr("Click OK to proceed with meshing."))
+        draw_unknown_blocks_dialog(self.layout, unknown, prefs)
 
     @classmethod
     def poll(cls, context):
@@ -310,14 +366,11 @@ class MOZI_OT_rebuild_mesh(bpy.types.Operator):
         if source_type == "NONE":
             return False
 
-        # An external mesh parented under an MTK container must not be
-        # overwritten with voxel-generated geometry.
         if source_type in ("SAVE", "SYNC", "SCENE") and world_mesh is not None:
             if classify_origin(world_mesh) == ORIGIN_EXTERNAL:
                 return False
 
         if source_type == "SCENE":
-            # For self-contained .mtkscene packages, asset pipeline is not required
             return cloud_obj is not None
 
         prefs = get_prefs(context)
@@ -328,18 +381,14 @@ class MOZI_OT_rebuild_mesh(bpy.types.Operator):
             return False
 
         if source_type == "SYNC":
-            # Active sessions rebuild from in-memory storage; offline sessions
-            # require the persistent companion point cloud.
-            if _live_session_matches_container(context, root_container):
+            if _live_session_matches_container(context, root_container, get_session_fn=get_sync_bridge_session):
                 return True
             return cloud_obj is not None
 
         if source_type == "SAVE":
-            # Offline rebuild requires the persistent voxel point cloud.
             return cloud_obj is not None
 
         if source_type == "CLOUD":
-            # A standalone cloud needs an existing surface mesh to receive geometry.
             return cloud_obj is not None and world_mesh is not None
 
         return False
@@ -359,7 +408,6 @@ class MOZI_OT_rebuild_mesh(bpy.types.Operator):
 
         status = check_asset_cache_status(prefs)
 
-        # Ensure Object mode
         saved_mode = getattr(context, "mode", "OBJECT")
         if saved_mode != "OBJECT" and hasattr(bpy.ops, "object") and hasattr(bpy.ops.object, "mode_set"):
             try:
@@ -369,7 +417,6 @@ class MOZI_OT_rebuild_mesh(bpy.types.Operator):
 
         # Branch A: Active Live Sync session
         session = get_sync_bridge_session() if callable(get_sync_bridge_session) else None
-
         use_live_session = False
         if source_type == "SYNC" and session and getattr(session, "is_active", False):
             active_c_name = getattr(context.scene, "mozi_active_sync_container_name", "") if hasattr(context, "scene") else ""
@@ -377,60 +424,9 @@ class MOZI_OT_rebuild_mesh(bpy.types.Operator):
                 use_live_session = True
 
         if use_live_session:
-            from ...utils.world.sync_container import get_or_create_world_mesh_object, update_world_mesh
+            return _execute_live_rebuild(self, context, prefs, status, session, root_container, world_mesh_obj)
 
-            prefs = get_prefs(context)
-            if status in ("MISSING", "STALE"):
-                ensure_pipeline_assets_ready_sync(prefs)
-                if hasattr(session, "check_and_reload_dirty_cache"):
-                    session.check_and_reload_dirty_cache(prefs=prefs, force=True)
-            elif hasattr(session, "check_and_reload_dirty_cache"):
-                try:
-                    session.check_and_reload_dirty_cache(prefs=prefs)
-                except Exception:
-                    pass
-
-            def do_live_rebuild(progress_callback=None):
-                return session.get_world_mesh()
-
-            def on_live_success(mesh_data):
-                if not mesh_data or mesh_data.vertex_count == 0:
-                    self.report({"WARNING"}, "Voxel storage is empty or no geometry generated.")
-                    return
-                target_root = root_container
-                world_obj = world_mesh_obj or get_or_create_world_mesh_object(context, root_container=target_root)
-                storage = session.get_storage()
-                v_count, f_count = update_world_mesh(world_obj, mesh_data, storage=storage, sync_point_cloud=True)
-                root_obj = target_root or world_obj
-                props = getattr(root_obj, "mozi_sync", None) or (getattr(context.scene, "mozi_sync", None) if hasattr(context, "scene") else None)
-                if props:
-                    props.point_count = v_count
-                    props.faces_count = f_count
-                    props.last_update_info = f"Rebuilt World Mesh: {v_count:,} vertices, {f_count:,} faces"
-                self.report({"INFO"}, f"Live Sync mesh rebuilt: {v_count:,} vertices, {f_count:,} faces")
-
-            if not self.run_async:
-                try:
-                    data = do_live_rebuild()
-                    on_live_success(data)
-                    return {"FINISHED"}
-                except Exception as e:
-                    self.report({"ERROR"}, f"Failed rebuilding live sync mesh: {e}")
-                    return {"CANCELLED"}
-
-            task = AsyncTask(target=do_live_rebuild)
-            reporter = BlenderProgressReporter(context=context, total=100, title="Rebuilding World Mesh")
-            self._runner = ModalTaskRunner(
-                operator=self,
-                context=context,
-                task=task,
-                reporter=reporter,
-                on_success=on_live_success,
-                title="Rebuilding World Mesh",
-            )
-            return self._runner.start()
-
-        # Branch B: Remesh from companion Voxel Point Cloud (Save container, offline Sync, or Carved cloud)
+        # Branch B: Remesh from companion Voxel Point Cloud
         if source_type != "SCENE" and status in ("NO_PACKS", "NO_VANILLA"):
             self.report({"WARNING"}, reason)
             return {"CANCELLED"}
@@ -443,359 +439,42 @@ class MOZI_OT_rebuild_mesh(bpy.types.Operator):
             self.report({"ERROR"}, "Failed to extract voxel point cloud data from companion object.")
             return {"CANCELLED"}
 
-        pt_count = len(cloud_data)
-        if pt_count == 0:
+        if len(cloud_data) == 0:
             if world_mesh_obj and hasattr(world_mesh_obj, "data") and hasattr(world_mesh_obj.data, "clear_geometry"):
                 world_mesh_obj.data.clear_geometry()
             self.report({"INFO"}, "Voxel cloud is empty; cleared mesh geometry.")
             return {"FINISHED"}
 
-        # Inherit settings from root container or operator properties
-        enable_ao = getattr(self, "enable_ao", True)
-        if hasattr(enable_ao, "default"):
-            enable_ao = enable_ao.default
-        elif not isinstance(enable_ao, bool):
-            enable_ao = True
-
-        mesh_fluids = getattr(self, "mesh_fluids", True)
-        if hasattr(mesh_fluids, "default"):
-            mesh_fluids = mesh_fluids.default
-        elif not isinstance(mesh_fluids, bool):
-            mesh_fluids = True
-
-        weld_vertices = getattr(self, "weld_vertices", True)
-        if hasattr(weld_vertices, "default"):
-            weld_vertices = weld_vertices.default
-        elif not isinstance(weld_vertices, bool):
-            weld_vertices = True
-
-        origin_centered = getattr(self, "origin_centered", True)
-        if hasattr(origin_centered, "default"):
-            origin_centered = origin_centered.default
-        elif not isinstance(origin_centered, bool):
-            origin_centered = True
-        if root_container is not None and hasattr(root_container, "get"):
-            if root_container.get("mtk_enable_ao") is not None:
-                enable_ao = bool(root_container.get("mtk_enable_ao"))
-            if root_container.get("mtk_mesh_fluids") is not None:
-                mesh_fluids = bool(root_container.get("mtk_mesh_fluids"))
-            if root_container.get("mtk_weld_vertices") is not None:
-                weld_vertices = bool(root_container.get("mtk_weld_vertices"))
-            if root_container.get("mtk_origin_centered") is not None:
-                origin_centered = bool(root_container.get("mtk_origin_centered"))
-
-        anim_tex_enabled = None
-        if root_container is not None:
-            props = getattr(root_container, "mozi_save", None)
-            if props and hasattr(props, "enable_animated_textures"):
-                anim_tex_enabled = bool(props.enable_animated_textures)
-            elif hasattr(root_container, "get") and root_container.get("mtk_enable_animated_textures") is not None:
-                anim_tex_enabled = bool(root_container.get("mtk_enable_animated_textures"))
-        if anim_tex_enabled is None and world_mesh_obj is not None:
-            props = getattr(world_mesh_obj, "mozi_save", None)
-            if props and hasattr(props, "enable_animated_textures"):
-                anim_tex_enabled = bool(props.enable_animated_textures)
-            elif hasattr(world_mesh_obj, "get") and world_mesh_obj.get("mtk_enable_animated_textures") is not None:
-                anim_tex_enabled = bool(world_mesh_obj.get("mtk_enable_animated_textures"))
-
-        prefs = get_prefs(context)
-        if anim_tex_enabled is None:
-            raw_anim = getattr(prefs, "enable_animated_textures", True) if prefs is not None else True
-            anim_tex_enabled = raw_anim if isinstance(raw_anim, bool) else True
-
-        package_reader = None
-        did_precompile = False
-        if source_type == "SCENE":
-            from pathlib import Path
-            scene_pkg_path = None
-            if root_container is not None and hasattr(root_container, "get"):
-                scene_pkg_path = root_container.get("mtk:scene_package_path")
-
-            scene_data = None
-            if scene_pkg_path and Path(scene_pkg_path).is_file():
-                try:
-                    from ...bridge.scene import read_scene_package
-                    scene_data = read_scene_package(scene_pkg_path, origin_centered=origin_centered, z_up=True)
-                except Exception as exc:
-                    logger.warning("Failed to read original .mtkscene package at %s: %s", scene_pkg_path, exc)
-
-            if scene_data is not None:
-                model_db = scene_data.get("models")
-                atlas = scene_data.get("atlas")
-                biome_resolver = scene_data.get("biome_resolver")
-                colormaps = scene_data.get("colormaps")
-                ctm_solver = scene_data.get("ctm_solver")
-                package_reader = scene_data.get("reader")
-                asset_context = {"status": "READY"}
-                mesh_context = {
-                    "skin_cache_dir": None,
-                    "enable_animated_textures": anim_tex_enabled,
-                }
-                raw_threads = getattr(prefs, "thread_count", 0) if prefs is not None else 0
-                num_threads = raw_threads if isinstance(raw_threads, int) and not isinstance(raw_threads, bool) and raw_threads > 0 else None
-                cache_fingerprint = None
-                cache_timestamp = None
-            else:
-                can_run, reason = can_execute_asset_pipeline(prefs)
-                if not can_run:
-                    self.report({"ERROR"}, f"Original .mtkscene package is missing ({scene_pkg_path}) and host asset cache is not ready: {reason}")
-                    return {"CANCELLED"}
-                if status in ("MISSING", "STALE"):
-                    try:
-                        ensure_pipeline_assets_ready_sync(prefs)
-                    except Exception as e:
-                        self.report({"ERROR"}, f"Failed to precompile assets: {e}")
-                        return {"CANCELLED"}
-                    did_precompile = True
-                asset_context = prepare_asset_context(prefs)
-                mesh_context = prepare_world_mesh_context(prefs, enable_animated_textures=anim_tex_enabled)
-                model_db = mesh_context["model_db"]
-                atlas = mesh_context["atlas"]
-                biome_resolver = mesh_context["biome_resolver"]
-                colormaps = mesh_context.get("colormaps")
-                ctm_solver = mesh_context["ctm_solver"]
-                num_threads = mesh_context["num_threads"]
-                anim_tex_enabled = mesh_context["enable_animated_textures"]
-                cache_fingerprint = mesh_context["cache_fingerprint"]
-                cache_timestamp = mesh_context["cache_timestamp"]
-        else:
-            if status in ("MISSING", "STALE"):
-                try:
-                    ensure_pipeline_assets_ready_sync(prefs)
-                except Exception as e:
-                    self.report({"ERROR"}, f"Failed to precompile assets: {e}")
-                    return {"CANCELLED"}
-                did_precompile = True
-                status = "READY"
-
-            asset_context = prepare_asset_context(prefs)
-            mesh_context = prepare_world_mesh_context(prefs, enable_animated_textures=anim_tex_enabled)
-            model_db = mesh_context["model_db"]
-            atlas = mesh_context["atlas"]
-            biome_resolver = mesh_context["biome_resolver"]
-            colormaps = mesh_context.get("colormaps")
-            ctm_solver = mesh_context["ctm_solver"]
-            num_threads = mesh_context["num_threads"]
-            anim_tex_enabled = mesh_context["enable_animated_textures"]
-            cache_fingerprint = mesh_context["cache_fingerprint"]
-            cache_timestamp = mesh_context["cache_timestamp"]
-
-        # Scan for unknown blocks before launching worker
-        from ...bridge.world import scan_unknown_blocks
-        try:
-            unknown_blocks = scan_unknown_blocks(cloud_data, model_db=model_db, atlas=atlas, prefs=prefs)
-        except Exception as exc:
-            if not getattr(self, "force", False):
-                self.report({"ERROR"}, f"Unknown block validation failed: {exc}")
-                return {"CANCELLED"}
-            unknown_blocks = []
-
-        if unknown_blocks and not getattr(self, "force", False):
-            if getattr(self, "_dialog_confirmed", False):
-                self._dialog_confirmed = False
-            else:
-                self._unknown_blocks = unknown_blocks
-                if not getattr(bpy.app, "background", False) and hasattr(context, "window_manager"):
-                    self._dialog_confirmed = True
-                    return context.window_manager.invoke_props_dialog(self, width=420)
-                self.report(
-                    {"WARNING"},
-                    f"Found {len(unknown_blocks)} unknown block(s): {', '.join(unknown_blocks)}. "
-                    "Pass force=True to proceed with fallback cubes or air.",
-                )
-                self._dialog_confirmed = False
-                return {"CANCELLED"}
-
-        session_key = (
-            getattr(root_container, "name", None)
-            or (root_container.get("mozi_save_uuid") if root_container and hasattr(root_container, "get") else None)
-            or (getattr(world_mesh_obj, "name", None))
-            or (getattr(cloud_obj, "name", "global_cloud"))
+        flags = resolve_rebuild_flags(self, root_container, world_mesh_obj, prefs)
+        prep = prepare_rebuild_asset_context(
+            root_container=root_container,
+            source_type=source_type,
+            status=status,
+            prefs=prefs,
+            anim_tex_enabled=flags["anim_tex_enabled"],
+            origin_centered=flags["origin_centered"],
+            report_fn=self.report,
         )
+        if prep is None:
+            return {"CANCELLED"}
+        ctx_data, did_precompile = prep
 
-        def do_cloud_rebuild(progress_callback=None):
-            storage = cloud_data.to_storage()
-            unknown_strat = getattr(prefs, "unknown_block_strategy", "FALLBACK_CUBE") if prefs is not None else "FALLBACK_CUBE"
-            mesh_data, elapsed_ms = mesh_voxel_storage(
-                storage=storage,
-                model_db=model_db,
-                atlas=atlas,
-                biome_resolver=biome_resolver,
-                colormaps=colormaps,
-                ctm_solver=ctm_solver,
-                prefs=prefs,
-                enable_ao=enable_ao,
-                mesh_fluids=mesh_fluids,
-                weld_vertices=weld_vertices,
-                origin_centered=origin_centered,
-                num_threads=num_threads,
-                progress_callback=progress_callback,
-                world_session_key=session_key,
-                force_rebuild=did_precompile,
-                enable_animated_textures=anim_tex_enabled,
-                skin_cache_dir=mesh_context.get("skin_cache_dir"),
-                cache_fingerprint=cache_fingerprint,
-                cache_timestamp=cache_timestamp,
-                resolve_prefs=False,
-                resolve_ctm=False,
-                unknown_block_strategy=unknown_strat,
-            )
-            # Keep the rebuilt storage so the success handler can cache it for
-            # later WORLD biome re-tints.
-            return mesh_data, elapsed_ms, storage
+        proceed, dialog_res = check_unknown_blocks(self, context, cloud_data, ctx_data, prefs)
+        if not proceed:
+            return dialog_res
 
-        def on_cloud_success(result_tuple):
-            storage = None
-            if isinstance(result_tuple, tuple) and len(result_tuple) == 2 and isinstance(result_tuple[1], bool):
-                inner, did_precompile = result_tuple
-                if len(inner) == 3:
-                    mesh_data, elapsed_ms, storage = inner
-                else:
-                    mesh_data, elapsed_ms = inner
-                if did_precompile:
-                    try:
-                        reload_atlas_images(prefs)
-                    except Exception:
-                        pass
-            elif isinstance(result_tuple, tuple) and len(result_tuple) == 3:
-                mesh_data, elapsed_ms, storage = result_tuple
-            else:
-                mesh_data, elapsed_ms = result_tuple
-
-            if mesh_data is not None and getattr(mesh_data, "profile", None) is not None:
-                try:
-                    from ...bridge.diagnostics import record_operation_profile
-                    record_operation_profile("Rebuild World Mesh", mesh_data.profile)
-                except Exception:
-                    pass
-
-            nonlocal world_mesh_obj
-            if world_mesh_obj is None and root_container is not None:
-                mesh_name = f"{root_container.name}_Mesh"
-                b_mesh = bpy.data.meshes.new(mesh_name)
-                world_mesh_obj = bpy.data.objects.new(mesh_name, b_mesh)
-                if hasattr(world_mesh_obj, "parent"):
-                    world_mesh_obj.parent = root_container
-                target_coll = context.collection if context and context.collection else (
-                    bpy.context.scene.collection if hasattr(bpy.context, "scene") else None
-                )
-                if target_coll and hasattr(target_coll, "objects") and hasattr(target_coll.objects, "link"):
-                    target_coll.objects.link(world_mesh_obj)
-
-                # The new mesh inherits the container's origin so it is not
-                # mistaken for an external import.
-                root_origin = classify_origin(root_container)
-                if root_origin == ORIGIN_EXTERNAL:
-                    root_origin = ORIGIN_VOXEL
-                stamp_geometry_origin(world_mesh_obj, root_origin, overwrite=True)
-
-            if world_mesh_obj and hasattr(world_mesh_obj, "data"):
-                import time
-                t0_inj = time.perf_counter()
-                inject_mesh_data(
-                    world_mesh_obj.data,
-                    mesh_data,
-                    update_topology=True,
-                    update_normals=True,
-                )
-                inj_ms = (time.perf_counter() - t0_inj) * 1000.0
-
-                t0_mat = time.perf_counter()
-                used_chunk_ids = mesh_data.used_materials() if hasattr(mesh_data, "used_materials") else None
-                from ...bridge.world import get_world_session_dynamic_entity_atlases
-                dyn_entities = get_world_session_dynamic_entity_atlases(session_key) if session_key else None
-                if package_reader is not None:
-                    from ...utils.scene.materials import bind_scene_materials
-                    bind_scene_materials(
-                        world_mesh_obj,
-                        reader=package_reader,
-                        scene_name=root_container.name if root_container else "Scene",
-                        atlas=atlas,
-                        prefs=prefs,
-                        used_chunk_ids=used_chunk_ids,
-                        dynamic_entity_atlases=dyn_entities,
-                    )
-                else:
-                    ensure_world_materials(
-                        world_mesh_obj,
-                        prefs=prefs,
-                        atlas=atlas,
-                        used_chunk_ids=used_chunk_ids,
-                        dynamic_entity_atlases=dyn_entities,
-                        clean_unused_slots=True,
-                    )
-                mat_ms = (time.perf_counter() - t0_mat) * 1000.0
-
-                _safe_set_custom_prop(world_mesh_obj, "mtk_enable_animated_textures", bool(anim_tex_enabled))
-                if root_container is not None:
-                    _safe_set_custom_prop(root_container, "mtk_enable_animated_textures", bool(anim_tex_enabled))
-
-                try:
-                    from ...bridge.diagnostics import append_stage_to_last_profile
-                    append_stage_to_last_profile("blender_mesh_injection", inj_ms, getattr(mesh_data, "vertex_count", None))
-                    append_stage_to_last_profile("blender_material_binding", mat_ms, len(used_chunk_ids) if used_chunk_ids else None)
-                except Exception:
-                    pass
-
-                # Offline rebuilds resample the 3D biomes from the point cloud, so
-                # the object must advertise the WORLD preset (and keep that storage
-                # available for later panel edits).
-                from ...utils.materials.biome.updater import mark_world_biome, clear_biome_updater_cache, resolve_mesh_base_tint_types
-                clear_biome_updater_cache()
-                if mark_world_biome is not None:
-                    aliases = []
-                    if root_container is not None:
-                        aliases.append(getattr(root_container, "name", ""))
-                        container_id = root_container.get("mtk:container_id", "") if hasattr(root_container, "get") else ""
-                        if isinstance(container_id, str) and container_id:
-                            aliases.append(container_id)
-                        mark_world_biome(root_container, storage)
-                    mark_world_biome(world_mesh_obj, storage, aliases=aliases)
-
-                if resolve_mesh_base_tint_types is not None:
-                    try:
-                        resolve_mesh_base_tint_types(world_mesh_obj.data, world_mesh_obj)
-                    except Exception:
-                        pass
-
-                poly_cnt = len(world_mesh_obj.data.polygons) if hasattr(world_mesh_obj.data, "polygons") else 0
-                self.report(
-                    {"INFO"},
-                    f"Rebuilt voxel mesh: {poly_cnt:,} faces in "
-                    f"{format_timing(elapsed_ms, operation='Rebuild World Mesh')}",
-                )
-            else:
-                self.report({"WARNING"}, "No mesh object available to receive geometry.")
-
-        if not self.run_async:
-            try:
-                res = do_cloud_rebuild()
-                on_cloud_success(res)
-                return {"FINISHED"}
-            except Exception as e:
-                self.report({"ERROR"}, f"Remeshing failed: {e}")
-                return {"CANCELLED"}
-
-        task = AsyncTask(
-            target=run_task_with_asset_guard,
-            kwargs={
-                "target_func": do_cloud_rebuild,
-                "target_kwargs": {},
-                "prefs": prefs,
-                "task_title": "Rebuilding Voxel Mesh",
-                "asset_context": asset_context,
-            },
-        )
-        reporter = BlenderProgressReporter(context=context, total=100, title="Rebuilding Voxel Mesh")
-        self._runner = ModalTaskRunner(
+        return _launch_cloud_rebuild(
             operator=self,
             context=context,
-            task=task,
-            reporter=reporter,
-            on_success=on_cloud_success,
-            title="Rebuilding Voxel Mesh",
+            prefs=prefs,
+            cloud_data=cloud_data,
+            root_container=root_container,
+            world_mesh_obj=world_mesh_obj,
+            cloud_obj=cloud_obj,
+            flags=flags,
+            ctx_data=ctx_data,
+            did_precompile=did_precompile,
         )
-        return self._runner.start()
 
     def modal(self, context, event):
         if self._runner is not None:

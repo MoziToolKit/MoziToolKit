@@ -135,17 +135,19 @@ class TestWorldBridgePipeline:
 
     def test_world_bridge_has_no_sync_imports(self):
         """Verify that bridge.world AST imports no networking or LiveSync modules."""
-        world_py = Path(__file__).parent.parent / "bridge" / "world.py"
-        tree = ast.parse(world_py.read_text(encoding="utf-8"))
+        bridge_world = Path(__file__).parent.parent / "bridge" / "world"
+        world_files = list(bridge_world.glob("*.py")) if bridge_world.is_dir() else [Path(__file__).parent.parent / "bridge" / "world.py"]
 
         imported_modules = set()
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                for alias in node.names:
-                    imported_modules.add(alias.name)
-            elif isinstance(node, ast.ImportFrom):
-                if node.module:
-                    imported_modules.add(node.module)
+        for world_py in world_files:
+            tree = ast.parse(world_py.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        imported_modules.add(alias.name)
+                elif isinstance(node, ast.ImportFrom):
+                    if node.module:
+                        imported_modules.add(node.module)
 
         for mod in imported_modules:
             assert "sync" not in mod.lower(), f"Unexpected sync import: {mod}"

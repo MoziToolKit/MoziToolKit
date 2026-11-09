@@ -201,6 +201,13 @@ class TestUpdateCallbacks(unittest.TestCase):
         invalidate_pack_probe()
         packs_ui._set_is_probing(False)
         packs_ui._set_is_reordering(False)
+        packs_ui._probe_scheduled.clear()
+        packs_ui._probe_inflight.clear()
+        while not packs_ui._probe_results.empty():
+            try:
+                packs_ui._probe_results.get_nowait()
+            except Exception:
+                break
 
     def tearDown(self) -> None:
         invalidate_pack_probe()
@@ -461,6 +468,13 @@ class TestAsyncProbePipeline(unittest.TestCase):
         invalidate_pack_probe()
         packs_ui._set_is_probing(False)
         packs_ui._set_is_reordering(False)
+        packs_ui._probe_scheduled.clear()
+        packs_ui._probe_inflight.clear()
+        while not packs_ui._probe_results.empty():
+            try:
+                packs_ui._probe_results.get_nowait()
+            except Exception:
+                break
 
     def tearDown(self) -> None:
         invalidate_pack_probe()

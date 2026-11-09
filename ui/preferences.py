@@ -3,10 +3,10 @@ MoziToolKit Add-on Preferences interface and tab views.
 Orchestrates Resource Packs & Base JARs stack, Context Menu presets, and Environment/Storage tabs.
 """
 
-import bpy
-import site
-import sys
+from __future__ import annotations
+
 from pathlib import Path
+import bpy
 from bpy.props import BoolProperty, CollectionProperty, EnumProperty, IntProperty, StringProperty
 
 from ..utils.config import (
@@ -33,9 +33,9 @@ from ..utils.system import (
     sort_unadded_items,
 )
 from ..utils.assets import has_valid_vanilla_pack
-
 from ..utils.materials.biome import BIOME_ENUM_ITEMS
 
+from .preferences_utils import _safe_get_prefs, refresh_ui_and_menus
 from .preferences_packs import (
     MOZI_PG_resource_pack_entry,
     MOZI_UL_resource_packs_list,
@@ -72,6 +72,12 @@ from .preferences_menus import (
     on_item_label_changed,
     MENUS_CLASSES,
 )
+from .preferences_draw_packs import draw_resource_packs_tab
+from .preferences_draw_views import (
+    draw_material_tab,
+    draw_context_menus_tab,
+    draw_misc_tab,
+)
 
 __all__ = [
     "refresh_ui_and_menus",
@@ -106,40 +112,6 @@ __all__ = [
 ]
 
 
-def refresh_ui_and_menus(context=None):
-    """Force Blender UI regions to redraw so menu modifications take effect immediately."""
-    if context is None:
-        context = bpy.context
-    try:
-        for window in context.window_manager.windows:
-            for area in window.screen.areas:
-                area.tag_redraw()
-    except Exception:
-        pass
-
-
-def _safe_get_prefs(self_or_context=None):
-    """Safely resolve AddonPreferences instance across various caller contexts."""
-    if hasattr(self_or_context, "resource_packs"):
-        return self_or_context
-    if isinstance(self_or_context, bpy.types.Context):
-        prefs = get_prefs(self_or_context)
-        if prefs:
-            return prefs
-    if hasattr(self_or_context, "id_data") and hasattr(self_or_context.id_data, "resource_packs"):
-        return self_or_context.id_data
-    prefs = get_prefs(bpy.context)
-    if prefs:
-        return prefs
-    try:
-        for addon in bpy.context.preferences.addons.values():
-            if hasattr(addon, "preferences") and hasattr(addon.preferences, "resource_packs"):
-                return addon.preferences
-    except Exception:
-        pass
-    return None
-
-
 _is_updating_material_settings = False
 
 
@@ -156,7 +128,6 @@ def on_material_setting_changed(self, context):
             refresh_ui_and_menus(context)
     finally:
         _is_updating_material_settings = False
-
 
 
 def on_dna_setting_changed(self, context):
@@ -177,6 +148,7 @@ def sync_prefs_from_json(prefs):
 def save_prefs_to_json(prefs):
     """Save preferences PropertyGroups state to central ConfigManager."""
     get_config_manager().sync_from_preferences(prefs)
+
 
 def _detect_addon_idname():
     pkg = __package__ or ""
@@ -389,7 +361,6 @@ class MOZI_AddonPreferences(bpy.types.AddonPreferences):
             mgr = get_config_manager()
             mgr.sync_to_preferences(self)
             self.is_initialized = True
-            # Lazily classify pre-existing entries (non-blocking, debounced off the main thread).
             schedule_pending_pack_detection(self)
 
         if len(self.resource_packs) == 0:
@@ -403,7 +374,6 @@ class MOZI_AddonPreferences(bpy.types.AddonPreferences):
 
         layout = self.layout
 
-        # Primary Category Tabs
         cat_row = layout.row(align=True)
         cat_row.prop(self, "category_tab", expand=True)
 
@@ -419,451 +389,16 @@ class MOZI_AddonPreferences(bpy.types.AddonPreferences):
             self.draw_misc(layout, context)
 
     def draw_resource_packs(self, layout, context):
-        from ..i18n import tr
-
-        # -------------------------------------------------------------------
-        # 1. Primary Streamlined Instance Selector (核心启动器与实例选择)
-        # -------------------------------------------------------------------
-        inst_box = layout.box()
-        h_row = inst_box.row(align=True)
-        h_row.label(text=tr("Game Instance & Auto-Ingestion:"), icon="CONSOLE")
-        h_row.operator("mozi.scan_instances", text=tr("Scan / Refresh"), icon="FILE_REFRESH")
-        h_row.operator("mozi.pick_custom_instance_dir", text=tr("Add Folder..."), icon="FILE_FOLDER")
-
-        sel_col = inst_box.column(align=False)
-        r_filter = sel_col.row(align=True)
-        r_filter.prop(self, "detected_instances_launcher_filter", text=tr("Launcher"))
-        r_filter.prop(self, "detected_instance_id", text=tr("Instance"))
-
-        # Inspect current selected instance details
-        curr_inst = None
-        scan_state = "IDLE"
-        try:
-            from .preferences_packs import _CACHED_DISCOVERED_INSTANCES, _INSTANCE_SCAN_STATE
-            scan_state = _INSTANCE_SCAN_STATE
-            target_id = getattr(self, "detected_instance_id", "NONE")
-            if target_id not in ("NONE", "SCANNING") and _CACHED_DISCOVERED_INSTANCES:
-                curr_inst = next((i for i in _CACHED_DISCOVERED_INSTANCES if i.instance_id == target_id), None)
-                if curr_inst is None:
-                    try:
-                        idx = int(target_id)
-                        if 0 <= idx < len(_CACHED_DISCOVERED_INSTANCES):
-                            curr_inst = _CACHED_DISCOVERED_INSTANCES[idx]
-                    except Exception:
-                        pass
-        except Exception:
-            curr_inst = None
-
-        if curr_inst:
-            info_sub = inst_box.box()
-            i_row = info_sub.row(align=True)
-            iso_label = tr("Isolated Instance") if curr_inst.is_isolated else tr("Global Shared")
-            en_mods = len(curr_inst.enabled_mods) if hasattr(curr_inst, "enabled_mods") else len(curr_inst.mods)
-            mods_info = f"{tr('Mods')}: {en_mods}/{len(curr_inst.mods)}" if en_mods != len(curr_inst.mods) else f"{tr('Mods')}: {len(curr_inst.mods)}"
-            if getattr(curr_inst, "skipped_functional_mods", None):
-                mods_info += f" ({tr('Filtered')}: {len(curr_inst.skipped_functional_mods)})"
-
-            en_packs = len(curr_inst.enabled_resource_packs) if hasattr(curr_inst, "enabled_resource_packs") else len(curr_inst.resource_packs)
-            packs_info = f"{tr('Packs')}: {en_packs}/{len(curr_inst.resource_packs)}" if en_packs != len(curr_inst.resource_packs) else f"{tr('Packs')}: {len(curr_inst.resource_packs)}"
-
-            i_row.label(
-                text=f"{tr('Version')}: {curr_inst.minecraft_version} ({curr_inst.loader}) | {iso_label} | {mods_info} | {packs_info}",
-                icon="CHECKMARK" if curr_inst.has_client_jar else "INFO",
-            )
-            if not curr_inst.has_client_jar:
-                w_row = info_sub.row(align=True)
-                w_row.alert = True
-                w_row.label(text=tr("Client JAR not found in instance. Run the game once or add manual JAR."), icon="ERROR")
-        elif scan_state == "SCANNING":
-            info_sub = inst_box.box()
-            i_row = info_sub.row(align=True)
-            i_row.label(text=tr("Scanning local Minecraft launchers in background..."), icon="TIME")
-        else:
-            act_row = inst_box.row(align=True)
-            act_row.scale_y = 1.2
-            act_row.operator("mozi.scan_instances", text=tr("Scan System for Minecraft Instances"), icon="VIEWZOOM")
-
-        layout.separator()
-
-        # -------------------------------------------------------------------
-        # 2. Stack Precompilation & Cache (紧凑轻量缓存状态与一键烘焙)
-        # -------------------------------------------------------------------
-        cache_box = layout.box()
-        c_head = cache_box.row(align=True)
-        c_head.label(text=tr("Asset Prebake & Cache:"), icon="FILE_CACHE")
-
-        try:
-            from ..utils.assets import get_ui_asset_cache_status
-            status = get_ui_asset_cache_status(self)
-        except Exception:
-            status = "UNKNOWN"
-
-        st_row = cache_box.row(align=True)
-        st_row.scale_y = 0.9
-        if status == "CHECKING":
-            st_row.label(text=tr("Cache Status: Checking freshness..."), icon="TIME")
-        elif status == "READY":
-            st_row.label(text=tr("Cache Status: Ready and up-to-date"), icon="CHECKMARK")
-        elif status == "STALE":
-            st_row.alert = True
-            st_row.label(text=tr("Cache Status: Outdated (Stack changed, recompile recommended)"), icon="TIME")
-        elif status == "MISSING":
-            st_row.alert = True
-            st_row.label(text=tr("Cache Status: Missing (Not precompiled yet)"), icon="INFO")
-        elif status == "NO_VANILLA":
-            st_row.alert = True
-            st_row.label(text=tr("Cache Status: Disabled (Minecraft Vanilla Client JAR required)"), icon="ERROR")
-        else:
-            st_row.label(text=tr("Cache Status: No resource packs configured"), icon="INFO")
-
-        cache_row = cache_box.row(align=True)
-        cache_row.operator("mozi.precompile_cache", text=tr("Precompile / Rebuild Stack Caches"), icon="FILE_REFRESH")
-        cache_row.operator("mozi.open_cache_folder", text=tr("Open Cache Folder"), icon="FOLDER_REDIRECT")
-        cache_row.operator("mozi.clear_cache", text=tr("Clear Cache"), icon="TRASH")
-
-        layout.separator()
-
-        # -------------------------------------------------------------------
-        # 3. Advanced Collapsible Manual Stack (收敛折叠原有复杂菜单)
-        # -------------------------------------------------------------------
-        adv_box = layout.box()
-        adv_row = adv_box.row(align=True)
-        is_advanced_open = bool(getattr(self, "show_advanced_packs", False))
-        icon_tria = "TRIA_DOWN" if is_advanced_open else "TRIA_RIGHT"
-        adv_row.prop(self, "show_advanced_packs", icon=icon_tria, text=tr("Advanced: Manual Resource Pack & JAR Stack"))
-
-        if is_advanced_open:
-            # Detailed controls only shown when explicitly expanded
-            has_vanilla = status not in ("NO_VANILLA", "NO_PACKS") if status != "CHECKING" else has_valid_vanilla_pack(self)
-            if not has_vanilla:
-                warn_box = adv_box.box()
-                warn_box.alert = True
-                w_row = warn_box.row(align=True)
-                w_row.label(text=tr("Minecraft Vanilla Client JAR Required!"), icon="ERROR")
-                w_col = warn_box.column(align=True)
-                w_col.scale_y = 0.85
-                w_col.label(text=tr("Please add and enable a Minecraft Vanilla Client JAR (.jar) at the bottom tier."))
-
-            list_row = adv_box.row(align=False)
-            list_b = list_row.box()
-            list_b.template_list(
-                "MOZI_UL_resource_packs_list",
-                "",
-                self,
-                "resource_packs",
-                self,
-                "resource_packs_index",
-                rows=5,
-            )
-
-            idx = self.resource_packs_index
-            can_move_up = False
-            can_move_down = False
-            if 0 <= idx < len(self.resource_packs):
-                curr_tier = self.resource_packs[idx].pack_type
-                if idx > 0 and self.resource_packs[idx - 1].pack_type == curr_tier:
-                    can_move_up = True
-                if idx < len(self.resource_packs) - 1 and self.resource_packs[idx + 1].pack_type == curr_tier:
-                    can_move_down = True
-
-            btn_col = list_row.column(align=True)
-            btn_col.operator("mozi.pack_add", text="", icon="ADD")
-            btn_col.operator("mozi.pack_remove", text="", icon="REMOVE")
-            btn_col.separator(factor=2)
-
-            up_col = btn_col.column(align=True)
-            up_col.enabled = can_move_up
-            op_up = up_col.operator("mozi.pack_move", text="", icon="TRIA_UP")
-            op_up.direction = "UP"
-
-            down_col = btn_col.column(align=True)
-            down_col.enabled = can_move_down
-            op_down = down_col.operator("mozi.pack_move", text="", icon="TRIA_DOWN")
-            op_down.direction = "DOWN"
-
-            # Selected Pack Detail
-            if 0 <= idx < len(self.resource_packs):
-                item = self.resource_packs[idx]
-                detail_box = adv_box.box()
-                d_header = detail_box.row(align=True)
-                d_header.label(text=f"{tr('Pack Details')}: {item.name}", icon="PREFERENCES")
-                d_header.prop(item, "enabled", text=tr("Enabled"))
-
-                d_col = detail_box.column(align=False)
-                row1 = d_col.row(align=True)
-                row1.prop(item, "name", text=tr("Name"))
-                row1.prop(item, "pack_type", text=tr("Type"))
-
-                row2 = d_col.row(align=True)
-                row2.prop(item, "path", text=tr("Path"))
-
-                p_val = item.path.strip()
-                if not p_val:
-                    st_row = d_col.row(align=True)
-                    st_row.alert = True
-                    st_row.label(text=tr("Path is empty. Please select a .zip, .jar, or assets folder."), icon="INFO")
-                elif not Path(p_val).exists():
-                    st_row = d_col.row(align=True)
-                    st_row.alert = True
-                    st_row.label(text=f"{tr('File not found')}: '{p_val}'", icon="ERROR")
-
-                kind_warning = detected_kind_warning(item)
-                if kind_warning:
-                    warn_row = d_col.row(align=True)
-                    warn_row.alert = True
-                    warn_row.label(text=kind_warning, icon="ERROR")
+        draw_resource_packs_tab(self, layout, context)
 
     def draw_material(self, layout, context):
-        from ..i18n import tr
-        curr_engine = getattr(context.scene.render, "engine", "UNKNOWN") if context and context.scene else "UNKNOWN"
-        is_eevee = curr_engine in {"BLENDER_EEVEE", "BLENDER_EEVEE_NEXT"}
-
-        # Information Banner
-        info_box = layout.box()
-        b_row = info_box.row(align=True)
-        b_row.label(text=tr("Material & PBR Shading Configuration:"), icon="SHADING_RENDERED")
-
-        st_row = info_box.row(align=True)
-        st_row.scale_y = 0.9
-        engine_mode_text = tr("EEVEE Mode") if is_eevee else tr("Cycles Mode")
-        st_row.label(text=f"{tr('Active Scene Engine')}: {curr_engine} ({engine_mode_text})", icon="RESTRICT_RENDER_OFF")
-
-        layout.separator()
-
-        # Group 1: Default Material Replacement Settings
-        box_repl = layout.box()
-        b_repl_head = box_repl.row(align=True)
-        b_repl_head.label(text=tr("Default Material Replacement Settings:"), icon="MATERIAL")
-        col_repl = box_repl.column(align=False)
-        col_repl.prop(self, "pack_textures")
-        repl_row = col_repl.row(align=True)
-        repl_row.prop(self, "enable_ctm", text=tr("Connected Textures (CTM)"))
-        repl_row.prop(self, "enable_animated_textures", text=tr("Animated Textures"))
-        col_repl.prop(self, "smooth_biome_blend", text=tr("Smooth Biome Transition"))
-        col_repl.prop(self, "material_enable_vertex_ao", text=tr("Vertex Ambient Occlusion (AO)"))
-
-        # Group 2: Render Engine Adaptation & Presets
-        layout.separator()
-        box_engine = layout.box()
-        b1_head = box_engine.row(align=True)
-        b1_head.label(text=tr("Render Engine Adaptation & Presets:"), icon="SCENE")
-        col_eng = box_engine.column(align=False)
-        col_eng.prop(self, "material_render_engine", text=tr("Adaptation Mode"))
-        hint_eng = col_eng.row(align=True)
-        hint_eng.scale_y = 0.85
-        if self.material_render_engine == "AUTO":
-            hint_eng.label(text=tr("• Auto Mode: Optimizes alpha and subsurface settings for the active engine."))
-        elif self.material_render_engine == "EEVEE":
-            hint_eng.label(text=tr("• EEVEE Mode: Realtime-friendly alpha blending and optional subsurface override."))
-        else:
-            hint_eng.label(text=tr("• Cycles Mode: Full physical subsurface scattering where the material provides it."))
-
-        # Group 3: Subsurface Scattering
-        layout.separator()
-        box_sss = layout.box()
-        b4_head = box_sss.row(align=True)
-        b4_head.label(text=tr("Subsurface Scattering (Leaves / Plants / Crops):"), icon="OUTLINER_OB_CURVES")
-        col_sss = box_sss.column(align=False)
-        col_sss.prop(self, "material_subsurface_method", text=tr("Subsurface Method"))
-        col_sss.prop(self, "material_disable_subsurface", text=tr("Disable Subsurface Scattering"))
-
-        # Precompile Action
-        layout.separator()
-        row_pre = layout.row(align=True)
-        row_pre.operator("mozi.precompile_cache", text=tr("Rebuild / Precompile Stack Caches"), icon="FILE_REFRESH")
-        row_pre.operator("mozi.open_cache_folder", text=tr("Open Cache Folder"), icon="FOLDER_REDIRECT")
+        draw_material_tab(self, layout, context)
 
     def draw_context_menus(self, layout, context):
-        from ..i18n import tr
-        # Secondary Context Menu Sub-Tabs
-        sub_row = layout.row(align=True)
-        sub_row.prop(self, "context_menu_tab", expand=True)
-
-        layout.separator()
-
-        # Top Bar (Header Actions for Menu tabs)
-        top_box = layout.box()
-        top_row = top_box.row(align=True)
-        op_reset_cur = top_row.operator(MOZI_OT_menu_reset_config.bl_idname, text=tr("Reset Current View"), icon="FILE_REFRESH")
-        op_reset_cur.reset_all = False
-        op_reset_all = top_row.operator(MOZI_OT_menu_reset_config.bl_idname, text=tr("Reset All Views"), icon="RECOVER_LAST")
-        op_reset_all.reset_all = True
-        top_row.operator(MOZI_OT_menu_import_config.bl_idname, text=tr("Import Presets JSON..."), icon="IMPORT")
-        top_row.operator(MOZI_OT_menu_export_config.bl_idname, text=tr("Export Presets JSON..."), icon="EXPORT")
-
-        layout.separator()
-
-        view = self.context_menu_tab
-        added_coll_name = f"added_{view}"
-        added_idx_name = f"added_{view}_index"
-        unadded_coll_name = f"unadded_{view}"
-        unadded_idx_name = f"unadded_{view}_index"
-
-        added_coll = getattr(self, added_coll_name)
-        added_idx = getattr(self, added_idx_name)
-        unadded_coll = getattr(self, unadded_coll_name)
-        unadded_idx = getattr(self, unadded_idx_name)
-
-        # Main Two-Column Structure
-        main_row = layout.row(align=False)
-
-        # Left Column: Added Right-Click Menu Items
-        left_col = main_row.column(align=False)
-        left_box = left_col.box()
-        left_box.label(text=tr("Added Right-Click Menu Items:"), icon="CHECKBOX_HLT")
-        left_box.template_list(
-            "MOZI_UL_added_items_list",
-            "",
-            self,
-            added_coll_name,
-            self,
-            added_idx_name,
-            rows=6,
-        )
-
-        # Custom Description Input Box under left column
-        if 0 <= added_idx < len(added_coll):
-            item = added_coll[added_idx]
-            edit_box = left_col.box()
-            e_row = edit_box.row(align=True)
-            e_row.label(text=tr("Edit Menu Item:"), icon="EDITMODE_HLT")
-            e_row.prop(item, "enabled", text=tr("Enabled"))
-            edit_box.prop(item, "label", text=tr("Label"))
-
-        # Middle Column: Action Buttons (Icon-Only Compact Column)
-        mid_col = main_row.column(align=True)
-        mid_col.alignment = "CENTER"
-        mid_col.separator(factor=3)
-
-        # Add Button (Left Arrow)
-        sub_row1 = mid_col.row(align=True)
-        sub_row1.enabled = len(unadded_coll) > 0 and 0 <= unadded_idx < len(unadded_coll)
-        sub_row1.operator(MOZI_OT_menu_add_item.bl_idname, text="", icon="BACK")
-
-        # Remove Button (Right Arrow)
-        sub_row2 = mid_col.row(align=True)
-        sub_row2.enabled = len(added_coll) > 0 and 0 <= added_idx < len(added_coll)
-        sub_row2.operator(MOZI_OT_menu_remove_item.bl_idname, text="", icon="FORWARD")
-
-        mid_col.separator(factor=3)
-
-        # Move Up Button
-        sub_row3 = mid_col.row(align=True)
-        sub_row3.enabled = len(added_coll) > 0 and added_idx > 0
-        op_up = sub_row3.operator(MOZI_OT_menu_move_item.bl_idname, text="", icon="TRIA_UP")
-        op_up.direction = "UP"
-
-        # Move Down Button
-        sub_row4 = mid_col.row(align=True)
-        sub_row4.enabled = len(added_coll) > 0 and added_idx < len(added_coll) - 1
-        op_down = sub_row4.operator(MOZI_OT_menu_move_item.bl_idname, text="", icon="TRIA_DOWN")
-        op_down.direction = "DOWN"
-
-        # Right Column: Available / Unadded Options
-        right_col = main_row.column(align=False)
-        right_box = right_col.box()
-        right_box.label(text=tr("Available Unadded Options:"), icon="ADD")
-        right_box.template_list(
-            "MOZI_UL_unadded_items_list",
-            "",
-            self,
-            unadded_coll_name,
-            self,
-            unadded_idx_name,
-            rows=6,
-        )
+        draw_context_menus_tab(self, layout, context)
 
     def draw_misc(self, layout, context):
-        from ..i18n import tr
-        # Configuration Storage Info Box
-        config_box = layout.box()
-        c_header = config_box.row(align=True)
-        c_header.label(text=tr("Configuration Storage:"), icon="PREFERENCES")
-
-        c_desc = config_box.column(align=True)
-        c_desc.scale_y = 0.85
-        mgr = get_config_manager()
-        backend = mgr.get_backend()
-        from ..utils.config.backends.json_backend import JsonConfigBackend
-        path_str = backend.get_config_path() if isinstance(backend, JsonConfigBackend) else "config.json"
-        c_desc.label(text=f"{tr('Active File')}: {path_str}")
-        c_desc.label(text=tr("Changes are atomically written to external JSON file with automatic backup."))
-
-        layout.separator()
-
-        layout.separator()
-
-        # Performance & Multi-Threading
-        import os
-        perf_box = layout.box()
-        perf_header = perf_box.row(align=True)
-        perf_header.label(text=tr("Performance & Multi-Threading:"), icon="MOD_DATA_TRANSFER")
-        cpu_cnt = os.cpu_count() or 1
-        perf_header.label(text=f"{tr('Detected')}: {cpu_cnt} {tr('cores')}", icon="INFO")
-
-        perf_col = perf_box.column(align=True)
-        perf_col.prop(self, "thread_count", text=tr("Worker Threads"))
-        perf_col.scale_y = 0.85
-        if self.thread_count == 0:
-            perf_col.label(text=f"{tr('Active mode')}: {tr('Auto')} ({cpu_cnt} {tr('threads')})")
-        else:
-            perf_col.label(text=f"{tr('Active mode')}: {tr('Fixed')} ({self.thread_count} {tr('threads')})")
-        perf_col.label(text=tr("Controls Rayon thread pool concurrency for asset precompilation, atlas encoding, and mesh construction."))
-
-        perf_box.separator()
-
-        # DNA Direct Memory Acceleration toggle
-        dna_row = perf_box.row(align=True)
-        dna_row.prop(self, "enable_dna_acceleration", text=tr("DNA Direct Memory Acceleration"))
-
-        dna_desc = perf_box.column(align=True)
-        dna_desc.scale_y = 0.85
-        if not self.enable_dna_acceleration:
-            dna_desc.label(text=f"{tr('Status')}: {tr('Disabled (Safe Batch API Mode)')}", icon="CHECKMARK")
-        else:
-            try:
-                from ..bridge.dna import is_dna_available
-                dna_avail = is_dna_available()
-            except Exception:
-                dna_avail = False
-            if dna_avail:
-                dna_desc.label(text=f"{tr('Status')}: {tr('Active (Hardware Speed)')}", icon="CHECKMARK")
-            else:
-                dna_desc.label(text=f"{tr('Status')}: {tr('Unavailable (Batch API Active)')}", icon="INFO")
-        dna_desc.label(text=tr("Hardware-speed direct memory injection into Blender mesh buffers. Disable to enforce 100% stable standard BPy batch API."))
-
-        layout.separator()
-
-        # Cache & Storage Management
-        try:
-            from ..utils.assets import get_cache_stats
-            stats = get_cache_stats(self)
-        except Exception:
-            try:
-                from ..bridge import get_cache_stats
-                stats = get_cache_stats(self)
-            except Exception:
-                stats = {
-                    "size_formatted": "0 B",
-                    "files_count": 0,
-                    "path": str(getattr(self, "cache_dir", "") or "Default"),
-                }
-
-        cache_box = layout.box()
-        cache_header = cache_box.row(align=True)
-        cache_header.label(text=tr("Persistent Cache & Storage:"), icon="DISK_DRIVE")
-        cache_header.label(text=f"{tr('Total')}: {stats['size_formatted']} ({stats['files_count']} {tr('files')})", icon="INFO")
-        cache_header.operator("mozi.refresh_cache_stats", text=tr("Refresh"), icon="FILE_REFRESH")
-
-        cache_col = cache_box.column(align=True)
-        cache_col.prop(self, "cache_dir", text=tr("Cache Location"))
-        cache_col.scale_y = 0.85
-        cache_col.label(text=f"{tr('Resolved Path')}: {stats['path']}")
-        cache_col.label(text=tr("Extracted packs, compiled multi-layer atlases, and JSON indices persist here across restarts."))
-
-        cache_row = cache_box.row(align=True)
-        cache_row.operator("mozi.open_cache_folder", text=tr("Open Cache Folder"), icon="FILE_FOLDER")
-        cache_row.operator("mozi.clear_cache", text=tr("Clear Resource Pack Cache"), icon="TRASH")
+        draw_misc_tab(self, layout, context)
 
 
 PREFERENCES_CLASSES = (
@@ -871,4 +406,3 @@ PREFERENCES_CLASSES = (
     *MENUS_CLASSES,
     MOZI_AddonPreferences,
 )
-

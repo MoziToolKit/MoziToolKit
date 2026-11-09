@@ -407,15 +407,19 @@ class TestLauncherScan(unittest.TestCase):
             pref_packs._INSTANCE_SCAN_STATE = orig_state
             _CACHED_DISCOVERED_INSTANCES.clear()
             _CACHED_DISCOVERED_INSTANCES.extend(orig_cached)
-            prefs.resource_packs.clear()
-            for name, path, p_type, p_source, d_kind, enabled in orig_packs:
-                elem = prefs.resource_packs.add()
-                elem.name = name
-                elem.path = path
-                elem.pack_type = p_type
-                elem.pack_type_source = p_source
-                elem.detected_kind = d_kind
-                elem.enabled = enabled
+            pref_packs._set_is_reordering(True)
+            try:
+                prefs.resource_packs.clear()
+                for name, path, p_type, p_source, d_kind, enabled in orig_packs:
+                    elem = prefs.resource_packs.add()
+                    elem.name = name
+                    elem.path = path
+                    elem.pack_type = p_type
+                    elem.pack_type_source = p_source
+                    elem.detected_kind = d_kind
+                    elem.enabled = enabled
+            finally:
+                pref_packs._set_is_reordering(False)
 
     def test_options_txt_resource_pack_priority_and_enabled_states(self):
         """Tests that options.txt resourcePacks stack determines pack order and enabled status."""

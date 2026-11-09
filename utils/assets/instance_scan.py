@@ -133,6 +133,7 @@ def schedule_background_instance_scan(
                     if not has_any_valid and best is not None:
                         from ..launcher_scan import apply_instance_to_preferences
                         apply_instance_to_preferences(best, prefs)
+                        set_last_applied_instance_id(best.instance_id)
                         try:
                             from .guard import invalidate_guard_cache
                             invalidate_guard_cache()
@@ -145,10 +146,13 @@ def schedule_background_instance_scan(
                             set_is_updating_instance(True)
                             try:
                                 prefs.detected_instance_id = best.instance_id
+                                set_last_applied_instance_id(best.instance_id)
                             except Exception:
                                 pass
                             finally:
                                 set_is_updating_instance(False)
+                        elif target_id not in ("NONE", "SCANNING"):
+                            set_last_applied_instance_id(target_id)
                 refresh_ui_and_menus(context)
                 if on_complete:
                     on_complete(_CACHED_DISCOVERED_INSTANCES)

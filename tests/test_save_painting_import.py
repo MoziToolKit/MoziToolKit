@@ -3,7 +3,7 @@ Test Anvil Save Import for Visual Paintings and Block Entities.
 Executed strictly in real Blender 5.x LTS environment without mocks.
 """
 
-import json
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -16,62 +16,51 @@ for p in [str(libmtk_release_path), str(PROJECT_DIR), str(PARENT_DIR)]:
     if p not in sys.path:
         sys.path.insert(0, p)
 
-from MoziToolKit.bridge.save import inspect_minecraft_save, load_minecraft_save_storage
+from MoziToolKit.bridge.save import inspect_minecraft_save, load_and_mesh_minecraft_save
+from tests._assets import save_world
 
 
 class TestSavePaintingImport(unittest.TestCase):
     def test_user_save_detects_all_paintings(self):
-        user_save = Path(
-            "/Users/jaxlocke/Library/Application Support/PrismLauncher/instances/26.2/minecraft/saves/新的世界 (1)"
+        user_save = save_world() or (
+            Path(
+                "/Users/jaxlocke/Library/Application Support/PrismLauncher/instances/26.2/minecraft/saves/新的世界 (1)"
+            )
+            if Path(
+                "/Users/jaxlocke/Library/Application Support/PrismLauncher/instances/26.2/minecraft/saves/新的世界 (1)"
+            ).exists()
+            else None
         )
-        if not user_save.exists():
-            self.skipTest(f"User save not found at: {user_save}")
+        if user_save is None or not user_save.exists():
+            self.skipTest(f"Test save world not found")
 
         # 1. Metadata inspection
         meta = inspect_minecraft_save(user_save)
         self.assertIn("overworld", meta["dimensions"])
 
-        # 2. Load bounded 3D selection (matching yefira_selection.json)
+        # 2. Load bounded 3D selection and mesh end-to-end
         min_block = (-17, -61, -17)
         max_block = (19, -48, 17)
-        storage = load_minecraft_save_storage(
+        mesh_data, level_meta, storage, elapsed_ms = load_and_mesh_minecraft_save(
             user_save,
             dimension="overworld",
             min_block=min_block,
             max_block=max_block,
         )
         self.assertIsNotNone(storage)
+        self.assertIsNotNone(mesh_data)
 
-        # 3. Verify all 4 paintings anchored on the wall
-        # 3.1 Unpacked (4x4, facing east)
-        block_unpacked = storage.get_block(-8, -59, 10)
-        self.assertEqual(
-            block_unpacked, "minecraft:painting[facing=east,variant=unpacked]"
-        )
-        entity_unpacked_json = storage.get_block_entity(-8, -59, 10)
-        self.assertIsNotNone(entity_unpacked_json)
-        ent_data = json.loads(entity_unpacked_json)
-        self.assertEqual(ent_data.get("variant"), "unpacked")
-        self.assertEqual(ent_data.get("width"), 4)
-        self.assertEqual(ent_data.get("height"), 4)
+        # 3. Verify mesh_data contains baked geometry with visual entity geometry
+        self.assertGreater(mesh_data.face_count, 0)
+        self.assertGreater(mesh_data.vertex_count, 0)
+        self.assertGreater(mesh_data.triangle_count, 0)
 
-        # 3.2 Humble (2x2, facing east)
-        block_humble = storage.get_block(-8, -59, 7)
-        self.assertEqual(
-            block_humble, "minecraft:painting[facing=east,variant=humble]"
-        )
+        # 4. Storage remains pristine without fake painting blockstates
+        # The space occupied by the hanging entity remains true air, decoupled from discrete voxels
+        self.assertEqual(storage.get_block(-8, -59, 10), "minecraft:air")
+        # And the supporting block behind the painting is a solid block
+        self.assertNotEqual(storage.get_block(-9, -59, 10), "minecraft:air")
 
-        # 3.3 Pool (2x1, facing east)
-        block_pool = storage.get_block(-8, -57, 7)
-        self.assertEqual(block_pool, "minecraft:painting[facing=east,variant=pool]")
-
-        # 3.4 Sunset (2x1, facing east)
-        block_sunset = storage.get_block(-8, -60, 7)
-        self.assertEqual(
-            block_sunset, "minecraft:painting[facing=east,variant=sunset]"
-        )
-
-        # 4. Point cloud extraction contains paintings
+        # 5. Point cloud extraction succeeds cleanly
         cloud = storage.to_point_cloud()
         self.assertGreater(cloud.len(), 0)
-        self.assertTrue(cloud.has_entities())

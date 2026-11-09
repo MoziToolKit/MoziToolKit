@@ -18,13 +18,6 @@ from .engine import (
     has_libmtk,
     require_libmtk,
 )
-from .entity import (
-    build_painting_mesh,
-    calculate_painting_position,
-    get_all_painting_variants,
-    get_painting_dimension,
-    get_painting_variant,
-)
 from .assets import (
     check_cache_dirty,
     clear_cache,
@@ -97,7 +90,6 @@ from .progress import (
 )
 from .save import (
     inspect_minecraft_save,
-    load_minecraft_save_storage,
     load_and_mesh_minecraft_save,
 )
 from .scene import (
@@ -232,7 +224,6 @@ __all__ = [
     "mesh_voxel_storage",
     # Save (Anvil unpacking & meshing)
     "inspect_minecraft_save",
-    "load_minecraft_save_storage",
     "load_and_mesh_minecraft_save",
     # Scene Interchange (.mtkscene)
     "export_scene_package",
@@ -245,12 +236,6 @@ __all__ = [
     "is_sync_available",
     "require_sync",
     "reset_sync_bridge_session",
-    # Entity & Painting
-    "build_painting_mesh",
-    "calculate_painting_position",
-    "get_all_painting_variants",
-    "get_painting_dimension",
-    "get_painting_variant",
     # Progress
     "ProgressReport",
     "ProgressCallback",

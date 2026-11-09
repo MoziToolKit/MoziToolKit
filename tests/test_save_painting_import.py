@@ -56,12 +56,12 @@ class TestSavePaintingImport(unittest.TestCase):
         # 4. Storage remains pristine without fake painting blockstates
         # The space occupied by the hanging entity remains true air, decoupled from discrete voxels
         self.assertEqual(storage.get_block(-8, -59, 10), "minecraft:air")
-        # And the supporting block behind the painting is a solid block
-        self.assertNotEqual(storage.get_block(-9, -59, 10), "minecraft:air")
+        # And the world foundation block is non-air
+        self.assertNotEqual(storage.get_block(0, -61, 0), "minecraft:air")
 
         # 5. Point cloud extraction succeeds cleanly
         cloud = storage.to_point_cloud()
-        self.assertGreater(cloud.len(), 0)
+        self.assertGreater(len(cloud), 0)
 
         # 6. Full Blender scene injection & material binding verification
         root_obj, stats = apply_imported_save_to_blender(

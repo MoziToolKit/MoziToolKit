@@ -284,6 +284,12 @@ class MTK_OT_import_minecraft_save(bpy.types.Operator, ImportHelper, CommonMeshi
         except Exception:
             prefs = None
 
+        try:
+            from ...utils.system.network import sync_system_proxies
+            sync_system_proxies()
+        except Exception:
+            pass
+
         # Asset readiness gate: verify valid vanilla client base pack before proceeding
         can_run, reason = can_execute_asset_pipeline(prefs)
         if not can_run:

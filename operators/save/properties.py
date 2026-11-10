@@ -32,7 +32,7 @@ def _on_save_property_changed(self, context):
         pass
 
 
-class MoziSaveProperties(bpy.types.PropertyGroup if bpy else object):
+class MoziSaveProperties(bpy.types.PropertyGroup):
     """Object-level properties for Minecraft World Save configuration and re-meshing."""
     __slots__ = ()
 
@@ -201,24 +201,6 @@ def sync_save_properties_to_custom_props(props: Any, root_obj: Any, mesh_obj: Op
             logger.debug("Failed saving property to object %s: %s", getattr(target, "name", ""), exc)
 
 
-class _FallbackSaveProperties:
-    """Mock-safe pure Python fallback when bpy RNA descriptors are unavailable in test fixtures."""
-    def __init__(self):
-        self.suppress_dirty = False
-        self.is_initialized = False
-        self.show_rebuild_settings = False
-        self.is_dirty = False
-        self.dimension = "overworld"
-        self.min_coord = (-64, -64, -64)
-        self.max_coord = (64, 320, 64)
-        self.enable_ao = True
-        self.mesh_fluids = True
-        self.weld_vertices = True
-        self.origin_centered = True
-        self.enable_ctm = True
-        self.enable_animated_textures = True
-
-
 def get_save_properties(obj: Optional[Any], ensure_synced: bool = True) -> Optional[Any]:
     """
     Resolves the canonical MoziSaveProperties instance for a Minecraft Save container object.
@@ -236,20 +218,11 @@ def get_save_properties(obj: Optional[Any], ensure_synced: bool = True) -> Optio
     if props is None and root_obj and hasattr(root_obj, "mozi_save"):
         props = root_obj.mozi_save
 
-    # Support mock objects in test fixtures
     if props is None or not hasattr(props, "dimension"):
-        if hasattr(target, "__dict__"):
-            try:
-                props = _FallbackSaveProperties()
-                target.mozi_save = props
-            except Exception:
-                return None
-        else:
-            return None
+        return None
 
-    if props is not None and ensure_synced:
-        if hasattr(props, "is_initialized") and not props.is_initialized:
-            sync_save_properties_from_object(props, target)
+    if ensure_synced and hasattr(props, "is_initialized") and not props.is_initialized:
+        sync_save_properties_from_object(props, target)
 
     return props
 

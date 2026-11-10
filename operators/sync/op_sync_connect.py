@@ -13,8 +13,8 @@ import bpy
 from ...bridge.sync import (
     get_sync_bridge_session,
     is_sync_available,
-    load_atlas_from_cache,
-    load_model_database_from_cache,
+    load_baked_atlas_from_cache,
+    load_baked_model_database,
     load_biome_resolver_from_cache,
 )
 from ...bridge.assets import invalidate_asset_cache_memory
@@ -169,8 +169,8 @@ class MOZI_OT_sync_connect(bpy.types.Operator):
             except Exception:
                 pass
 
-        model_db = load_model_database_from_cache(prefs)
-        atlas = load_atlas_from_cache(prefs)
+        model_db = load_baked_model_database(prefs)
+        atlas = load_baked_atlas_from_cache(prefs)
         biome_resolver = load_biome_resolver_from_cache(prefs)
 
         try:
@@ -246,6 +246,7 @@ class MOZI_OT_sync_connect(bpy.types.Operator):
                 atlas=atlas,
                 biome_resolver=biome_resolver,
                 auth_token=(getattr(props, "auth_token", "") or None) if props else None,
+                prefs=prefs,
             )
         else:
             success = session.start(
@@ -256,6 +257,7 @@ class MOZI_OT_sync_connect(bpy.types.Operator):
                 atlas=atlas,
                 biome_resolver=biome_resolver,
                 auth_token=(getattr(props, "auth_token", "") or None) if props else None,
+                prefs=prefs,
             )
 
         if not success:

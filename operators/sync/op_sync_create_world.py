@@ -44,32 +44,6 @@ def switch_properties_tab_to_data(context=None):
         logger.debug("Failed switching properties tab to DATA: %s", e)
 
 
-def switch_properties_tab_to_object(context=None):
-    """Switch any visible Properties editor window to the OBJECT tab."""
-    if context is None:
-        context = getattr(bpy, "context", None)
-    if not context:
-        return
-    try:
-        wm = getattr(context, "window_manager", None) or getattr(bpy.context, "window_manager", None)
-        windows = getattr(wm, "windows", []) if wm else []
-        if not windows and getattr(context, "window", None):
-            windows = [context.window]
-
-        for win in windows:
-            screen = getattr(win, "screen", None)
-            if not screen:
-                continue
-            for area in screen.areas:
-                if area.type == 'PROPERTIES':
-                    for space in area.spaces:
-                        if space.type == 'PROPERTIES':
-                            space.context = 'OBJECT'
-                            area.tag_redraw()
-    except Exception as e:
-        logger.debug("Failed switching properties tab to OBJECT: %s", e)
-
-
 class MOZI_OT_add_yefira_world(bpy.types.Operator):
     """Create a new Yefira World Empty container for Minecraft Live Sync."""
     bl_idname = "mozi.add_yefira_world"

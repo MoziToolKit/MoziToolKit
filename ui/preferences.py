@@ -5,34 +5,10 @@ Orchestrates Resource Packs & Base JARs stack, Context Menu presets, and Environ
 
 from __future__ import annotations
 
-from pathlib import Path
 import bpy
 from bpy.props import BoolProperty, CollectionProperty, EnumProperty, IntProperty, StringProperty
 
-from ..utils.config import (
-    get_config_manager,
-    load_config,
-    load_full_config,
-    save_config,
-    save_full_config,
-    load_pack_stack_config,
-    save_pack_stack_config,
-    load_material_settings_config,
-    save_material_settings_config,
-    get_enabled_pack_entries,
-    reset_config,
-    reset_views_config,
-    export_config,
-    import_config,
-    normalize_operator_id,
-)
-from ..utils.system import (
-    ALL_OPERATORS,
-    DEFAULT_PRESETS,
-    get_prefs,
-    sort_unadded_items,
-)
-from ..utils.assets import has_valid_vanilla_pack
+from ..utils.config import get_config_manager
 from ..utils.materials.biome import BIOME_ENUM_ITEMS
 
 from .preferences_utils import _safe_get_prefs, refresh_ui_and_menus
@@ -49,14 +25,9 @@ from .preferences_packs import (
     on_detected_instances_launcher_filter_changed,
     get_detected_instances_enum_items,
     _CACHED_DISCOVERED_INSTANCES,
-    describe_detected_kind,
-    detected_kind_warning,
     schedule_pending_pack_detection,
     reorder_resource_packs_by_tier,
     populate_resource_packs,
-    on_pack_entry_changed,
-    on_pack_type_changed,
-    on_pack_path_changed,
     PACKS_CLASSES,
 )
 from .preferences_menus import (

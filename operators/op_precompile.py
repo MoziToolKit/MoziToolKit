@@ -198,29 +198,6 @@ class MOZI_OT_open_cache_folder(bpy.types.Operator):
             return {'CANCELLED'}
 
 
-class MOZI_OT_open_url(bpy.types.Operator):
-    """Open a URL in the default web browser."""
-
-    bl_idname = "mozi.open_url"
-    bl_label = "Open URL"
-    bl_description = "Open link in system web browser"
-
-    url: bpy.props.StringProperty(
-        name="URL",
-        description="URL to open",
-        default="https://github.com/MoziToolKit/MoziToolKit",
-    )
-
-    def execute(self, context):
-        import webbrowser
-        try:
-            webbrowser.open(self.url)
-            return {'FINISHED'}
-        except Exception as e:
-            self.report({'ERROR'}, f"Could not open URL: {e}")
-            return {'CANCELLED'}
-
-
 class MOZI_OT_open_preferences(bpy.types.Operator):
     """Open MoziToolKit Add-on Preferences."""
 
@@ -264,7 +241,6 @@ OPERATOR_CLASSES = (
     MOZI_OT_clear_cache,
     MOZI_OT_open_cache_folder,
     MOZI_OT_refresh_cache_stats,
-    MOZI_OT_open_url,
     MOZI_OT_open_preferences,
 )
 OPERATORS_CLASSES = OPERATOR_CLASSES

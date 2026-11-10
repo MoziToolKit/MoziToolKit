@@ -11,7 +11,6 @@ from .animated import (
 from .atlas_uv_decoder import build_atlas_uv_decoder_node_group
 from .atlas_uv_tiling import ensure_atlas_uv_tiling
 from .biome import ensure_biome_tint
-from .parallax import ensure_parallax_uv_offset
 
 
 def ensure_all_templates():
@@ -26,7 +25,6 @@ def ensure_all_templates():
         "MC_Atlas_UV_Decoder": build_atlas_uv_decoder_node_group(),
         "MC_Atlas_UV_Tiling": ensure_atlas_uv_tiling(),
         "MC_Biome_Tint": ensure_biome_tint(),
-        "MC_Parallax_UV_Offset": ensure_parallax_uv_offset(),
     }
 
 
@@ -41,7 +39,6 @@ __all__ = (
     "ensure_animation_scheduler",
     "ensure_atlas_uv_tiling",
     "ensure_biome_tint",
-    "ensure_parallax_uv_offset",
 )
 
 

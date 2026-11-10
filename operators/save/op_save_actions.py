@@ -21,7 +21,7 @@ from .utils import resolve_save_container
 logger = logging.getLogger("MoziToolKit.Operators.Save.Actions")
 
 
-class MOZI_OT_save_load_yefira_selection(bpy.types.Operator if bpy else object):
+class MOZI_OT_save_load_yefira_selection(bpy.types.Operator):
     """Load latest selection bounds and dimension from yefira_selection.json in the save folder"""
 
     bl_idname = "mozi.save_load_yefira_selection"
@@ -91,7 +91,7 @@ class MOZI_OT_save_load_yefira_selection(bpy.types.Operator if bpy else object):
         return {"FINISHED"}
 
 
-class MOZI_OT_save_reset_settings(bpy.types.Operator if bpy else object):
+class MOZI_OT_save_reset_settings(bpy.types.Operator):
     """Reset re-mesh settings back to the currently loaded model geometry"""
 
     bl_idname = "mozi.save_reset_settings"

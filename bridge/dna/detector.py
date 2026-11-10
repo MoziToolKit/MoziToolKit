@@ -58,8 +58,8 @@ def is_dna_available() -> bool:
 
     # 3. Check native engine accelerator capability
     try:
-        from ..engine import get_libmtk_blender
-        return get_libmtk_blender() is not None
+        from ..engine import get_libmtk_dna
+        return get_libmtk_dna() is not None
     except Exception:
         return False
 
@@ -77,7 +77,7 @@ def is_dna_enabled() -> bool:
     # Query AddonPreferences if running in Blender host
     if "bpy" in sys.modules:
         try:
-            from ...utils.system import get_prefs
+            from ..prefs import get_prefs
             prefs = get_prefs()
             if prefs is not None and hasattr(prefs, "enable_dna_acceleration"):
                 if not prefs.enable_dna_acceleration:

@@ -79,6 +79,11 @@ def invalidate_guard_cache() -> None:
         _GUARD_CHECKING_KEYS.clear()
 
 
+from ...bridge.assets.cache import register_cache_invalidation_callback
+
+register_cache_invalidation_callback(invalidate_guard_cache)
+
+
 def can_execute_asset_pipeline(prefs=None) -> Tuple[bool, str]:
     """Evaluates whether the asset pipeline can be executed."""
     return _eval_can_execute(prefs, check_asset_cache_status)

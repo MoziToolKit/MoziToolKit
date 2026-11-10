@@ -8,15 +8,15 @@ operators and panels.
 
 from __future__ import annotations
 
-import builtins
 import logging
+from typing import Optional
 
 from ..engine import get_libmtk, require_libmtk
 from ..assets import (
     load_biome_resolver_from_cache,
     load_colormaps_from_cache,
-    load_model_database_from_cache,
-    load_atlas_from_cache,
+    load_baked_model_database,
+    load_baked_atlas_from_cache,
     check_cache_dirty,
     get_cache_fingerprint,
     get_cache_timestamp,
@@ -33,22 +33,16 @@ def is_sync_available() -> bool:
     return mtk is not None
 
 
-def require_sync() -> None:
-    """Ensures native libmtk Live Sync backend is loaded, raising RuntimeError otherwise."""
-    require_libmtk("Live Sync")
-
-
-# Global singleton bridge instance (anchored in builtins to prevent dual-import split brain across packages)
-_GLOBAL_SESSION_ATTR = "_mozi_global_sync_bridge_session"
-if not hasattr(builtins, _GLOBAL_SESSION_ATTR):
-    setattr(builtins, _GLOBAL_SESSION_ATTR, SyncBridgeSession())
-
-_global_sync_session = getattr(builtins, _GLOBAL_SESSION_ATTR)
+# Global singleton bridge instance
+_global_sync_session: Optional[SyncBridgeSession] = None
 
 
 def get_sync_bridge_session() -> SyncBridgeSession:
     """Returns the shared global SyncBridgeSession singleton."""
-    return getattr(builtins, _GLOBAL_SESSION_ATTR, _global_sync_session)
+    global _global_sync_session
+    if _global_sync_session is None:
+        _global_sync_session = SyncBridgeSession()
+    return _global_sync_session
 
 
 def reset_sync_bridge_session() -> SyncBridgeSession:
@@ -60,12 +54,11 @@ def reset_sync_bridge_session() -> SyncBridgeSession:
 
 __all__ = [
     "is_sync_available",
-    "require_sync",
     "SyncBridgeSession",
     "get_sync_bridge_session",
     "reset_sync_bridge_session",
-    "load_model_database_from_cache",
-    "load_atlas_from_cache",
+    "load_baked_model_database",
+    "load_baked_atlas_from_cache",
     "load_biome_resolver_from_cache",
     "load_colormaps_from_cache",
     "check_cache_dirty",

@@ -23,7 +23,7 @@ from ....bridge.engine import has_libmtk
 
 
 from ..cleaner import clean_obsolete_mesh_attributes
-from ..constants import (
+from ....bridge.mesh.attribute_schema import (
     ATTR_BIOME_TINT_DATA,
     ATTR_BIOME_TINT_COLOR,
     ATTR_SOURCE_TEXTURE_KEY,

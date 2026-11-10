@@ -18,7 +18,7 @@ from ..utils.materials.biome import (
     detect_object_material_mode,
     update_object_biome,
 )
-from ..utils.materials.constants import ATTR_BIOME_TINT_DATA
+from ..bridge.mesh.attribute_schema import ATTR_BIOME_TINT_DATA
 from ..utils.mesh.ownership import classify_origin
 from ..bridge.material import get_biome_meta
 from ..i18n import tr

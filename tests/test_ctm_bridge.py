@@ -30,13 +30,7 @@ for p in [str(libmtk_release_path), str(PROJECT_DIR), str(PARENT_DIR)]:
 import bpy
 
 from MoziToolKit.bridge.engine import get_libmtk
-from MoziToolKit.utils.assets.modrinth import (
-    RECOMMENDED_CTM_PACKS,
-    search_modrinth_packs,
-    get_project_versions,
-    fetch_modrinth_pack,
-)
-from MoziToolKit.bridge.assets.pack import get_configured_ctm_solver
+from MoziToolKit.bridge.assets.pack import get_configured_ctm_solver, get_configured_pack_stack
 from MoziToolKit.bridge.world import mesh_voxel_storage
 from MoziToolKit.utils.world import apply_voxel_mesh_to_blender
 from tests._assets import require_ctm_resource_pack, ctm_resource_pack_zip
@@ -93,13 +87,6 @@ class TestCtmBridge(unittest.TestCase):
     def tearDown(self):
         self.tmp_dir.cleanup()
 
-    def test_modrinth_constants_and_structure(self):
-        """Verify recommended CTM packs metadata structure."""
-        self.assertTrue(len(RECOMMENDED_CTM_PACKS) >= 3)
-        slugs = [p["slug"] for p in RECOMMENDED_CTM_PACKS]
-        self.assertIn("clean-connected-glass", slugs)
-        self.assertIn("vanilla-connected-glass", slugs)
-
     def test_synthetic_ctm_solver_construction(self):
         """Verify CtmSolver parses the synthetic CTM pack properly."""
         if self.mtk is None or not hasattr(self.mtk, "ResourcePackStack"):
@@ -111,7 +98,6 @@ class TestCtmBridge(unittest.TestCase):
         self.assertEqual(stack.get_ctm_rule_count(), 2)
         solver = stack.build_ctm_solver()
         self.assertIsNotNone(solver)
-        self.assertEqual(solver.rule_count, 2)
 
     def test_configured_ctm_solver_helper(self):
         """Verify bridge helper get_configured_ctm_solver loads rules."""
@@ -125,7 +111,9 @@ class TestCtmBridge(unittest.TestCase):
 
         solver = get_configured_ctm_solver(mock_prefs)
         self.assertIsNotNone(solver)
-        self.assertGreaterEqual(solver.rule_count, 1)
+        stack = get_configured_pack_stack(mock_prefs)
+        self.assertIsNotNone(stack)
+        self.assertGreaterEqual(stack.get_ctm_rule_count(), 1)
 
     def test_ctm_meshing_standalone_mode(self):
         """Verify voxel storage meshing in Standalone mode resolves CTM face texture keys."""

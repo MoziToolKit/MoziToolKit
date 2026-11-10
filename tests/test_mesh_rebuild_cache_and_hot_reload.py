@@ -179,7 +179,7 @@ class TestMeshRebuildCacheAndHotReload(unittest.TestCase):
         world.clear_cache()
         # World mesh and section mesh cache must be purged
         self.assertEqual(world.get_world_mesh().vertex_count, 0)
-        self.assertEqual(len(world.used_chunk_ids()), 0)
+        self.assertEqual(len(world.get_world_mesh().used_materials()), 0)
 
         # Re-mesh after cache purge
         re_mesh = world.rebuild_all()

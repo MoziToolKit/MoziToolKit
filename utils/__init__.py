@@ -3,7 +3,7 @@ MoziToolKit Utilities Root Package.
 Organized into core glue and Blender orchestration domains:
 - system: Python dependency management and right-click menu registry
 - config: Addon preference manager and persistence backends
-- node_groups: Pure Blender shader node template generators (LabPBR, parallax, atlas UV, animations)
+- node_groups: Pure Blender shader node template generators (LabPBR, atlas UV, animations)
 """
 
 from . import system

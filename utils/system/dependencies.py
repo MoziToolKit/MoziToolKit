@@ -17,46 +17,7 @@ def has_libmtk() -> bool:
         return False
 
 
-def get_prefs(context=None):
-    """
-    Retrieve MoziToolKit AddonPreferences safely across legacy add-on
-    and Blender 4.2+ extensions packaging environments.
-    """
-    if context is None:
-        context = getattr(bpy, "context", None)
+from ...bridge.prefs import get_prefs
 
-    if not hasattr(context, "preferences") or not context.preferences:
-        return None
+__all__ = ["has_libmtk", "get_prefs"]
 
-    addons = getattr(context.preferences, "addons", None)
-    if addons is None:
-        return None
-
-    # 1. Search for any addon entry whose .preferences is an instance of MOZI_AddonPreferences
-    pref_cls = getattr(bpy.types, "MOZI_AddonPreferences", None)
-    for addon in addons.values():
-        pref = getattr(addon, "preferences", None)
-        if pref is not None:
-            if pref_cls and isinstance(pref, pref_cls):
-                return pref
-            if hasattr(pref, "resource_packs") or hasattr(pref, "added_mesh"):
-                return pref
-
-    # 2. Check known addon idnames
-    for name in ["bl_ext.vscode_development.MoziToolKit", "MoziToolKit"]:
-        addon = addons.get(name)
-        if addon and getattr(addon, "preferences", None) is not None:
-            return addon.preferences
-
-    # 3. If in test or headless environment, ensure registered in addons
-    idname = getattr(pref_cls, "bl_idname", "MoziToolKit") if pref_cls else "MoziToolKit"
-    try:
-        if idname not in addons:
-            addons.new(name=idname)
-        addon = addons.get(idname)
-        if addon and getattr(addon, "preferences", None) is not None:
-            return addon.preferences
-    except Exception:
-        pass
-
-    return None

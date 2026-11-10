@@ -1,6 +1,6 @@
 {
   "addon_version": "2.0.0",
-  "blender_version": "5.2.1 LTS",
+  "blender_version": "5.2.3 LTS",
   "carve": {
     "carved_polygons": 60,
     "initial_polygons": 54,
@@ -25,16 +25,16 @@
   },
   "debug_world": {
     "object": "B0_Debug_World",
-    "polygons": 4066,
+    "polygons": 293288,
     "stats": {
-      "elapsed_ms": 7.5,
-      "meshing_time_ms": 7.5,
-      "voxel_count": 385
+      "elapsed_ms": 118.41,
+      "meshing_time_ms": 118.41,
+      "voxel_count": 17086
     },
-    "vertices": 5448
+    "vertices": 417120
   },
   "failures": [],
-  "generated_at": "2026-10-20T12:20:47.389099+00:00",
+  "generated_at": "2026-11-10T01:41:52.615682+00:00",
   "menus": {
     "mesh": [
       "mozi.adaptive_pixel_split",
@@ -63,19 +63,17 @@
       "canonical_id": "mozi.adaptive_pixel_split",
       "default_label": "Adaptive Pixel Split",
       "enabled": true,
-      "icon": "GRID",
+      "icon": "NONE",
       "label": "Adaptive Pixel Split",
       "views": [
-        "mesh",
-        "object",
-        "uv"
+        "mesh"
       ]
     },
     "mozi.auto_extrude_repair": {
       "canonical_id": "mozi.auto_extrude_repair",
       "default_label": "Auto Extrude Repair",
       "enabled": true,
-      "icon": "NORMALS_FACE",
+      "icon": "NONE",
       "label": "Auto Extrude Repair",
       "views": [
         "mesh"
@@ -85,7 +83,7 @@
       "canonical_id": "mozi.clear_custom_normals",
       "default_label": "Clear Custom Normals",
       "enabled": true,
-      "icon": "NORMALS_VERTEX",
+      "icon": "NONE",
       "label": "Clear Custom Normals",
       "views": [
         "mesh",
@@ -96,7 +94,7 @@
       "canonical_id": "mozi.random_extrude",
       "default_label": "Random Extrude",
       "enabled": true,
-      "icon": "MOD_EXPLODE",
+      "icon": "NONE",
       "label": "Random Extrude",
       "views": [
         "mesh"
@@ -106,7 +104,7 @@
       "canonical_id": "mozi.rebuild_mesh",
       "default_label": "Rebuild Voxel Mesh",
       "enabled": true,
-      "icon": "MOD_REMESH",
+      "icon": "NONE",
       "label": "Rebuild Voxel Mesh",
       "views": [
         "object",
@@ -117,18 +115,18 @@
       "canonical_id": "mozi.repair_fluid_uv",
       "default_label": "Repair Fluid UV",
       "enabled": true,
-      "icon": "UV_DATA",
+      "icon": "NONE",
       "label": "Repair Fluid UV",
       "views": [
-        "uv",
-        "mesh"
+        "mesh",
+        "uv"
       ]
     },
     "mozi.replace_material": {
       "canonical_id": "mozi.replace_material",
       "default_label": "Replace Material",
       "enabled": true,
-      "icon": "MATERIAL",
+      "icon": "NONE",
       "label": "Replace Material",
       "views": [
         "object",
@@ -139,17 +137,18 @@
       "canonical_id": "mozi.scale_uv",
       "default_label": "Scale UV Faces",
       "enabled": true,
-      "icon": "CON_SIZELIKE",
+      "icon": "NONE",
       "label": "Scale UV Faces",
       "views": [
-        "uv"
+        "uv",
+        "mesh"
       ]
     },
     "mozi.select_hard_edges": {
       "canonical_id": "mozi.select_hard_edges",
       "default_label": "Select Hard & Sharp Edges",
       "enabled": true,
-      "icon": "EDGESEL",
+      "icon": "NONE",
       "label": "Select Hard & Sharp Edges",
       "views": [
         "mesh"
@@ -159,7 +158,7 @@
       "canonical_id": "mozi.select_transparent_faces",
       "default_label": "Select Transparent Faces",
       "enabled": true,
-      "icon": "IMAGE_ALPHA",
+      "icon": "NONE",
       "label": "Select Transparent Faces",
       "views": [
         "mesh",
@@ -170,7 +169,7 @@
       "canonical_id": "mozi.set_texture_interpolation_closest",
       "default_label": "Set Image Interpolation to Closest",
       "enabled": true,
-      "icon": "IMAGE_DATA",
+      "icon": "NONE",
       "label": "Set Image Interpolation to Closest",
       "views": [
         "object",
@@ -181,7 +180,7 @@
       "canonical_id": "mozi.toggle_voxel_cloud",
       "default_label": "Toggle Voxel Point Cloud Visibility",
       "enabled": true,
-      "icon": "POINTCLOUD_DATA",
+      "icon": "NONE",
       "label": "Toggle Voxel Point Cloud Visibility",
       "views": [
         "object",

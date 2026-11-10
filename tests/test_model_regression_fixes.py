@@ -67,7 +67,7 @@ class TestModelRegressionFixes(unittest.TestCase):
         if not self.spbr_21.exists():
             raise unittest.SkipTest("SPBR-21.zip pack not found")
 
-        res = self.db.get_mesh("minecraft:iron_chain[axis=y]", False)
+        res = libmtk_py.unstable.testing.model_database_get_mesh(self.db, "minecraft:iron_chain[axis=y]", False)
         self.assertIsNotNone(res, "iron_chain[axis=y] must resolve")
         mesh, textures = res
         # Vanilla chain has only 4 faces (2 intersecting planes). SPBR 3D model has 100 faces.
@@ -76,10 +76,10 @@ class TestModelRegressionFixes(unittest.TestCase):
 
     def test_chest_orientation_distinct_coordinates(self):
         """Chests facing north, south, east, and west must have distinct rotated geometry."""
-        res_n = self.db.get_mesh("minecraft:chest[facing=north,type=single,waterlogged=false]", False)
-        res_s = self.db.get_mesh("minecraft:chest[facing=south,type=single,waterlogged=false]", False)
-        res_e = self.db.get_mesh("minecraft:chest[facing=east,type=single,waterlogged=false]", False)
-        res_w = self.db.get_mesh("minecraft:chest[facing=west,type=single,waterlogged=false]", False)
+        res_n = libmtk_py.unstable.testing.model_database_get_mesh(self.db, "minecraft:chest[facing=north,type=single,waterlogged=false]", False)
+        res_s = libmtk_py.unstable.testing.model_database_get_mesh(self.db, "minecraft:chest[facing=south,type=single,waterlogged=false]", False)
+        res_e = libmtk_py.unstable.testing.model_database_get_mesh(self.db, "minecraft:chest[facing=east,type=single,waterlogged=false]", False)
+        res_w = libmtk_py.unstable.testing.model_database_get_mesh(self.db, "minecraft:chest[facing=west,type=single,waterlogged=false]", False)
 
         self.assertIsNotNone(res_n)
         self.assertIsNotNone(res_s)
@@ -97,15 +97,15 @@ class TestModelRegressionFixes(unittest.TestCase):
 
     def test_chiseled_bookshelf_slot_states(self):
         """Chiseled bookshelf with different occupied slots must produce different geometry and textures."""
-        shelf_empty = self.db.get_mesh(
+        shelf_empty = libmtk_py.unstable.testing.model_database_get_mesh(self.db, 
             "minecraft:chiseled_bookshelf[facing=north,slot_0_occupied=false,slot_1_occupied=false,slot_2_occupied=false,slot_3_occupied=false,slot_4_occupied=false,slot_5_occupied=false]",
             False,
         )
-        shelf_one = self.db.get_mesh(
+        shelf_one = libmtk_py.unstable.testing.model_database_get_mesh(self.db, 
             "minecraft:chiseled_bookshelf[facing=north,slot_0_occupied=true,slot_1_occupied=false,slot_2_occupied=false,slot_3_occupied=false,slot_4_occupied=false,slot_5_occupied=false]",
             False,
         )
-        shelf_full = self.db.get_mesh(
+        shelf_full = libmtk_py.unstable.testing.model_database_get_mesh(self.db, 
             "minecraft:chiseled_bookshelf[facing=north,slot_0_occupied=true,slot_1_occupied=true,slot_2_occupied=true,slot_3_occupied=true,slot_4_occupied=true,slot_5_occupied=true]",
             False,
         )
@@ -128,9 +128,9 @@ class TestModelRegressionFixes(unittest.TestCase):
 
     def test_skulls_and_heads(self):
         """Skulls must rotate with rotation property; dragon and piglin heads must use custom geometries."""
-        head_r0 = self.db.get_mesh("minecraft:player_head[rotation=0]", False)
-        head_r4 = self.db.get_mesh("minecraft:player_head[rotation=4]", False)
-        head_r8 = self.db.get_mesh("minecraft:player_head[rotation=8]", False)
+        head_r0 = libmtk_py.unstable.testing.model_database_get_mesh(self.db, "minecraft:player_head[rotation=0]", False)
+        head_r4 = libmtk_py.unstable.testing.model_database_get_mesh(self.db, "minecraft:player_head[rotation=4]", False)
+        head_r8 = libmtk_py.unstable.testing.model_database_get_mesh(self.db, "minecraft:player_head[rotation=8]", False)
 
         self.assertIsNotNone(head_r0)
         self.assertIsNotNone(head_r4)
@@ -148,21 +148,21 @@ class TestModelRegressionFixes(unittest.TestCase):
         )
 
         # Dragon head (4 internal contact faces between horns/nostrils and base are deduplicated: 42 - 4 = 38)
-        dragon = self.db.get_mesh("minecraft:dragon_head[rotation=0]", False)
+        dragon = libmtk_py.unstable.testing.model_database_get_mesh(self.db, "minecraft:dragon_head[rotation=0]", False)
         self.assertIsNotNone(dragon)
         mesh_d, tex_d = dragon
         self.assertEqual(mesh_d.face_count, 38, "Dragon head model has 38 faces after deduplicating 4 internal contact faces")
         self.assertIn("minecraft:entity/enderdragon/dragon", tex_d)
 
         # Piglin head (5 internal contact faces between tusks/snout and head are deduplicated; rotated ears preserve all faces: 36 - 5 = 31)
-        piglin = self.db.get_mesh("minecraft:piglin_head[rotation=0]", False)
+        piglin = libmtk_py.unstable.testing.model_database_get_mesh(self.db, "minecraft:piglin_head[rotation=0]", False)
         self.assertIsNotNone(piglin)
         mesh_p, tex_p = piglin
         self.assertEqual(mesh_p.face_count, 31, "Piglin head model has 31 faces with rotated ears")
         self.assertIn("minecraft:entity/piglin/piglin", tex_p)
 
         # Wall skull
-        wall_dragon = self.db.get_mesh("minecraft:dragon_wall_head[facing=north]", False)
+        wall_dragon = libmtk_py.unstable.testing.model_database_get_mesh(self.db, "minecraft:dragon_wall_head[facing=north]", False)
         self.assertIsNotNone(wall_dragon)
         self.assertEqual(wall_dragon[0].face_count, 38)
 
@@ -171,7 +171,7 @@ class TestModelRegressionFixes(unittest.TestCase):
         """Pink petals / wildflowers must not fall back to 6-sided solid cubes."""
         for amt in [1, 2, 3, 4]:
             st = f"minecraft:pink_petals[facing=north,flower_amount={amt}]"
-            res = self.db.get_mesh(st, False)
+            res = libmtk_py.unstable.testing.model_database_get_mesh(self.db, st, False)
             self.assertIsNotNone(res, f"{st} must resolve")
             mesh, tex = res
             self.assertNotEqual(mesh.face_count, 6, f"{st} must not be a 6-sided solid cube")
@@ -179,14 +179,14 @@ class TestModelRegressionFixes(unittest.TestCase):
 
         # Alias resolution
         st_alias = "minecraft:pink_petals[facing=north,flowers=1]"
-        res_alias = self.db.get_mesh(st_alias, False)
+        res_alias = libmtk_py.unstable.testing.model_database_get_mesh(self.db, st_alias, False)
         self.assertIsNotNone(res_alias)
         self.assertNotEqual(res_alias[0].face_count, 6)
 
     def test_wall_isolated_and_connected_geometry(self):
         """Walls must resolve isolated post (not 4-way cross) and straight connection geometries."""
         # 1. Isolated wall (single post)
-        res_iso = self.db.get_mesh(
+        res_iso = libmtk_py.unstable.testing.model_database_get_mesh(self.db, 
             "minecraft:cobblestone_wall[east=none,north=none,south=none,west=none,up=true,waterlogged=false]",
             False,
         )
@@ -202,12 +202,12 @@ class TestModelRegressionFixes(unittest.TestCase):
         self.assertAlmostEqual(max_z, 0.75, places=2)
 
         # 2. Bare unparameterized wall fallback
-        res_bare = self.db.get_mesh("minecraft:cobblestone_wall", False)
+        res_bare = libmtk_py.unstable.testing.model_database_get_mesh(self.db, "minecraft:cobblestone_wall", False)
         self.assertIsNotNone(res_bare, "Bare cobblestone_wall must resolve")
         self.assertEqual(res_bare[0].face_count, 6, "Bare wall must resolve to post only (6 faces)")
 
         # 3. Straight wall connected along Z (North-South)
-        res_z = self.db.get_mesh(
+        res_z = libmtk_py.unstable.testing.model_database_get_mesh(self.db, 
             "minecraft:cobblestone_wall[east=none,north=low,south=low,west=none,up=false,waterlogged=false]",
             False,
         )
@@ -220,7 +220,7 @@ class TestModelRegressionFixes(unittest.TestCase):
         self.assertGreater(min_x_c, 0.25, "Z-connected wall must not reach X=0.0")
         self.assertLess(max_x_c, 0.75, "Z-connected wall must not reach X=1.0")
 
-        res_x = self.db.get_mesh(
+        res_x = libmtk_py.unstable.testing.model_database_get_mesh(self.db, 
             "minecraft:cobblestone_wall[east=low,north=none,south=none,west=low,up=false,waterlogged=false]",
             False,
         )
@@ -236,7 +236,7 @@ class TestModelRegressionFixes(unittest.TestCase):
     def test_fence_isolated_and_connected_geometry(self):
         """Fences must resolve isolated post and directional side connections."""
         # Isolated fence
-        res_iso = self.db.get_mesh(
+        res_iso = libmtk_py.unstable.testing.model_database_get_mesh(self.db, 
             "minecraft:oak_fence[east=false,north=false,south=false,west=false,waterlogged=false]",
             False,
         )
@@ -244,12 +244,12 @@ class TestModelRegressionFixes(unittest.TestCase):
         self.assertEqual(res_iso[0].face_count, 6, "Isolated fence must have 6 faces (post only)")
 
         # Bare unparameterized fence
-        res_bare = self.db.get_mesh("minecraft:oak_fence", False)
+        res_bare = libmtk_py.unstable.testing.model_database_get_mesh(self.db, "minecraft:oak_fence", False)
         self.assertIsNotNone(res_bare)
         self.assertEqual(res_bare[0].face_count, 6, "Bare fence must resolve to post only")
 
         # East-West connected fence
-        res_ew = self.db.get_mesh(
+        res_ew = libmtk_py.unstable.testing.model_database_get_mesh(self.db, 
             "minecraft:oak_fence[east=true,north=false,south=false,west=true,waterlogged=false]",
             False,
         )
@@ -284,7 +284,7 @@ class TestModelRegressionFixes(unittest.TestCase):
 
     def test_bell_body_elements_and_texture(self):
         """Bell must include both support frame and golden bell body (27 quads clipped, 28 unclipped)."""
-        res = self.db.get_mesh("minecraft:bell[attachment=floor,facing=north]", False)
+        res = libmtk_py.unstable.testing.model_database_get_mesh(self.db, "minecraft:bell[attachment=floor,facing=north]", False)
         self.assertIsNotNone(res, "bell[attachment=floor,facing=north] must resolve")
         mesh, textures = res
         self.assertIn(mesh.quad_count, (27, 28), f"Expected 27 or 28 quads for bell, got {mesh.quad_count}")
@@ -295,14 +295,14 @@ class TestModelRegressionFixes(unittest.TestCase):
     def test_chest_uv_mapping_and_double_chest(self):
         """Single and double chest UV mappings must correctly align front, top, bottom, and side faces."""
         # Single chest
-        res_single = self.db.get_mesh("minecraft:chest[facing=north,type=single,waterlogged=false]", False)
+        res_single = libmtk_py.unstable.testing.model_database_get_mesh(self.db, "minecraft:chest[facing=north,type=single,waterlogged=false]", False)
         self.assertIsNotNone(res_single)
         mesh_s, tex_s = res_single
         self.assertEqual(mesh_s.quad_count, 18)
         self.assertIn("minecraft:entity/chest/normal", tex_s)
 
         # Left double chest
-        res_left = self.db.get_mesh("minecraft:chest[facing=north,type=left,waterlogged=false]", False)
+        res_left = libmtk_py.unstable.testing.model_database_get_mesh(self.db, "minecraft:chest[facing=north,type=left,waterlogged=false]", False)
         self.assertIsNotNone(res_left)
         mesh_l, tex_l = res_left
         self.assertEqual(mesh_l.quad_count, 18)
@@ -327,7 +327,7 @@ class TestModelRegressionFixes(unittest.TestCase):
         self.assertTrue(west_quad_found, "Left chest must have a West face")
 
         # Right double chest
-        res_right = self.db.get_mesh("minecraft:chest[facing=north,type=right,waterlogged=false]", False)
+        res_right = libmtk_py.unstable.testing.model_database_get_mesh(self.db, "minecraft:chest[facing=north,type=right,waterlogged=false]", False)
         self.assertIsNotNone(res_right)
         mesh_r, tex_r = res_right
         self.assertEqual(mesh_r.quad_count, 18)

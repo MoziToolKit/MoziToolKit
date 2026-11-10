@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, List, Optional
 import numpy as np
 
-from ..constants import (
+from ....bridge.mesh.attribute_schema import (
     ATTR_BIOME_TINT_DATA,
     ATTR_SOURCE_TEXTURE_KEY,
     ATTR_SOURCE_TEXTURE_IDX,

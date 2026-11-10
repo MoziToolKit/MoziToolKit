@@ -59,7 +59,7 @@ class TestComplexModelsSync(unittest.TestCase):
         ]
 
         for state, min_expected_faces in test_states:
-            res = self.model_db.get_mesh(state, clip_hidden=False)
+            res = libmtk_py.unstable.testing.model_database_get_mesh(self.model_db, state, clip_hidden=False)
             self.assertIsNotNone(res, f"Failed to resolve model for state: {state}")
             mesh, textures = res
             self.assertGreaterEqual(

@@ -36,6 +36,7 @@ class SyncLifecycleMixin:
         enable_animated_textures: Optional[bool],
         colormaps: Optional[Any],
         smooth_biome_blend: Optional[bool],
+        prefs: Optional[Any] = None,
     ) -> Tuple[Optional[Any], Optional[str], Optional[Any]]:
         sync_mod = _get_sync_mod()
         if sync_mod is not None:
@@ -59,12 +60,12 @@ class SyncLifecycleMixin:
         # The Yefira config parser trims auth tokens (RFC v3.1 §4.1).
         clean_token = (auth_token or "").strip() or None
 
-        prefs = None
-        try:
-            from ...utils.system import get_prefs
-            prefs = get_prefs()
-        except Exception:
-            prefs = None
+        if prefs is None:
+            try:
+                from ..prefs import get_prefs
+                prefs = get_prefs()
+            except Exception:
+                prefs = None
 
         if enable_animated_textures is None:
             raw_anim = getattr(prefs, "enable_animated_textures", True) if prefs is not None else True
@@ -136,6 +137,7 @@ class SyncLifecycleMixin:
         enable_animated_textures: Optional[bool] = None,
         colormaps: Optional[Any] = None,
         smooth_biome_blend: Optional[bool] = None,
+        prefs: Optional[Any] = None,
     ) -> bool:
         """Starts the background LiveSync client thread connecting to `url`."""
         config, clean_token, mtk = self._prepare_config(
@@ -151,6 +153,7 @@ class SyncLifecycleMixin:
             enable_animated_textures=enable_animated_textures,
             colormaps=colormaps,
             smooth_biome_blend=smooth_biome_blend,
+            prefs=prefs,
         )
         if config is None or mtk is None:
             return False
@@ -231,6 +234,7 @@ class SyncLifecycleMixin:
         enable_animated_textures: Optional[bool] = None,
         colormaps: Optional[Any] = None,
         smooth_biome_blend: Optional[bool] = None,
+        prefs: Optional[Any] = None,
     ) -> bool:
         """
         Starts the LiveSync client using cached handshake parameters for 0ms zero-rebuild reconnect.
@@ -249,6 +253,7 @@ class SyncLifecycleMixin:
             enable_animated_textures=enable_animated_textures,
             colormaps=colormaps,
             smooth_biome_blend=smooth_biome_blend,
+            prefs=prefs,
         )
         if config is None or mtk is None:
             return False
@@ -327,16 +332,16 @@ class SyncLifecycleMixin:
         sync_mod = _get_sync_mod()
         if sync_mod is not None:
             check_cache_dirty = sync_mod.check_cache_dirty
-            load_model_db = sync_mod.load_model_database_from_cache
-            load_atlas = sync_mod.load_atlas_from_cache
+            load_model_db = sync_mod.load_baked_model_database
+            load_atlas = sync_mod.load_baked_atlas_from_cache
             load_biome_resolver = sync_mod.load_biome_resolver_from_cache
             get_configured_ctm_solver = getattr(sync_mod, "get_configured_ctm_solver", None)
             mtk = sync_mod.get_libmtk()
         else:
             from ..assets import (
                 check_cache_dirty,
-                load_model_database_from_cache as load_model_db,
-                load_atlas_from_cache as load_atlas,
+                load_baked_model_database as load_model_db,
+                load_baked_atlas_from_cache as load_atlas,
                 load_biome_resolver_from_cache as load_biome_resolver,
                 get_configured_ctm_solver,
             )

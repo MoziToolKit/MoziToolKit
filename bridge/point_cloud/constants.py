@@ -34,7 +34,6 @@ PROP_BIOME_PALETTE = ATTR_BIOME_PALETTE
 PROP_BLOCK_ENTITY_PALETTE = ATTR_ENTITY_PALETTE
 
 # Legacy/retired attributes kept for backwards-compatibility checks
-ATTR_BLOCK_STATE = "mtk_block_state"
 ATTR_BIOME = "mtk_biome"
 
 

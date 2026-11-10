@@ -27,7 +27,7 @@ from MoziToolKit.bridge.dna import (
     safe_as_pointer,
     set_dna_enabled,
 )
-from MoziToolKit.bridge.engine import get_libmtk_blender, has_libmtk_dna
+from MoziToolKit.bridge.engine import get_libmtk_dna, has_libmtk_dna
 
 
 class TestDnaBridge(unittest.TestCase):
@@ -135,7 +135,7 @@ class TestDnaBridge(unittest.TestCase):
         if not has_libmtk_dna():
             self.skipTest("libmtk native DNA accelerator is not loaded")
 
-        blender_dna = get_libmtk_blender()
+        blender_dna = get_libmtk_dna()
         self.assertIsNotNone(blender_dna)
         self.assertEqual(blender_dna.api_version(), 2)
         self.assertTrue(hasattr(blender_dna, "copy_f32"))

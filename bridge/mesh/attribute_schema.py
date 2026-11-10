@@ -59,19 +59,9 @@ def _validate_schema() -> None:
 _validate_schema()
 
 
-def attribute_spec(name: str) -> Optional[AttributeSpec]:
-    """Returns the canonical spec for an active attribute, or None."""
-    return ATTRIBUTE_SPECS.get(name)
-
-
 def is_active(name: str) -> bool:
     """Whether the native core or host may write this attribute."""
     return name in ATTRIBUTE_SPECS
-
-
-def is_retired(name: str) -> bool:
-    """Whether this attribute must be purged and never written again."""
-    return name in RETIRED_ATTRIBUTE_NAMES
 
 
 # Re-export generated ATTR_* constants so callers have one import site.
@@ -90,7 +80,5 @@ __all__ = [
     "MATERIAL_ATTRIBUTE_NAMES",
     "METADATA_ATTRIBUTE_NAMES",
     "RETIRED_ATTRIBUTE_NAMES",
-    "attribute_spec",
     "is_active",
-    "is_retired",
 ] + [name for name in globals() if name.startswith("ATTR_")]

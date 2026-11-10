@@ -313,6 +313,12 @@ def import_save_to_blender(
     except Exception as e:
         logger.debug("Failed configuring skin cache dir for save import: %s", e)
 
+    try:
+        from ..system.network import sync_system_proxies
+        sync_system_proxies()
+    except Exception:
+        pass
+
     mesh_data, meta, storage, elapsed_ms = load_and_mesh_minecraft_save(
         world_dir=world_dir,
         dimension=dimension,

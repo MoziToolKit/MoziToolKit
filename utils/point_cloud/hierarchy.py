@@ -278,15 +278,20 @@ def ensure_voxel_child_cloud(
     except (TypeError, AttributeError, KeyError):
         pass
 
-    # 5. Inject points and configure Mask modifier via bridge
+    # 5. Inject points via bridge
     from ...bridge.point_cloud import inject_voxel_point_cloud
 
     inject_voxel_point_cloud(
         cloud_obj,
         cloud_data,
-        update_mask=True,
-        initial_hidden=initial_hidden,
         fast_mode=fast_mode,
+    )
+
+    # 6. Orchestrate Mask modifier in DCC hierarchy layer
+    setup_voxel_mask_modifier(
+        cloud_obj,
+        initial_hidden=initial_hidden,
+        force_update=True,
     )
 
     return cloud_obj

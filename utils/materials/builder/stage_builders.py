@@ -12,7 +12,7 @@ from ...node_groups.animated import (
     ensure_animation_scheduler,
     ensure_animated_uv_mapping,
 )
-from ..constants import (
+from ....bridge.mesh.attribute_schema import (
     ATTR_UV_TRANSFORM,
     ATTR_UV_ROTATION,
     ATTR_BIOME_TINT_DATA,

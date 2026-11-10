@@ -50,7 +50,7 @@ class TestDebugWorldBakeValidation(unittest.TestCase):
         hits = 0
         empty = []
         for s in entity_states:
-            res = self.db.get_mesh(s, False)
+            res = libmtk_py.unstable.testing.model_database_get_mesh(self.db, s, False)
             if res is not None and res[0].face_count > 0:
                 hits += 1
             else:
@@ -73,7 +73,7 @@ class TestDebugWorldBakeValidation(unittest.TestCase):
         for s in single_chests:
             for facing in ["north", "south", "east", "west"]:
                 if f"facing={facing}" in s:
-                    res = self.db.get_mesh(s, False)
+                    res = libmtk_py.unstable.testing.model_database_get_mesh(self.db, s, False)
                     self.assertIsNotNone(res)
                     facings[facing] = ma.positions(res[0])
 
@@ -86,7 +86,7 @@ class TestDebugWorldBakeValidation(unittest.TestCase):
         """Overall hit rate on 32k+ states must exceed 97% (remaining are air/light/invisible blocks)."""
         hits = 0
         for s in self.unique_states:
-            res = self.db.get_mesh(s, False)
+            res = libmtk_py.unstable.testing.model_database_get_mesh(self.db, s, False)
             if res is not None and res[0].face_count > 0:
                 hits += 1
 
@@ -113,7 +113,7 @@ class TestDebugWorldBakeValidation(unittest.TestCase):
         ]
 
         for s in sample_entity_blocks:
-            res = self.db.get_mesh(s, False)
+            res = libmtk_py.unstable.testing.model_database_get_mesh(self.db, s, False)
             self.assertIsNotNone(res, f"Block {s} must resolve")
             mesh_data, textures = res
             self.assertGreater(mesh_data.vertex_count, 0, f"Block {s} must have vertices")

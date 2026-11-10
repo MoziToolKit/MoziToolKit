@@ -321,8 +321,8 @@ class TestSyncIncrementalFastPath(unittest.TestCase):
                  patch("MoziToolKit.operators.sync.op_sync_connect.can_execute_asset_pipeline", return_value=(True, "")), \
                  patch("MoziToolKit.operators.sync.op_sync_connect.is_sync_available", return_value=True), \
                  patch("MoziToolKit.operators.sync.op_sync_connect.check_asset_cache_status", return_value="READY"), \
-                 patch("MoziToolKit.operators.sync.op_sync_connect.load_model_database_from_cache", return_value=None), \
-                 patch("MoziToolKit.operators.sync.op_sync_connect.load_atlas_from_cache", return_value=None), \
+                 patch("MoziToolKit.operators.sync.op_sync_connect.load_baked_model_database", return_value=None), \
+                 patch("MoziToolKit.operators.sync.op_sync_connect.load_baked_atlas_from_cache", return_value=None), \
                  patch("MoziToolKit.operators.sync.op_sync_connect.load_biome_resolver_from_cache", return_value=None), \
                  patch("MoziToolKit.operators.sync.op_sync_connect.start_sync_timer"):
 

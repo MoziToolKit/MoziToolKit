@@ -134,7 +134,7 @@ class TestUvOrientationSync(unittest.TestCase):
 
         # Make sure remap_to_atlas works without error
         libmtk_py.unstable.testing.model_database_remap_to_atlas(self.model_db, self.atlas)
-        mesh_tuple = self.model_db.get_mesh("minecraft:stone")
+        mesh_tuple = libmtk_py.unstable.testing.model_database_get_mesh(self.model_db, "minecraft:stone")
         if mesh_tuple is not None:
             mesh, textures = mesh_tuple
             flat_uvs = ma.loop_uvs(mesh)

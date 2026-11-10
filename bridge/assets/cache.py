@@ -12,7 +12,12 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
+import shutil
+import subprocess
+import sys
+
 from ..engine import get_libmtk
+from ..prefs import get_prefs
 from .pack import get_configured_pack_stack
 from .readers import (
     get_cached_texture_f32 as _readers_get_cached_texture_f32,
@@ -23,14 +28,195 @@ from .readers import (
     load_biome_resolver_inner,
     load_colormaps_inner,
 )
-from ...utils.assets.cache_utils import (
-    clear_cache as _utils_clear_cache,
-    get_cache_dir,
-    get_cache_stats,
-    open_cache_folder,
-)
 
-clear_cache = _utils_clear_cache
+_cached_cache_stats: Optional[Dict[str, Any]] = None
+_cached_cache_stats_path: Optional[str] = None
+_CACHE_INVALIDATION_CALLBACKS: list[Any] = []
+
+
+def register_cache_invalidation_callback(callback: Any) -> None:
+    """Registers a listener to be notified when the in-memory asset cache is invalidated."""
+    if callback not in _CACHE_INVALIDATION_CALLBACKS:
+        _CACHE_INVALIDATION_CALLBACKS.append(callback)
+
+
+def unregister_cache_invalidation_callback(callback: Any) -> None:
+    """Unregisters a previously registered asset cache invalidation listener."""
+    if callback in _CACHE_INVALIDATION_CALLBACKS:
+        _CACHE_INVALIDATION_CALLBACKS.remove(callback)
+
+
+def _resolve_prefs(prefs=None):
+    if prefs is not None:
+        return prefs
+    return get_prefs()
+
+
+def get_cache_dir(prefs=None) -> Path:
+    """
+    Returns the persistent cache directory for compiled assets.
+    Delegates path resolution to the host (Blender/Python):
+    1. Environment override (`MOZI_CACHE_DIR`) for test sandboxing / isolation.
+    2. User-customized path in AddonPreferences (`prefs.cache_dir`).
+    3. Blender standard plugin user data directory:
+       `bpy.utils.user_resource("DATAFILES") / "MoziToolKit" / "cache"`
+    4. Fallback to `~/.config/blender/MoziToolKit/cache`.
+    """
+    env_dir = os.environ.get("MOZI_CACHE_DIR")
+    if env_dir:
+        p = Path(env_dir)
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+
+    prefs = _resolve_prefs(prefs)
+
+    if prefs is not None and hasattr(prefs, "cache_dir"):
+        custom_path = getattr(prefs, "cache_dir", "").strip()
+        if custom_path:
+            try:
+                import bpy
+                resolved = bpy.path.abspath(custom_path)
+            except Exception:
+                resolved = custom_path
+            p = Path(resolved)
+            p.mkdir(parents=True, exist_ok=True)
+            return p
+
+    cache_dir = None
+    try:
+        import bpy
+        if hasattr(bpy, "utils") and hasattr(bpy.utils, "user_resource"):
+            cache_dir = Path(bpy.utils.user_resource("DATAFILES")) / "MoziToolKit" / "cache"
+    except Exception:
+        cache_dir = None
+
+    if not cache_dir:
+        cache_dir = Path.home() / ".config" / "blender" / "MoziToolKit" / "cache"
+
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir
+
+
+def invalidate_cache_stats_memo() -> None:
+    """Invalidates the memoized cache statistics so the next read re-scans the directory."""
+    global _cached_cache_stats, _cached_cache_stats_path
+    _cached_cache_stats = None
+    _cached_cache_stats_path = None
+
+
+def get_cache_stats(prefs=None, force_refresh: bool = False) -> Dict[str, Any]:
+    """
+    Returns human-readable and byte statistics for all cached packages on disk.
+    Memoized against the resolved cache path string.
+    """
+    global _cached_cache_stats, _cached_cache_stats_path
+    cache_path = get_cache_dir(prefs)
+    path_str = str(cache_path)
+
+    if (
+        not force_refresh
+        and _cached_cache_stats_path is not None
+        and _cached_cache_stats is not None
+        and _cached_cache_stats_path == path_str
+    ):
+        return _cached_cache_stats
+
+    total_size = 0
+    file_count = 0
+
+    if cache_path.exists():
+        for root, _, files in os.walk(cache_path):
+            for f in files:
+                fp = Path(root) / f
+                try:
+                    total_size += fp.stat().st_size
+                    file_count += 1
+                except Exception:
+                    pass
+
+    if total_size < 1024:
+        size_str = f"{total_size} B"
+    elif total_size < 1024 * 1024:
+        size_str = f"{total_size / 1024:.1f} KB"
+    elif total_size < 1024 * 1024 * 1024:
+        size_str = f"{total_size / (1024 * 1024):.1f} MB"
+    else:
+        size_str = f"{total_size / (1024 * 1024 * 1024):.2f} GB"
+
+    _cached_cache_stats = {
+        "path": path_str,
+        "size_bytes": total_size,
+        "size_formatted": size_str,
+        "files_count": file_count,
+    }
+    _cached_cache_stats_path = path_str
+    return _cached_cache_stats
+
+
+def clear_cache(prefs=None, on_invalidate_callback=None) -> int:
+    """Empties all compiled caches in the cache directory and returns the total bytes freed."""
+    global _cached_cache_stats, _cached_cache_stats_path
+
+    invalidate_asset_cache_memory()
+
+    if on_invalidate_callback is not None:
+        try:
+            on_invalidate_callback()
+        except Exception:
+            pass
+
+    cache_path = get_cache_dir(prefs)
+    freed_bytes = 0
+
+    def _item_size(p: Path) -> int:
+        if p.is_file():
+            try:
+                return p.stat().st_size
+            except Exception:
+                return 0
+        total = 0
+        try:
+            for root, _, files in os.walk(p):
+                for f in files:
+                    try:
+                        total += (Path(root) / f).stat().st_size
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        return total
+
+    if cache_path.exists():
+        for item in list(cache_path.iterdir()):
+            size = _item_size(item)
+            try:
+                if item.is_dir():
+                    shutil.rmtree(item, ignore_errors=False)
+                else:
+                    item.unlink()
+                freed_bytes += size
+            except Exception as exc:
+                logger.warning("Failed to remove cache entry %s: %s", item, exc)
+
+    _cached_cache_stats = None
+    _cached_cache_stats_path = None
+    return freed_bytes
+
+
+def open_cache_folder(prefs=None) -> None:
+    """Opens the persistent cache directory in the host operating system's native file explorer."""
+    cache_path = get_cache_dir(prefs)
+    try:
+        cache_path.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+
+    if sys.platform == "win32":
+        os.startfile(str(cache_path))
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", str(cache_path)])
+    else:
+        subprocess.Popen(["xdg-open", str(cache_path)])
 
 logger = logging.getLogger("MoziToolKit.Bridge.Assets.Cache")
 
@@ -91,17 +277,13 @@ def invalidate_asset_cache_memory() -> None:
     except Exception:
         pass
 
-    try:
-        from ...utils.assets.guard import invalidate_guard_cache
-        invalidate_guard_cache()
-    except Exception:
-        pass
+    invalidate_cache_stats_memo()
 
-    try:
-        from ...utils.assets.cache_utils import invalidate_cache_stats_memo
-        invalidate_cache_stats_memo()
-    except Exception:
-        pass
+    for callback in list(_CACHE_INVALIDATION_CALLBACKS):
+        try:
+            callback()
+        except Exception:
+            pass
 
     try:
         from ..debug import clear_debug_world_cache
@@ -286,11 +468,6 @@ def load_baked_model_database(prefs=None, verify_fingerprint: bool = False) -> O
     return db
 
 
-def load_model_database_from_cache(prefs=None, verify_fingerprint: bool = False) -> Optional[Any]:
-    """Alias for load_baked_model_database."""
-    return load_baked_model_database(prefs, verify_fingerprint=verify_fingerprint)
-
-
 def load_baked_atlas_from_cache(prefs=None) -> Optional[Any]:
     """Loads precompiled BakedAtlas from cache package into memory, reusing cached instance."""
     global _CACHED_ATLAS, _CACHED_ATLAS_PKG_PATH, _CACHED_ATLAS_MTIME
@@ -307,9 +484,6 @@ def load_baked_atlas_from_cache(prefs=None) -> Optional[Any]:
     _CACHED_ATLAS_PKG_PATH = pkg
     _CACHED_ATLAS_MTIME = mtime
     return atlas
-
-
-load_atlas_from_cache = load_baked_atlas_from_cache
 
 
 def load_biome_resolver_from_cache(prefs=None) -> Optional[Any]:
@@ -428,7 +602,6 @@ __all__ = [
     "get_cached_texture_f32",
     "ensure_atlas_textures_extracted",
     "load_baked_model_database",
-    "load_model_database_from_cache",
     "load_baked_atlas_from_cache",
     "load_biome_resolver_from_cache",
     "load_colormaps_from_cache",
@@ -440,4 +613,7 @@ __all__ = [
     "get_cache_dir",
     "get_cache_stats",
     "open_cache_folder",
+    "invalidate_cache_stats_memo",
+    "register_cache_invalidation_callback",
+    "unregister_cache_invalidation_callback",
 ]

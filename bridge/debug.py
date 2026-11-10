@@ -15,8 +15,8 @@ from .engine import get_libmtk, has_libmtk, require_libmtk
 
 
 def _has_valid_vanilla_pack(prefs=None) -> bool:
-    """Resolves the host-side vanilla-client gate, failing closed if the guard is unavailable."""
-    from ..utils.assets.guard import has_valid_vanilla_pack
+    """Resolves vanilla client availability via bridge.assets.pack."""
+    from .assets.pack import has_valid_vanilla_pack
     return has_valid_vanilla_pack(prefs)
 
 
@@ -59,8 +59,8 @@ def load_debug_world_storage(prefs=None, states=None, stack=None):
 
     # 1. Prefer driving directly from active precompiled asset cache (.mtkcache)
     try:
-        from .assets.cache import load_model_database_from_cache
-        cached_db = load_model_database_from_cache(prefs)
+        from .assets.cache import load_baked_model_database
+        cached_db = load_baked_model_database(prefs)
         if cached_db is not None and not cached_db.is_empty():
             return voxel_storage.create_debug_world_from_model_db(cached_db)
     except Exception as e:

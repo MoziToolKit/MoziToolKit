@@ -14,12 +14,10 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from ..dna import is_dna_enabled
 from ..engine import get_libmtk
 from .attributes import (
-    inject_attribute,
     inject_custom_attributes,
     inject_face_attribute_float,
     inject_face_attribute_float4,
     inject_face_attribute_int,
-    inject_face_attribute_string,
     inject_face_attribute_vector,
     inject_face_source_texture_palette,
     resolve_source_texture_keys,
@@ -59,8 +57,6 @@ def __getattr__(name: str) -> Any:
     mtk = get_libmtk()
     if name == "MeshData":
         return getattr(mtk, "MeshData", Any) if mtk else Any
-    if name == "AttributeDomain":
-        return getattr(mtk, "AttributeDomain", Any) if mtk else Any
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 
@@ -209,12 +205,10 @@ __all__ = [
     "analyze_mesh_hard_edges",
     "extract_mesh_data",
     "extract_mesh_data_dna",
-    "inject_attribute",
     "inject_custom_attributes",
     "inject_face_attribute_float",
     "inject_face_attribute_float4",
     "inject_face_attribute_int",
-    "inject_face_attribute_string",
     "inject_face_attribute_vector",
     "inject_face_materials_dna",
     "inject_face_source_texture_palette",

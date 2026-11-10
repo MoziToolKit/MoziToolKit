@@ -6,7 +6,6 @@ Encapsulates native routines for Biome metadata, sampling, and tint generation.
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
@@ -22,12 +21,6 @@ TINT_TYPE_FOLIAGE: int = getattr(mtk_inst, "TINT_TYPE_FOLIAGE", 2) if mtk_inst e
 TINT_TYPE_WATER: int = getattr(mtk_inst, "TINT_TYPE_WATER", 3) if mtk_inst else 3
 TINT_TYPE_HARDCODED: int = getattr(mtk_inst, "TINT_TYPE_HARDCODED", 4) if mtk_inst else 4
 TINT_TYPE_DRY_FOLIAGE: int = getattr(mtk_inst, "TINT_TYPE_DRY_FOLIAGE", 5) if mtk_inst else 5
-
-
-def load_biome_resolver_from_file(file_path: Union[str, Path]) -> Any:
-    """Load a precompiled BiomeResolver instance from a biome_mapping.json file."""
-    mtk = require_libmtk("load_biome_resolver_from_file")
-    return mtk.BiomeResolver.from_file(str(file_path))
 
 
 def get_biome_meta(biome_name: str) -> Dict[str, Any]:

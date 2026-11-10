@@ -28,7 +28,7 @@ from MoziToolKit.utils.materials.biome.updater import (
     update_object_biome,
 )
 from MoziToolKit.ui.panel_biome import _get_object_biome, _resolve_biome_preset
-from MoziToolKit.utils.materials.constants import (
+from MoziToolKit.bridge.mesh.attribute_schema import (
     ATTR_BIOME_TINT_COLOR,
     ATTR_BIOME_TINT_DATA,
     ATTR_SOURCE_TEXTURE_IDX,

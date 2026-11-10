@@ -17,7 +17,6 @@ from .constants import (
     ATTR_BIOME,
     ATTR_BIOME_IDX,
     ATTR_BLOCK_ENTITY_IDX,
-    ATTR_BLOCK_STATE,
     ATTR_BLOCK_STATE_IDX,
     ATTR_BLOCK_X,
     ATTR_BLOCK_Y,
@@ -40,8 +39,6 @@ logger = logging.getLogger("MoziToolKit.Bridge.PointCloud")
 def inject_voxel_point_cloud(
     cloud_obj_or_mesh: Any,
     cloud_data: Any,
-    update_mask: bool = True,
-    initial_hidden: bool = True,
     fast_mode: bool = True,
     use_dna: bool = True,
 ) -> bool:
@@ -132,18 +129,6 @@ def inject_voxel_point_cloud(
             attr_entity_idx=attr_entity_idx,
         )
 
-    # 5. Configure Mask Modifier via utils
-    if update_mask and obj is not None and getattr(obj, "type", "") == "MESH":
-        try:
-            from ...utils.point_cloud.hierarchy import setup_voxel_mask_modifier
-            setup_voxel_mask_modifier(
-                obj,
-                initial_hidden=initial_hidden,
-                force_update=reallocated,
-            )
-        except Exception:
-            pass
-
     if hasattr(target_data, "update"):
         target_data.update()
 
@@ -154,7 +139,6 @@ __all__ = [
     "ATTR_BIOME",
     "ATTR_BIOME_IDX",
     "ATTR_BLOCK_ENTITY_IDX",
-    "ATTR_BLOCK_STATE",
     "ATTR_BLOCK_STATE_IDX",
     "ATTR_BLOCK_X",
     "ATTR_BLOCK_Y",

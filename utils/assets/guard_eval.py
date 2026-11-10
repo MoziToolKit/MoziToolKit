@@ -17,15 +17,19 @@ from .cache_utils import get_cache_dir
 
 logger = logging.getLogger("MoziToolKit.Utils.Assets.GuardEval")
 
-#: Host-level asset roots / archives honoured when no preferences are registered (CLI, CI).
-ENV_ASSET_ROOTS = ("MC_DIR", "MC_ASSETS_DIR", "MTK_TEST_ASSETS")
-ENV_ASSET_ARCHIVES = ("MTK_TEST_JAR", "MC_JAR")
+from ...bridge.assets.pack import (
+    ENV_ASSET_ARCHIVES,
+    ENV_ASSET_ROOTS,
+    _VANILLA_CHECK_CACHE,
+    _VANILLA_PROBE_CACHE,
+    has_valid_vanilla_pack,
+    path_provides_vanilla_client,
+)
+
+_path_provides_vanilla_client = path_provides_vanilla_client
 
 #: Block identifiers probed by Rust core for canonical base foundation.
 BASE_PROBE_BLOCKS = ("stone", "dirt", "oak_planks")
-
-_VANILLA_PROBE_CACHE: Dict[Tuple[str, int, int], bool] = {}
-_VANILLA_CHECK_CACHE: Dict[Any, bool] = {}
 
 
 class PurePackEntry:
@@ -111,93 +115,6 @@ def _get_pack_signature(prefs=None) -> tuple:
     env_sig = tuple((k, os.environ.get(k, "")) for k in ENV_ASSET_ROOTS + ENV_ASSET_ARCHIVES)
     return (tuple(entries), single, single_mtime, env_sig)
 
-
-def _path_provides_vanilla_client(path: Path) -> bool:
-    """Single source of truth for 'can this path serve as the vanilla client foundation'.
-    Delegates directly to libmtk native core (GEMINI.md Rule 1 & Rule 2).
-    """
-    mtk = get_libmtk()
-    if mtk is None:
-        raise RuntimeError("libmtk native core is required for vanilla client validation")
-    try:
-        if not path.exists():
-            return False
-        stat = path.stat()
-        key = (str(path.resolve()), stat.st_mtime_ns, stat.st_size)
-    except OSError:
-        return False
-
-    if key in _VANILLA_PROBE_CACHE:
-        return _VANILLA_PROBE_CACHE[key]
-
-    res = mtk.path_provides_vanilla_client(str(path.resolve()))
-    _VANILLA_PROBE_CACHE[key] = res
-    return res
-
-
-def _is_entry_valid_vanilla_client(entry: Any) -> bool:
-    """Whether a resource-pack entry is enabled and provides vanilla client assets."""
-    if not getattr(entry, "enabled", True):
-        return False
-    raw_path = getattr(entry, "path", "")
-    if not raw_path or not isinstance(raw_path, str):
-        return False
-    return _path_provides_vanilla_client(Path(raw_path.strip()))
-
-
-def _has_configured_packs(prefs: Any) -> bool:
-    """True when the preferences actually configure at least one pack entry."""
-    for entry in getattr(prefs, "resource_packs", None) or []:
-        raw_path = getattr(entry, "path", "")
-        if isinstance(raw_path, str) and raw_path.strip():
-            return True
-    single_path = getattr(prefs, "resource_pack_path", None)
-    return isinstance(single_path, str) and bool(single_path.strip())
-
-
-def has_valid_vanilla_pack(prefs=None) -> bool:
-    """
-    Checks whether the active configuration can provide Minecraft client assets.
-    """
-    sig = _get_pack_signature(prefs)
-    if sig in _VANILLA_CHECK_CACHE:
-        return _VANILLA_CHECK_CACHE[sig]
-
-    if prefs is None:
-        try:
-            prefs = get_prefs()
-        except Exception:
-            prefs = None
-
-    result = False
-    if prefs is not None:
-        for entry in getattr(prefs, "resource_packs", None) or []:
-            if _is_entry_valid_vanilla_client(entry):
-                result = True
-                break
-
-        if not result:
-            single_path = getattr(prefs, "resource_pack_path", None)
-            if isinstance(single_path, str) and single_path.strip():
-                if _path_provides_vanilla_client(Path(single_path.strip())):
-                    result = True
-
-        # A stack is configured but none of it can back the pipeline: fail closed.
-        if not result and _has_configured_packs(prefs):
-            _VANILLA_CHECK_CACHE[sig] = False
-            return False
-
-    if not result:
-        # No packs configured (CLI / CI / first run): the host environment may point at
-        # unpacked client assets or a client JAR, still subject to the content check.
-        for env_var in ENV_ASSET_ROOTS + ENV_ASSET_ARCHIVES:
-            val = os.environ.get(env_var)
-            if val and _path_provides_vanilla_client(Path(val)):
-                result = True
-                break
-
-    _VANILLA_CHECK_CACHE[sig] = result
-    return result
 
 
 def can_execute_asset_pipeline(prefs=None, check_status_fn=None) -> Tuple[bool, str]:

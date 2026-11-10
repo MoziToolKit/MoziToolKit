@@ -9,10 +9,8 @@ import logging
 from typing import Any, Optional
 import numpy as np
 
-from ..constants import (
-    ATTR_SOURCE_TEXTURE_IDX,
-    PROP_CREATED_BY,
-)
+from ....bridge.mesh.attribute_schema import ATTR_SOURCE_TEXTURE_IDX
+from ..constants import PROP_CREATED_BY
 from .biome import (
     TINT_TYPE_NONE,
     TINT_TYPE_HARDCODED,

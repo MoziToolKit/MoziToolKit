@@ -94,7 +94,7 @@ def mesh_voxel_storage(
     if resolve_prefs and num_threads is None:
         if prefs is None:
             try:
-                from ...utils.system.dependencies import get_prefs
+                from ..prefs import get_prefs
                 prefs = get_prefs()
             except Exception:
                 pass

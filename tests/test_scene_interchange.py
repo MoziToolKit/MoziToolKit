@@ -298,8 +298,8 @@ class TestSceneInterchangeEndToEnd(unittest.TestCase):
         # Check models
         models = data["models"]
         self.assertIsNotNone(models)
-        self.assertIsNotNone(models.get_mesh("minecraft:stone"))
-        self.assertIsNotNone(models.get_mesh("minecraft:dirt"))
+        self.assertIsNotNone(self.mtk.unstable.testing.model_database_get_mesh(models, "minecraft:stone"))
+        self.assertIsNotNone(self.mtk.unstable.testing.model_database_get_mesh(models, "minecraft:dirt"))
 
         # Check atlas
         atlas = data["atlas"]
@@ -611,7 +611,7 @@ class TestSceneInterchangeEndToEnd(unittest.TestCase):
         self.assertEqual(data.get("dynamic_entity_slots"), slots_input)
 
         # Validate that the exported package is 100% valid
-        report = reader.validate()
+        report = self.mtk.unstable.testing.validate_scene_package(reader)
         self.assertTrue(report["is_valid"], f"Expected valid package, got errors: {report['errors']}")
         self.assertEqual(len(report["errors"]), 0)
 
@@ -629,7 +629,7 @@ class TestSceneInterchangeEndToEnd(unittest.TestCase):
         """Verifies that MesherConfig.colormaps actually drives the grass block tint color in generated mesh buffers."""
         # 1. Pure solid magenta grass colormap (R=255, G=0, B=255)
         magenta_png = create_tiny_png(16, 16, (255, 0, 255, 255))
-        custom_cms = self.mtk.VanillaColormaps.from_bytes(grass=magenta_png)
+        custom_cms = self.mtk.unstable.testing.create_colormaps_from_bytes(grass=magenta_png)
 
         # 2. VoxelPointCloud with a single grass block in plains
         cloud = self.mtk.VoxelPointCloud()
@@ -695,7 +695,7 @@ class TestSceneInterchangeEndToEnd(unittest.TestCase):
 
         # Validate that reader validates this dynamic entity package as 100% valid
         reader = self.mtk.ScenePackageReader.open(scene_path)
-        report = reader.validate()
+        report = self.mtk.unstable.testing.validate_scene_package(reader)
         self.assertTrue(report["is_valid"], f"Expected valid scene package, got errors: {report['errors']}")
         self.assertEqual(len(report["errors"]), 0)
 
@@ -731,7 +731,7 @@ class TestSceneInterchangeEndToEnd(unittest.TestCase):
         reader_no_dyn = self.mtk.ScenePackageReader.open(no_dyn_path)
         bundle_no_dyn = reader_no_dyn.unpack()
         self.assertIsNone(bundle_no_dyn["dynamic_entity_slots"])
-        report_no_dyn = reader_no_dyn.validate()
+        report_no_dyn = self.mtk.unstable.testing.validate_scene_package(reader_no_dyn)
         self.assertTrue(report_no_dyn["is_valid"], f"Expected valid report, got: {report_no_dyn['errors']}")
         self.assertEqual(len(report_no_dyn["errors"]), 0)
 
@@ -772,7 +772,7 @@ class TestSceneInterchangeEndToEnd(unittest.TestCase):
         """Verifies that ScenePackageReader.validate() returns a dictionary with is_valid, errors, warnings."""
         scene_path = self._ensure_exported_scene()
         reader = self.mtk.ScenePackageReader.open(scene_path)
-        report = reader.validate()
+        report = self.mtk.unstable.testing.validate_scene_package(reader)
         self.assertIsInstance(report, dict)
         self.assertIn("is_valid", report)
         self.assertIn("errors", report)
@@ -853,7 +853,7 @@ class TestSceneInterchangeEndToEnd(unittest.TestCase):
 
         # 2. Build custom solid magenta grass colormap
         magenta_png = create_tiny_png(16, 16, (255, 0, 255, 255))
-        custom_cms = self.mtk.VanillaColormaps.from_bytes(grass=magenta_png)
+        custom_cms = self.mtk.unstable.testing.create_colormaps_from_bytes(grass=magenta_png)
 
         cloud = self.mtk.VoxelPointCloud()
         cloud.push([0.5, 0.5, 0.5], [0, 0, 0], "minecraft:grass_block", "minecraft:plains", 15)

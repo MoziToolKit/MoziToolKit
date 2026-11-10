@@ -12,14 +12,14 @@ import numpy as np
 
 from ....bridge.material import get_biome_meta
 from ..cleaner import clean_obsolete_mesh_attributes
-from ..constants import (
+from ....bridge.mesh.attribute_schema import (
     ATTR_ATLAS_CHUNK_ID,
     ATTR_BIOME_TINT_DATA,
     ATTR_BIOME_TINT_COLOR,
     ATTR_SOURCE_TEXTURE_KEY,
     ATTR_SOURCE_TEXTURE_IDX,
-    PROP_ATLAS_MAPPING,
 )
+from ..constants import PROP_ATLAS_MAPPING
 from .biome import (
     get_biome_colors,
     TINT_TYPE_HARDCODED,

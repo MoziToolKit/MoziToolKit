@@ -22,9 +22,6 @@ def clean_material_name(name: str) -> str:
     return mtk.clean_material_identifier(name)
 
 
-clean_material_identifier = clean_material_name
-
-
 def normalize_banner_pattern(code_or_name: str) -> str:
     """Normalize a legacy banner pattern short-code or identifier into standard pattern stem."""
     mtk = require_libmtk("normalize_banner_pattern")
@@ -33,10 +30,10 @@ def normalize_banner_pattern(code_or_name: str) -> str:
 
 def builtin_biome_suffixes() -> tuple[str, ...]:
     """
-    Returns the DCC-exporter biome suffixes owned by the Python preset layer.
+    Returns the DCC-exporter biome suffixes from the Rust native core (SSOT).
     """
-    from ...utils.materials.matching.presets.jmc2obj import biome_suffixes
-    return biome_suffixes()
+    mtk = require_libmtk("builtin_biome_suffixes")
+    return tuple(mtk.builtin_biome_suffixes())
 
 
 def remap_mesh_multi_uvs_paletted(

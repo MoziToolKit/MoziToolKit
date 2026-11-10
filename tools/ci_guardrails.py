@@ -53,6 +53,46 @@ def check_layer_isolation() -> list[str]:
     return errors
 
 
+def check_bridge_layer_isolation() -> list[str]:
+    """Enforce strict unidirectional dependency: bridge/ MUST NOT import utils/ (Rule 2)."""
+    errors: list[str] = []
+    bridge_dir = MOZI_ROOT / "bridge"
+    if not bridge_dir.exists():
+        return errors
+
+    for py_file in sorted(bridge_dir.rglob("*.py")):
+        rel = py_file.relative_to(MOZI_ROOT).as_posix()
+        tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=rel)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    parts = alias.name.split(".")
+                    if parts[0] == "utils" or (
+                        len(parts) > 1 and parts[0] == "MoziToolKit" and parts[1] == "utils"
+                    ):
+                        errors.append(
+                            f"{rel}:{node.lineno}: forbidden reverse import `{alias.name}` in bridge/ "
+                            f"(Rule 2: bridge must not import utils)"
+                        )
+            elif isinstance(node, ast.ImportFrom):
+                mod = node.module or ""
+                mod_parts = mod.split(".")
+                if mod_parts[0] == "utils" or (
+                    len(mod_parts) > 1 and mod_parts[0] == "MoziToolKit" and mod_parts[1] == "utils"
+                ):
+                    errors.append(
+                        f"{rel}:{node.lineno}: forbidden reverse import from `{mod}` in bridge/ "
+                        f"(Rule 2: bridge must not import utils)"
+                    )
+                for alias in node.names:
+                    if alias.name == "utils" or alias.name.startswith("utils."):
+                        errors.append(
+                            f"{rel}:{node.lineno}: forbidden reverse import of `{alias.name}` in bridge/ "
+                            f"(Rule 2: bridge must not import utils)"
+                        )
+    return errors
+
+
 def check_blender_6_compat() -> list[str]:
     errors: list[str] = []
     for sub in ("bridge", "ui", "operators", "utils", "dev", "tests"):
@@ -170,6 +210,7 @@ def main() -> int:
 
     errors: list[str] = []
     errors.extend(check_layer_isolation())
+    errors.extend(check_bridge_layer_isolation())
     errors.extend(check_blender_6_compat())
     errors.extend(check_no_magic_mock_in_tests())
     errors.extend(check_bridge_purity_and_no_probing())

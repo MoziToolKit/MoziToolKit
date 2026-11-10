@@ -22,7 +22,7 @@ from MoziToolKit.utils.materials.cleaner import (
     clean_obsolete_mesh_attributes,
     prune_optional_mesh_attributes,
 )
-from MoziToolKit.utils.materials.constants import (
+from MoziToolKit.bridge.mesh.attribute_schema import (
     ATTR_ATLAS_CHUNK_ID,
     ATTR_BIOME_TINT_COLOR,
     ATTR_UV_TRANSFORM,

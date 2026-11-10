@@ -9,7 +9,7 @@
     "required_native_symbols_present": true
   },
   "forbidden_hits": [],
-  "generated_at": "2026-11-09T06:28:50.754071+00:00",
+  "generated_at": "2026-11-10T01:07:19.565294+00:00",
   "libmtk_blender_dna": {
     "api_version": 2,
     "functions": [
@@ -34,7 +34,6 @@
       "attribute_names",
       "clear",
       "colors_memoryview",
-      "compact_materials",
       "dynamic_entity_atlases",
       "dynamic_entity_slots",
       "face_count",
@@ -58,7 +57,6 @@
     ],
     "top_level": [
       "AssetCache",
-      "AttributeDomain",
       "BakedAtlas",
       "BakedModelDatabase",
       "BiomeResolver",
@@ -112,13 +110,11 @@
       "resolve_active_cache_package",
       "sample_colormap_colors",
       "scale_uv",
-      "unstable",
-      "version"
+      "unstable"
     ],
     "unstable": [
       "testing"
-    ],
-    "version": "0.1.0"
+    ]
   },
   "missing_required": [],
   "status": "pass"

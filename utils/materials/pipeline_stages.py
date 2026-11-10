@@ -50,14 +50,14 @@ from .biome import (
     compute_biome_tint_attributes_paletted,
     apply_biome_tint_attributes,
 )
-from .constants import (
+from ...bridge.mesh.attribute_schema import (
     ATTR_ATLAS_CHUNK_ID,
     ATTR_UV_TRANSFORM,
     ATTR_UV_ROTATION,
     ATTR_ANIM_TIMING,
     ATTR_ANIM_FRAME_SIZE,
-    chunk_supports_tint,
 )
+from .constants import chunk_supports_tint
 from .uv_layers import (
     find_local_uv_layer,
     read_uv_layer,

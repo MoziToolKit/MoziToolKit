@@ -172,12 +172,6 @@ def load_and_mesh_minecraft_save(
     if cache_package_path is not None:
         call_kwargs["cache_package_path"] = cache_package_path
 
-    try:
-        from ..utils.system.network import sync_system_proxies
-        sync_system_proxies()
-    except Exception:
-        pass
-
     mesh_data, level_meta, storage = mtk.load_and_mesh_minecraft_save(**call_kwargs)
     t1 = time.perf_counter()
     elapsed_ms = (t1 - t0) * 1000.0

@@ -88,13 +88,13 @@ JMC2OBJ_BIOME_SUFFIXES: tuple[str, ...] = (
     "_taiga",
     "-snow",
     "_snow",
-    "_y",
 )
 
 
 def biome_suffixes() -> tuple[str, ...]:
-    """DCC-exporter biome suffixes owned by the Python preset layer."""
-    return JMC2OBJ_BIOME_SUFFIXES
+    """DCC-exporter biome suffixes sourced from the Rust core via bridge."""
+    from .....bridge.material import builtin_biome_suffixes
+    return builtin_biome_suffixes()
 
 MINECRAFT_COLORS = (
     "white", "orange", "magenta", "light_blue", "yellow", "lime",

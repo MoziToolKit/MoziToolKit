@@ -95,7 +95,7 @@ class TestVoxelPointCloudBridge:
         b_mesh = bpy.data.meshes.new("Test_Entity_Mesh")
         b_obj = bpy.data.objects.new("Test_Entity_Obj", b_mesh)
         try:
-            assert inject_voxel_point_cloud(b_obj, cloud, update_mask=False)
+            assert inject_voxel_point_cloud(b_obj, cloud)
             assert ATTR_BLOCK_ENTITY_IDX in b_mesh.attributes
             assert list(b_mesh.get(PROP_BLOCK_ENTITY_PALETTE)) == ent_pal
             assert [d.value for d in b_mesh.attributes[ATTR_BLOCK_ENTITY_IDX].data] == [-1, 0, 0]
@@ -139,7 +139,8 @@ class TestVoxelPointCloudBridge:
 
         try:
             # 1. Inject point cloud
-            success = inject_voxel_point_cloud(b_obj, cloud, update_mask=True, initial_hidden=True)
+            success = inject_voxel_point_cloud(b_obj, cloud)
+            setup_voxel_mask_modifier(b_obj, initial_hidden=True)
             assert success is True
             assert len(b_mesh.vertices) == 2
 
@@ -390,7 +391,7 @@ class TestVoxelPointCloudBridge:
 
         try:
             # 1. Fast batch injection
-            ok = inject_voxel_point_cloud(b_obj, cloud, update_mask=False, fast_mode=True)
+            ok = inject_voxel_point_cloud(b_obj, cloud, fast_mode=True)
             assert ok is True
             assert len(b_mesh.vertices) == 1000
 
@@ -432,9 +433,9 @@ class TestVoxelPointCloudBridge:
         dna_obj = bpy.data.objects.new("DNA_Parity_Obj", dna_mesh)
         std_obj = bpy.data.objects.new("Std_Parity_Obj", std_mesh)
         try:
-            assert inject_voxel_point_cloud(dna_obj, cloud, update_mask=False)
+            assert inject_voxel_point_cloud(dna_obj, cloud)
             set_dna_enabled(False)
-            assert inject_voxel_point_cloud(std_obj, cloud, update_mask=False)
+            assert inject_voxel_point_cloud(std_obj, cloud)
 
             assert [tuple(v.co) for v in dna_mesh.vertices] == [
                 tuple(v.co) for v in std_mesh.vertices
@@ -469,7 +470,7 @@ class TestVoxelPointCloudBridge:
         b_mesh = bpy.data.meshes.new("Test_DirectPtr_Mesh")
         b_obj = bpy.data.objects.new("Test_DirectPtr_Obj", b_mesh)
         try:
-            ok = inject_voxel_point_cloud(b_obj, cloud, update_mask=False)
+            ok = inject_voxel_point_cloud(b_obj, cloud)
             assert ok is True
             assert len(b_mesh.vertices) == 2
             assert tuple(b_mesh.vertices[0].co) == (1.0, 2.0, 3.0)
@@ -487,7 +488,7 @@ class TestVoxelPointCloudBridge:
             b_pc = bpy.data.pointclouds.new("Test_DirectPtr_PC")
             pc_obj = bpy.data.objects.new("Test_DirectPtr_PCObj", b_pc)
             try:
-                ok = inject_voxel_point_cloud(pc_obj, cloud, update_mask=False)
+                ok = inject_voxel_point_cloud(pc_obj, cloud)
                 assert ok is True
                 assert len(b_pc.points) == 2
                 assert tuple(b_pc.points[0].co) == (1.0, 2.0, 3.0)
@@ -511,6 +512,7 @@ class TestVoxelPointCloudBridge:
             MASK_MODIFIER_NAME,
             VOXEL_VERTEX_GROUP,
         )
+        from MoziToolKit.utils.point_cloud import setup_voxel_mask_modifier
 
         cloud1 = libmtk_py.VoxelPointCloud()
         cloud1.push([1.0, 2.0, 3.0], [10, 20, 30], "minecraft:stone", "minecraft:plains", 15)
@@ -522,7 +524,8 @@ class TestVoxelPointCloudBridge:
 
         try:
             # 1. Initial injection with mask modifier setup
-            ok = inject_voxel_point_cloud(b_obj, cloud1, update_mask=True)
+            ok = inject_voxel_point_cloud(b_obj, cloud1)
+            setup_voxel_mask_modifier(b_obj)
             assert ok is True
             assert len(b_mesh.vertices) == 2
             vg = b_obj.vertex_groups.get(VOXEL_VERTEX_GROUP)
@@ -539,7 +542,7 @@ class TestVoxelPointCloudBridge:
             cloud2.push([7.0, 8.0, 9.0], [70, 80, 90], "minecraft:glass", "minecraft:jungle", 10)
             cloud2.push([1.0, 2.0, 3.0], [15, 25, 35], "minecraft:stone", "minecraft:plains", 12)
 
-            ok = inject_voxel_point_cloud(b_obj, cloud2, update_mask=True)
+            ok = inject_voxel_point_cloud(b_obj, cloud2)
             assert ok is True
             assert len(b_mesh.vertices) == 2
 

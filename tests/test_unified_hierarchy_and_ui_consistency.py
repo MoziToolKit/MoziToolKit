@@ -29,7 +29,7 @@ from MoziToolKit.utils.materials.biome.updater import (
     update_object_biome,
     detect_object_material_mode,
 )
-from MoziToolKit.utils.materials.constants import ATTR_BIOME_TINT_DATA
+from MoziToolKit.bridge.mesh.attribute_schema import ATTR_BIOME_TINT_DATA
 from MoziToolKit.utils.mesh.ownership import (
     ORIGIN_SYNC_WORLD,
     ORIGIN_SAVE,

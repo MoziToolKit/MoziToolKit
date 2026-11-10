@@ -37,7 +37,6 @@ class TestEngineBridge:
 
         # Dynamic classes in mesh bridge
         assert hasattr(mesh, "MeshData")
-        assert hasattr(mesh, "AttributeDomain")
 
         # The undocumented `mtk_py` / `libmtk_py` / `HAS_LIBMTK` module aliases are retired: every
         # consumer resolves the native module through `bridge.engine`.

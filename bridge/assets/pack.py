@@ -9,28 +9,34 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from ..engine import get_libmtk
+from ..prefs import get_prefs
 
 logger = logging.getLogger("MoziToolKit.Bridge.Assets.Pack")
 
-from ...utils.system import get_prefs
-
+#: Host-level asset roots / archives honoured when no preferences are registered (CLI, CI).
+ENV_ASSET_ROOTS = ("MC_DIR", "MC_ASSETS_DIR", "MTK_TEST_ASSETS")
+ENV_ASSET_ARCHIVES = ("MTK_TEST_JAR", "MC_JAR")
 
 _CACHED_PACK_STACK: Optional[Any] = None
 _CACHED_STACK_SIGNATURE: Optional[tuple] = None
 _CACHED_CTM_SOLVER: Optional[Any] = None
 _CACHED_CTM_SIGNATURE: Optional[tuple] = None
+_VANILLA_PROBE_CACHE: Dict[Tuple[str, int, int], bool] = {}
+_VANILLA_CHECK_CACHE: Dict[Any, bool] = {}
 
 
 def invalidate_pack_stack_cache() -> None:
-    """Invalidates memoized ResourcePackStack and CtmSolver instances."""
+    """Invalidates memoized ResourcePackStack, CtmSolver, and vanilla check caches."""
     global _CACHED_PACK_STACK, _CACHED_STACK_SIGNATURE, _CACHED_CTM_SOLVER, _CACHED_CTM_SIGNATURE
     _CACHED_PACK_STACK = None
     _CACHED_STACK_SIGNATURE = None
     _CACHED_CTM_SOLVER = None
     _CACHED_CTM_SIGNATURE = None
+    _VANILLA_PROBE_CACHE.clear()
+    _VANILLA_CHECK_CACHE.clear()
 
 
 def get_configured_pack_stack(prefs=None) -> Optional[Any]:
@@ -152,4 +158,117 @@ def get_configured_ctm_solver(prefs=None, force: bool = False) -> Optional[Any]:
     return None
 
 
-__all__ = ["get_configured_pack_stack", "get_configured_ctm_solver", "invalidate_pack_stack_cache"]
+def path_provides_vanilla_client(path: Path) -> bool:
+    """Verifies that a path or ZIP/JAR provides core Minecraft vanilla client assets via libmtk_py."""
+    mtk = get_libmtk()
+    if mtk is None:
+        raise RuntimeError("libmtk native core is required for vanilla client validation")
+    try:
+        if not path.exists():
+            return False
+        stat = path.stat()
+        key = (str(path.resolve()), stat.st_mtime_ns, stat.st_size)
+    except OSError:
+        return False
+
+    if key in _VANILLA_PROBE_CACHE:
+        return _VANILLA_PROBE_CACHE[key]
+
+    res = mtk.path_provides_vanilla_client(str(path.resolve()))
+    _VANILLA_PROBE_CACHE[key] = res
+    return res
+
+
+def _is_entry_valid_vanilla_client(entry: Any) -> bool:
+    if not getattr(entry, "enabled", True):
+        return False
+    raw_path = getattr(entry, "path", "")
+    if not raw_path or not isinstance(raw_path, str):
+        return False
+    return path_provides_vanilla_client(Path(raw_path.strip()))
+
+
+def _has_configured_packs(prefs: Any) -> bool:
+    for entry in getattr(prefs, "resource_packs", None) or []:
+        raw_path = getattr(entry, "path", "")
+        if isinstance(raw_path, str) and raw_path.strip():
+            return True
+    single_path = getattr(prefs, "resource_pack_path", None)
+    return isinstance(single_path, str) and bool(single_path.strip())
+
+
+def _get_pack_signature(prefs=None) -> tuple:
+    if prefs is None:
+        prefs = get_prefs()
+    packs = getattr(prefs, "resource_packs", None) or []
+    entries = []
+    for e in packs:
+        raw = getattr(e, "path", "") or ""
+        enabled = getattr(e, "enabled", True)
+        pt = getattr(e, "pack_type", "")
+        mtime = 0.0
+        if raw:
+            try:
+                mtime = os.path.getmtime(raw)
+            except OSError:
+                mtime = 0.0
+        entries.append((raw, enabled, pt, mtime))
+    single = getattr(prefs, "resource_pack_path", "") or ""
+    single_mtime = 0.0
+    if single:
+        try:
+            single_mtime = os.path.getmtime(single)
+        except OSError:
+            single_mtime = 0.0
+    env_sig = tuple((k, os.environ.get(k, "")) for k in ENV_ASSET_ROOTS + ENV_ASSET_ARCHIVES)
+    return (tuple(entries), single, single_mtime, env_sig)
+
+
+def has_valid_vanilla_pack(prefs=None) -> bool:
+    """Checks whether the active configuration or environment can provide Minecraft vanilla client assets."""
+    sig = _get_pack_signature(prefs)
+    if sig in _VANILLA_CHECK_CACHE:
+        return _VANILLA_CHECK_CACHE[sig]
+
+    if prefs is None:
+        prefs = get_prefs()
+
+    result = False
+    if prefs is not None:
+        for entry in getattr(prefs, "resource_packs", None) or []:
+            if _is_entry_valid_vanilla_client(entry):
+                result = True
+                break
+
+        if not result:
+            single_path = getattr(prefs, "resource_pack_path", None)
+            if isinstance(single_path, str) and single_path.strip():
+                if path_provides_vanilla_client(Path(single_path.strip())):
+                    result = True
+
+        if not result and _has_configured_packs(prefs):
+            _VANILLA_CHECK_CACHE[sig] = False
+            return False
+
+    if not result:
+        for env_var in ENV_ASSET_ROOTS + ENV_ASSET_ARCHIVES:
+            val = os.environ.get(env_var)
+            if val and path_provides_vanilla_client(Path(val)):
+                result = True
+                break
+
+    _VANILLA_CHECK_CACHE[sig] = result
+    return result
+
+
+__all__ = [
+    "get_configured_pack_stack",
+    "get_configured_ctm_solver",
+    "invalidate_pack_stack_cache",
+    "has_valid_vanilla_pack",
+    "path_provides_vanilla_client",
+    "ENV_ASSET_ROOTS",
+    "ENV_ASSET_ARCHIVES",
+    "_VANILLA_PROBE_CACHE",
+    "_VANILLA_CHECK_CACHE",
+]

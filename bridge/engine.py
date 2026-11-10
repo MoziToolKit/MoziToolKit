@@ -182,16 +182,6 @@ def get_dna_api_error() -> Optional[str]:
     return _dna_api_error
 
 
-def get_libmtk_blender() -> Optional[Any]:
-    """Compatibility alias for the standalone Blender raw-memory adapter."""
-    return get_libmtk_dna()
-
-
-def has_libmtk_blender() -> bool:
-    """Returns True if the standalone Blender raw-memory adapter is active."""
-    return get_libmtk_blender() is not None
-
-
 def has_libmtk_dna() -> bool:
     """Returns True if the standalone Blender raw-memory adapter is loaded."""
     return get_libmtk_dna() is not None

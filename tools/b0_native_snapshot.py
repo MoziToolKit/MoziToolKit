@@ -90,7 +90,6 @@ def main() -> None:
     report = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "libmtk_py": {
-            "version": libmtk_py.version(),
             "api_version": libmtk_py.api_version(),
             "top_level": top_level,
             "mesh_data_methods": mesh_methods,

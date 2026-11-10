@@ -126,27 +126,6 @@ def inject_face_source_texture_palette(
             logger.debug("Failed to remove retired provenance string: %s", exc)
 
 
-def inject_face_attribute_string(mesh: Any, name: str, values: List[str]) -> None:
-    """Inject a Face-domain String attribute into Blender Mesh."""
-    if name == ATTR_SOURCE_TEXTURE_KEY:
-        pal = list(dict.fromkeys(values))
-        k2i = {k: i for i, k in enumerate(pal)}
-        idx_arr = np.fromiter((k2i[k] for k in values), dtype=np.int32, count=len(values))
-        inject_face_source_texture_palette(mesh, pal, idx_arr)
-        return
-    attr = get_or_create_attribute(mesh, name, "STRING", "FACE")
-    if attr and len(attr.data) == len(values):
-        for i, val in enumerate(values):
-            b_val = val.encode("utf-8") if isinstance(val, str) else bytes(val)
-            try:
-                attr.data[i].value = b_val
-            except Exception:
-                try:
-                    attr.data[i].value = val
-                except Exception:
-                    pass
-
-
 def inject_face_attribute_int(mesh: Any, name: str, values: Any) -> None:
     """Inject a Face-domain Int attribute into Blender Mesh (list or buffer)."""
     attr = get_or_create_attribute(mesh, name, "INT", "FACE")
@@ -203,58 +182,6 @@ def inject_face_attribute_vector(mesh: Any, name: str, flat_values: Any) -> None
         arr = np.frombuffer(flat_values, dtype=np.float32)
     if arr.size == len(attr.data) * 3:
         attr.data.foreach_set("vector", arr)
-
-
-def inject_attribute(
-    mesh: Any,
-    name: str,
-    values: Any,
-    data_type: str = "FLOAT",
-    domain: str = "FACE",
-) -> None:
-    """Generic attribute injection dispatcher for Blender Mesh attributes."""
-    dtype_upper = data_type.upper()
-    dom_upper = domain.upper()
-
-    if dom_upper == "FACE":
-        if dtype_upper == "STRING":
-            inject_face_attribute_string(mesh, name, values)
-            return
-        elif dtype_upper in ("INT", "INT32", "INT8", "BOOLEAN"):
-            inject_face_attribute_int(mesh, name, values)
-            return
-        elif dtype_upper == "FLOAT":
-            inject_face_attribute_float(mesh, name, values)
-            return
-        elif dtype_upper in ("FLOAT_COLOR", "BYTE_COLOR"):
-            inject_face_attribute_float4(mesh, name, values)
-            return
-        elif dtype_upper in ("FLOAT_VECTOR", "FLOAT3"):
-            inject_face_attribute_vector(mesh, name, values)
-            return
-
-    attr = get_or_create_attribute(mesh, name, dtype_upper, dom_upper)
-    if not attr:
-        return
-
-    if dtype_upper == "STRING" and len(attr.data) == len(values):
-        for i, val in enumerate(values):
-            b_val = val.encode("utf-8") if isinstance(val, str) else bytes(val)
-            try:
-                attr.data[i].value = b_val
-            except Exception:
-                try:
-                    attr.data[i].value = val
-                except Exception:
-                    pass
-    elif dtype_upper in ("FLOAT_COLOR", "BYTE_COLOR"):
-        attr.data.foreach_set("color", np.ascontiguousarray(values, dtype=np.float32))
-    elif dtype_upper in ("FLOAT_VECTOR", "FLOAT3"):
-        attr.data.foreach_set("vector", np.ascontiguousarray(values, dtype=np.float32))
-    elif dtype_upper in ("INT", "INT32", "INT8", "BOOLEAN"):
-        attr.data.foreach_set("value", np.ascontiguousarray(values, dtype=np.int32))
-    elif dtype_upper == "FLOAT":
-        attr.data.foreach_set("value", np.ascontiguousarray(values, dtype=np.float32))
 
 
 def inject_custom_attributes(

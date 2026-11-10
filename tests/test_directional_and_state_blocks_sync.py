@@ -58,7 +58,7 @@ class TestDirectionalAndStateBlocksSync(unittest.TestCase):
         axes = ["axis=y", "axis=x", "axis=z"]
         for ax in axes:
             st = f"minecraft:oak_log[{ax}]"
-            res = self.model_db.get_mesh(st, False)
+            res = libmtk_py.unstable.testing.model_database_get_mesh(self.model_db, st, False)
             self.assertIsNotNone(res, f"Log {st} must resolve")
             mesh, textures = res
             self.assertEqual(mesh.face_count, 6, f"Log {st} must have 6 faces")
@@ -66,12 +66,12 @@ class TestDirectionalAndStateBlocksSync(unittest.TestCase):
             self.assertIn("minecraft:block/oak_log_top", textures)
 
         # Unparameterized log fallback (defaults to axis=y)
-        res_default = self.model_db.get_mesh("minecraft:oak_log", False)
+        res_default = libmtk_py.unstable.testing.model_database_get_mesh(self.model_db, "minecraft:oak_log", False)
         self.assertIsNotNone(res_default, "Unparameterized minecraft:oak_log must resolve")
         self.assertEqual(res_default[0].face_count, 6)
 
         # Stripped log
-        res_stripped = self.model_db.get_mesh("minecraft:stripped_oak_log", False)
+        res_stripped = libmtk_py.unstable.testing.model_database_get_mesh(self.model_db, "minecraft:stripped_oak_log", False)
         self.assertIsNotNone(res_stripped, "Stripped log must resolve")
 
     def test_furnace_facing_and_lit_models(self):
@@ -79,7 +79,7 @@ class TestDirectionalAndStateBlocksSync(unittest.TestCase):
         facings = ["north", "south", "east", "west"]
         for facing in facings:
             st_off = f"minecraft:furnace[facing={facing},lit=false]"
-            res_off = self.model_db.get_mesh(st_off, False)
+            res_off = libmtk_py.unstable.testing.model_database_get_mesh(self.model_db, st_off, False)
             self.assertIsNotNone(res_off, f"Furnace {st_off} must resolve")
             mesh_off, tex_off = res_off
             self.assertEqual(mesh_off.face_count, 6)
@@ -87,7 +87,7 @@ class TestDirectionalAndStateBlocksSync(unittest.TestCase):
             self.assertNotIn("minecraft:block/furnace_front_on", tex_off)
 
             st_on = f"minecraft:furnace[facing={facing},lit=true]"
-            res_on = self.model_db.get_mesh(st_on, False)
+            res_on = libmtk_py.unstable.testing.model_database_get_mesh(self.model_db, st_on, False)
             self.assertIsNotNone(res_on, f"Furnace {st_on} must resolve")
             mesh_on, tex_on = res_on
             self.assertEqual(mesh_on.face_count, 6)
@@ -95,19 +95,19 @@ class TestDirectionalAndStateBlocksSync(unittest.TestCase):
             self.assertNotIn("minecraft:block/furnace_front", tex_on)
 
         # Query omitting lit (should default to lit=false)
-        res_facing_only = self.model_db.get_mesh("minecraft:furnace[facing=east]", False)
+        res_facing_only = libmtk_py.unstable.testing.model_database_get_mesh(self.model_db, "minecraft:furnace[facing=east]", False)
         self.assertIsNotNone(res_facing_only, "minecraft:furnace[facing=east] must resolve")
         self.assertIn("minecraft:block/furnace_front", res_facing_only[1])
 
         # Bare unparameterized furnace
-        res_bare = self.model_db.get_mesh("minecraft:furnace", False)
+        res_bare = libmtk_py.unstable.testing.model_database_get_mesh(self.model_db, "minecraft:furnace", False)
         self.assertIsNotNone(res_bare, "Bare minecraft:furnace must resolve")
         self.assertIn("minecraft:block/furnace_front", res_bare[1])
 
     def test_piston_and_piston_head_models(self):
         """Pistons must distinguish extended vs retracted states, and piston heads must provide 10-face custom meshes."""
         # Retracted piston
-        res_retracted = self.model_db.get_mesh("minecraft:piston[facing=up,extended=false]", False)
+        res_retracted = libmtk_py.unstable.testing.model_database_get_mesh(self.model_db, "minecraft:piston[facing=up,extended=false]", False)
         self.assertIsNotNone(res_retracted)
         m_ret, tex_ret = res_retracted
         self.assertEqual(m_ret.face_count, 6)
@@ -115,37 +115,37 @@ class TestDirectionalAndStateBlocksSync(unittest.TestCase):
         self.assertNotIn("minecraft:block/piston_inner", tex_ret)
 
         # Extended piston base
-        res_extended = self.model_db.get_mesh("minecraft:piston[facing=up,extended=true]", False)
+        res_extended = libmtk_py.unstable.testing.model_database_get_mesh(self.model_db, "minecraft:piston[facing=up,extended=true]", False)
         self.assertIsNotNone(res_extended)
         m_ext, tex_ext = res_extended
         self.assertEqual(m_ext.face_count, 6)
         self.assertIn("minecraft:block/piston_inner", tex_ext)
 
         # Piston head (normal) - 10 to 15 faces depending on pack arm extension elements
-        res_head = self.model_db.get_mesh("minecraft:piston_head[facing=up,type=normal,short=false]", False)
+        res_head = libmtk_py.unstable.testing.model_database_get_mesh(self.model_db, "minecraft:piston_head[facing=up,type=normal,short=false]", False)
         self.assertIsNotNone(res_head)
         m_head, tex_head = res_head
         self.assertIn(m_head.face_count, (10, 15), "Piston head must have 10 or 15 faces (head + arm)")
         self.assertIn("minecraft:block/piston_top", tex_head)
 
         # Sticky piston head
-        res_sticky = self.model_db.get_mesh("minecraft:piston_head[facing=up,type=sticky,short=false]", False)
+        res_sticky = libmtk_py.unstable.testing.model_database_get_mesh(self.model_db, "minecraft:piston_head[facing=up,type=sticky,short=false]", False)
         self.assertIsNotNone(res_sticky)
         self.assertIn("minecraft:block/piston_top_sticky", res_sticky[1])
 
         # Piston head omitting short=false
-        res_head_omit = self.model_db.get_mesh("minecraft:piston_head[facing=up,type=normal]", False)
+        res_head_omit = libmtk_py.unstable.testing.model_database_get_mesh(self.model_db, "minecraft:piston_head[facing=up,type=normal]", False)
         self.assertIsNotNone(res_head_omit, "piston_head omitting short=false must resolve")
         self.assertIn(res_head_omit[0].face_count, (10, 15))
 
         # Bare piston and piston head
-        self.assertIsNotNone(self.model_db.get_mesh("minecraft:piston", False))
-        self.assertIsNotNone(self.model_db.get_mesh("minecraft:piston_head", False))
+        self.assertIsNotNone(libmtk_py.unstable.testing.model_database_get_mesh(self.model_db, "minecraft:piston", False))
+        self.assertIsNotNone(libmtk_py.unstable.testing.model_database_get_mesh(self.model_db, "minecraft:piston_head", False))
 
     def test_torch_and_wall_torch_models(self):
         """Wall torches must resolve tilted geometry, and torch[facing=north] must alias to wall_torch."""
         # Floor standing torch
-        m_floor, tex_floor = self.model_db.get_mesh("minecraft:torch", False)
+        m_floor, tex_floor = libmtk_py.unstable.testing.model_database_get_mesh(self.model_db, "minecraft:torch", False)
         self.assertEqual(m_floor.face_count, 6)
         pos_floor = ma.positions(m_floor)
         min_y_floor = min(pos_floor[1::3])
@@ -154,7 +154,7 @@ class TestDirectionalAndStateBlocksSync(unittest.TestCase):
         self.assertAlmostEqual(max_y_floor, 0.625, places=2)
 
         # Wall torch
-        m_wall, tex_wall = self.model_db.get_mesh("minecraft:wall_torch[facing=north]", False)
+        m_wall, tex_wall = libmtk_py.unstable.testing.model_database_get_mesh(self.model_db, "minecraft:wall_torch[facing=north]", False)
         self.assertEqual(m_wall.face_count, 6)
         pos_wall = ma.positions(m_wall)
         min_y_wall = min(pos_wall[1::3])
@@ -164,16 +164,16 @@ class TestDirectionalAndStateBlocksSync(unittest.TestCase):
         self.assertGreater(max_y_wall, 0.7)
 
         # Alias: torch[facing=north] must resolve to wall torch geometry!
-        m_alias, tex_alias = self.model_db.get_mesh("minecraft:torch[facing=north]", False)
+        m_alias, tex_alias = libmtk_py.unstable.testing.model_database_get_mesh(self.model_db, "minecraft:torch[facing=north]", False)
         self.assertIsNotNone(m_alias)
         pos_alias = ma.positions(m_alias)
         self.assertAlmostEqual(min(pos_alias[1::3]), min_y_wall, places=2)
         self.assertAlmostEqual(max(pos_alias[1::3]), max_y_wall, places=2)
 
         # Bare wall_torch query
-        self.assertIsNotNone(self.model_db.get_mesh("minecraft:wall_torch", False))
-        self.assertIsNotNone(self.model_db.get_mesh("minecraft:soul_wall_torch[facing=north]", False))
-        self.assertIsNotNone(self.model_db.get_mesh("minecraft:redstone_wall_torch[facing=north]", False))
+        self.assertIsNotNone(libmtk_py.unstable.testing.model_database_get_mesh(self.model_db, "minecraft:wall_torch", False))
+        self.assertIsNotNone(libmtk_py.unstable.testing.model_database_get_mesh(self.model_db, "minecraft:soul_wall_torch[facing=north]", False))
+        self.assertIsNotNone(libmtk_py.unstable.testing.model_database_get_mesh(self.model_db, "minecraft:redstone_wall_torch[facing=north]", False))
 
     def test_live_sync_delta_state_transitions(self):
         """

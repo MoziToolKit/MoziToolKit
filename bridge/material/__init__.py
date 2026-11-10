@@ -20,14 +20,12 @@ from .biome import (
     compute_mesh_biome_attributes_from_storage,
     get_all_biomes,
     get_biome_meta,
-    load_biome_resolver_from_file,
     reapply_uniform_biome_tint,
     sample_colormap_colors,
 )
 from .resolve import (
     build_material_palette,
     builtin_biome_suffixes,
-    clean_material_identifier,
     clean_material_name,
     get_chunk_texture_specs,
     load_baked_atlas_from_json,
@@ -44,31 +42,25 @@ def is_material_bridge_available() -> bool:
     return get_libmtk() is not None
 
 
-def require_material_bridge() -> None:
-    """Raise RuntimeError if native libmtk_py material bridge is unavailable."""
-    if not is_material_bridge_available():
-        require_libmtk("material & biome bridge")
-
-
 def __getattr__(name: str) -> Any:
     mtk = get_libmtk()
     if name in ("BiomeResolver", "MaterialResolver", "GridAtlasSpec", "BakedAtlas"):
-        require_material_bridge()
+        if mtk is None:
+            require_libmtk("material & biome bridge")
         val = getattr(mtk, name, None)
         if val is None:
             raise AttributeError(f"libmtk_py does not expose '{name}'")
         return val
     if name.startswith("TINT_TYPE_"):
-        require_material_bridge()
+        if mtk is None:
+            require_libmtk("material & biome bridge")
         return getattr(mtk, name)
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 
 __all__ = [
     "is_material_bridge_available",
-    "require_material_bridge",
     "BiomeResolver",
-    "load_biome_resolver_from_file",
     "get_biome_meta",
     "sample_colormap_colors",
     "get_all_biomes",
@@ -77,7 +69,6 @@ __all__ = [
     "reapply_uniform_biome_tint",
     "MaterialResolver",
     "clean_material_name",
-    "clean_material_identifier",
     "normalize_banner_pattern",
     "builtin_biome_suffixes",
     "GridAtlasSpec",

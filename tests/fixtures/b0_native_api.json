@@ -9,7 +9,7 @@
     "required_native_symbols_present": true
   },
   "forbidden_hits": [],
-  "generated_at": "2026-11-10T01:07:19.565294+00:00",
+  "generated_at": "2026-11-10T04:45:20.071675+00:00",
   "libmtk_blender_dna": {
     "api_version": 2,
     "functions": [
@@ -21,7 +21,8 @@
       "copy_f32",
       "copy_i32",
       "copy_u32",
-      "copy_u8"
+      "copy_u8",
+      "version"
     ]
   },
   "libmtk_py": {
@@ -110,7 +111,8 @@
       "resolve_active_cache_package",
       "sample_colormap_colors",
       "scale_uv",
-      "unstable"
+      "unstable",
+      "version"
     ],
     "unstable": [
       "testing"

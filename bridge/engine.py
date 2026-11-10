@@ -228,23 +228,30 @@ def get_engine_info() -> Dict[str, Any]:
     Compatible with both development mode and release mode.
     """
     mtk = get_libmtk()
+    dna = get_libmtk_dna()
     info = {
         "available": mtk is not None,
         "mode": "Not Found",
         "path": "None",
         "version": "Unknown",
         "api_version": None,
-        "dna_available": get_libmtk_dna() is not None,
+        "dna_available": dna is not None,
+        "dna_version": "Unknown",
         "dna_api_version": (
-            getattr(get_libmtk_dna(), "api_version", lambda: None)()
-            if get_libmtk_dna() is not None
+            getattr(dna, "api_version", lambda: None)()
+            if dna is not None
             else None
         ),
         "is_dev": False,
     }
 
     if mtk is not None:
-        info["version"] = getattr(mtk, "version", lambda: "0.1.0")() if callable(getattr(mtk, "version", None)) else getattr(mtk, "version", "0.1.0")
+        ver_fn = getattr(mtk, "version", None)
+        if callable(ver_fn):
+            info["version"] = str(ver_fn())
+        elif hasattr(mtk, "__version__"):
+            info["version"] = str(getattr(mtk, "__version__"))
+
         api_fn = getattr(mtk, "api_version", None)
         info["api_version"] = api_fn() if callable(api_fn) else None
         mod_file = getattr(mtk, "__file__", "") or ""
@@ -256,5 +263,12 @@ def get_engine_info() -> Dict[str, Any]:
         else:
             info["mode"] = "Release Extension Wheel"
             info["is_dev"] = False
+
+    if dna is not None:
+        dna_ver_fn = getattr(dna, "version", None)
+        if callable(dna_ver_fn):
+            info["dna_version"] = str(dna_ver_fn())
+        elif hasattr(dna, "__version__"):
+            info["dna_version"] = str(getattr(dna, "__version__"))
 
     return info

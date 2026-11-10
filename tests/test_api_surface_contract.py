@@ -9,6 +9,7 @@ def test_required_native_symbols_exist():
     mtk = get_libmtk()
     assert mtk is not None
     required = [
+        "version",
         "api_version",
         "VoxelWorld",
         "VoxelPointCloud",
@@ -236,6 +237,10 @@ def test_standalone_dna_adapter_contract():
 
     dna = pytest.importorskip("libmtk_blender_dna")
     assert dna.api_version() == 2
+    assert hasattr(dna, "version")
+    assert len(dna.version()) > 0
+    assert hasattr(dna, "__version__")
+    assert dna.version() == dna.__version__
     for name in (
         "copy_f32",
         "copy_i32",

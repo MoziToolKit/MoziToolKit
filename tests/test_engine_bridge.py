@@ -20,8 +20,12 @@ class TestEngineBridge:
         assert "mode" in info
         assert "path" in info
         assert "version" in info
+        assert info["version"] != "Unknown"
+        assert len(info["version"]) > 0
         assert info["api_version"] == 2
         assert info["dna_available"] is True
+        assert info["dna_version"] != "Unknown"
+        assert len(info["dna_version"]) > 0
         assert info["dna_api_version"] == 2
 
     def test_dynamic_attributes_on_bridges(self):

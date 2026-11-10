@@ -50,6 +50,8 @@ FORBIDDEN = (
 )
 FORBIDDEN_PREFIXES = ("direct_copy_",)
 REQUIRED = (
+    "version",
+    "api_version",
     "VoxelWorld",
     "VoxelPointCloud",
     "VoxelStorage",

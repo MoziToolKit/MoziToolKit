@@ -773,7 +773,7 @@ def main():
         generate_snippet(report)
         sys.exit(0)
 
-    if args.prune-diff if hasattr(args, "prune-diff") else args.prune_diff:
+    if args.prune_diff:
         print_diff = args.mozi_dir / "i18n/dictionary.py"
         prune_diff(report, print_diff)
         sys.exit(0)

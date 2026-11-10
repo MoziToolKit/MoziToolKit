@@ -86,9 +86,19 @@ class VIEW3D_PT_mtk_dev_panel(bpy.types.Panel):
             stages = profile.get("stages", [])
             for idx, stage in enumerate(stages):
                 s_row = sub.row(align=True)
-                # Stage name
                 s_name = stage["name"]
-                s_row.label(text=f"{idx+1}. {s_name}")
+                cat = stage.get("category")
+                depth = int(stage.get("depth", 0))
+
+                # Indentation and prefix by depth
+                if depth == 0:
+                    cat_prefix = f"[{cat}] " if cat else ""
+                    display_name = f"{idx+1}. {cat_prefix}{s_name}"
+                else:
+                    indent = "    " * depth
+                    display_name = f"{indent}└─ {s_name}"
+
+                s_row.label(text=display_name)
 
                 # Optional items count
                 if stage.get("items_count") is not None:
@@ -99,6 +109,15 @@ class VIEW3D_PT_mtk_dev_panel(bpy.types.Panel):
                 # Duration & percentage
                 dur_text = f"{stage['duration_ms']:.2f} ms ({stage['percent']}%)"
                 s_row.label(text=dur_text)
+
+            unaccounted_ms = float(profile.get("unaccounted_ms", 0.0) or 0.0)
+            total_ms = float(profile.get("total_ms", 0.0) or 0.0)
+            if unaccounted_ms > 0.5 and total_ms > 0:
+                unacc_pct = round((unaccounted_ms / total_ms) * 100.0, 1)
+                u_row = sub.row(align=True)
+                u_row.label(text=f"~ {tr('Unaccounted Overhead')}")
+                u_row.label(text="")
+                u_row.label(text=f"{unaccounted_ms:.2f} ms ({unacc_pct}%)")
 
             prof_box.separator(factor=0.3)
             clear_row = prof_box.row(align=True)

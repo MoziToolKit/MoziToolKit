@@ -16,12 +16,26 @@ from MoziToolKit.utils.diagnostics import (
 )
 
 
-def _make_stage(name, duration_ms, items_count=None):
-    return SimpleNamespace(name=name, duration_ms=duration_ms, items_count=items_count)
+def _make_stage(name, duration_ms, items_count=None, category="mesh", depth=0, start_offset_ms=0.0):
+    return SimpleNamespace(
+        name=name,
+        duration_ms=duration_ms,
+        items_count=items_count,
+        category=category,
+        depth=depth,
+        start_offset_ms=start_offset_ms,
+    )
 
 
-def _make_profile(total_duration_ms, stages):
-    return SimpleNamespace(total_duration_ms=total_duration_ms, stages=stages)
+def _make_profile(total_duration_ms, stages, accounted_duration_ms=None, unaccounted_duration_ms=None):
+    accounted = accounted_duration_ms if accounted_duration_ms is not None else sum(s.duration_ms for s in stages if getattr(s, "depth", 0) == 0)
+    unaccounted = unaccounted_duration_ms if unaccounted_duration_ms is not None else max(0.0, total_duration_ms - accounted)
+    return SimpleNamespace(
+        total_duration_ms=total_duration_ms,
+        accounted_duration_ms=accounted,
+        unaccounted_duration_ms=unaccounted,
+        stages=stages,
+    )
 
 
 class TestProfileTracker(unittest.TestCase):
@@ -143,6 +157,28 @@ class TestProfileTracker(unittest.TestCase):
         self.assertEqual(last["stage_count"], 2)
         self.assertEqual(last["stages"][0]["percent"], 50.0)
         self.assertEqual(last["stages"][1]["percent"], 50.0)
+
+    def test_hierarchical_profile_and_unaccounted(self):
+        stages = [
+            _make_stage("assemble", 10.0, category="mesh", depth=0, start_offset_ms=0.0),
+            _make_stage("merge_seams", 6.0, category="mesh", depth=1, start_offset_ms=2.0),
+            _make_stage("compact_slots", 2.0, category="mesh", depth=1, start_offset_ms=8.0),
+        ]
+        profile_obj = _make_profile(15.0, stages)
+        record_operation_profile("World Assembly", profile_obj)
+        last = get_last_profile()
+
+        self.assertIsNotNone(last)
+        self.assertEqual(last["core_ms"], 15.0)
+        self.assertEqual(last["total_ms"], 15.0)
+        self.assertEqual(last["accounted_ms"], 10.0)
+        self.assertEqual(last["unaccounted_ms"], 5.0)
+        self.assertEqual(last["stage_count"], 3)
+
+        self.assertEqual(last["stages"][0]["depth"], 0)
+        self.assertEqual(last["stages"][0]["category"], "mesh")
+        self.assertEqual(last["stages"][1]["depth"], 1)
+        self.assertEqual(last["stages"][2]["depth"], 1)
 
 
 if __name__ == "__main__":

@@ -19,11 +19,18 @@ _LOCK = threading.Lock()
 def _make_stage(
     name: Any,
     duration_ms: Any,
-    items_count: Any,
+    items_count: Any = None,
     source: str = "core",
+    category: Optional[str] = None,
+    depth: int = 0,
+    start_offset_ms: float = 0.0,
 ) -> Dict[str, Any]:
+    cat = category if category else ("host" if source == "host" else "core")
     return {
         "name": str(name),
+        "category": str(cat),
+        "depth": int(depth),
+        "start_offset_ms": round(float(start_offset_ms or 0.0), 3),
         "duration_ms": round(float(duration_ms or 0.0), 3),
         "items_count": items_count,
         "source": source,
@@ -37,6 +44,8 @@ def _new_profile(operation: str) -> Dict[str, Any]:
         "core_ms": 0.0,
         "host_ms": 0.0,
         "total_ms": 0.0,
+        "accounted_ms": 0.0,
+        "unaccounted_ms": 0.0,
         "stage_count": 0,
         "stages": [],
         "timestamp": time.strftime("%H:%M:%S"),
@@ -48,19 +57,30 @@ def _recalculate(profile: Dict[str, Any]) -> None:
 
     Core time comes from Rust (it already includes uninstrumented work between
     its stages); host time is the sum of Blender-side stages appended later.
-    The total never drops below the sum of all stages.
+    Top-level stages (depth == 0) are used to compute the accounted work sum.
+    The total never drops below the sum of all top-level stages.
     """
     stages = profile.get("stages", [])
-    stage_sum = sum(float(stage.get("duration_ms", 0.0)) for stage in stages)
+    top_level_sum = sum(
+        float(stage.get("duration_ms", 0.0))
+        for stage in stages
+        if stage.get("depth", 0) == 0
+    )
     core_ms = float(profile.get("core_ms", 0.0) or 0.0)
     host_ms = float(profile.get("host_ms", 0.0) or 0.0)
-    total_ms = max(core_ms + host_ms, stage_sum)
+    total_ms = max(core_ms + host_ms, top_level_sum)
     for stage in stages:
         duration = float(stage.get("duration_ms", 0.0))
         stage["percent"] = round((duration / total_ms) * 100.0, 1) if total_ms > 0 else 0.0
+
+    accounted_ms = top_level_sum
+    unaccounted_ms = max(0.0, total_ms - accounted_ms)
+
     profile["core_ms"] = round(core_ms, 3)
     profile["host_ms"] = round(host_ms, 3)
     profile["total_ms"] = round(total_ms, 3)
+    profile["accounted_ms"] = round(accounted_ms, 3)
+    profile["unaccounted_ms"] = round(unaccounted_ms, 3)
     profile["stage_count"] = len(stages)
 
 
@@ -86,6 +106,9 @@ def record_operation_profile(
                     getattr(stage, "duration_ms", 0.0),
                     getattr(stage, "items_count", None),
                     "core",
+                    getattr(stage, "category", "core"),
+                    getattr(stage, "depth", 0),
+                    getattr(stage, "start_offset_ms", 0.0),
                 )
             )
     elif isinstance(profile_obj, dict):
@@ -98,7 +121,10 @@ def record_operation_profile(
                     stage.get("name", "stage"),
                     stage.get("duration_ms", 0.0),
                     stage.get("items_count"),
-                    "core",
+                    stage.get("source", "core"),
+                    stage.get("category", "core"),
+                    stage.get("depth", 0),
+                    stage.get("start_offset_ms", 0.0),
                 )
             )
 
@@ -112,6 +138,9 @@ def record_operation_profile(
                 duration,
                 host_stage.get("items_count"),
                 "host",
+                host_stage.get("category", "host"),
+                host_stage.get("depth", 0),
+                host_stage.get("start_offset_ms", 0.0),
             )
         )
 
@@ -128,6 +157,7 @@ def append_stage_to_last_profile(
     name: str,
     duration_ms: float,
     items_count: Optional[int] = None,
+    category: str = "host",
 ) -> None:
     """Appends a host-side stage to the currently active profile (e.g. Blender injection)."""
     global _LAST_PROFILE
@@ -135,7 +165,16 @@ def append_stage_to_last_profile(
         if _LAST_PROFILE is None:
             _LAST_PROFILE = _new_profile("Host Operation")
         duration = float(duration_ms or 0.0)
-        _LAST_PROFILE["stages"].append(_make_stage(name, duration, items_count, "host"))
+        _LAST_PROFILE["stages"].append(
+            _make_stage(
+                name=name,
+                duration_ms=duration,
+                items_count=items_count,
+                source="host",
+                category=category,
+                depth=0,
+            )
+        )
         _LAST_PROFILE["host_ms"] = float(_LAST_PROFILE.get("host_ms", 0.0) or 0.0) + duration
         _recalculate(_LAST_PROFILE)
 

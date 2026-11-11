@@ -22,6 +22,7 @@ from .constants import (
     PROP_BIOME_PALETTE,
     PROP_BLOCK_ENTITY_PALETTE,
     PROP_BLOCK_PALETTE,
+    PROP_VISUAL_ENTITIES,
 )
 
 logger = logging.getLogger("MoziToolKit.Bridge.PointCloud.DNA")
@@ -153,6 +154,21 @@ def inject_point_cloud_dna(
                     import numpy as np
                     ent_indices = np.frombuffer(cloud_data.entity_indices_memoryview(), dtype=np.int32)
                     attr_ent.data.foreach_set("value", np.ascontiguousarray(ent_indices))
+
+        # Continuous visual entities palette (array format in Blender UI to prevent accidental text editing)
+        if cloud_data.has_visual_entities():
+            palette = cloud_data.get_visual_entities_palette()
+            if target_data.get(PROP_VISUAL_ENTITIES) != palette:
+                target_data[PROP_VISUAL_ENTITIES] = palette
+            if obj is not None and obj.get(PROP_VISUAL_ENTITIES) != palette:
+                obj[PROP_VISUAL_ENTITIES] = palette
+        else:
+            for t in (target_data, obj):
+                if t is not None and hasattr(t, "__contains__") and PROP_VISUAL_ENTITIES in t:
+                    try:
+                        del t[PROP_VISUAL_ENTITIES]
+                    except Exception:
+                        pass
 
         return True
     except Exception as e:

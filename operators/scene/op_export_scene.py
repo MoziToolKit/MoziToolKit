@@ -194,6 +194,17 @@ class MOZI_OT_export_scene(bpy.types.Operator, ExportHelper):
         # Frontend UI hides CTM option; scene export canonically includes CTM rules and sub-tiles.
         enable_ctm = True
 
+        # Synchronize live visual entity objects from viewport into point cloud
+        from ...utils.scene.entities import extract_scene_visual_entities
+        live_ents_json = extract_scene_visual_entities(active or cloud_obj, point_cloud=point_cloud)
+        if live_ents_json is not None:
+            import json
+            try:
+                parsed = json.loads(live_ents_json)
+                point_cloud.set_visual_entities_palette([json.dumps(x) for x in parsed])
+            except Exception:
+                pass
+
         try:
             meta = export_scene_package(
                 output_path=self.filepath,
@@ -205,10 +216,13 @@ class MOZI_OT_export_scene(bpy.types.Operator, ExportHelper):
                 enable_ctm=enable_ctm,
             )
             v_count = meta.get("voxel_count", 0)
+            b_count = meta.get("unique_entities_count", 0)
+            vis_count = meta.get("visual_entities_count", 0)
+            e_count = b_count + vis_count
             res = meta.get("atlas_resolution", [0, 0])
             self.report(
                 {"INFO"},
-                f"Exported MTK Scene '{Path(self.filepath).name}' ({v_count} voxels, mini-atlas {res[0]}x{res[1]}).",
+                f"Exported MTK Scene '{Path(self.filepath).name}' ({v_count} voxels, {e_count} entities, mini-atlas {res[0]}x{res[1]}).",
             )
             return {"FINISHED"}
         except Exception as e:

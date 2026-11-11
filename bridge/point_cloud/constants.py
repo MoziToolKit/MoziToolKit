@@ -32,6 +32,7 @@ ATTR_BLOCK_ENTITY_IDX = ATTR_ENTITY_IDX
 PROP_BLOCK_PALETTE = ATTR_PALETTE
 PROP_BIOME_PALETTE = ATTR_BIOME_PALETTE
 PROP_BLOCK_ENTITY_PALETTE = ATTR_ENTITY_PALETTE
+PROP_VISUAL_ENTITIES = "mtk_visual_entities"
 
 # Legacy/retired attributes kept for backwards-compatibility checks
 ATTR_BIOME = "mtk_biome"

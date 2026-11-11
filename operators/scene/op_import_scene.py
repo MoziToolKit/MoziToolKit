@@ -72,8 +72,10 @@ class MOZI_OT_import_scene(bpy.types.Operator, ImportHelper, CommonMeshingOption
                     u_states = meta.get("unique_states_count", 0)
                     u_biomes = meta.get("unique_biomes_count", 0)
                     u_entities = meta.get("unique_entities_count", 0)
+                    v_entities = meta.get("visual_entities_count", 0)
+                    total_entities = u_entities + v_entities
                     box_info.label(
-                        text=f"{tr('Palette')}: {u_states} {tr('states')}, {u_biomes} {tr('biomes')}, {u_entities} {tr('entities')}",
+                        text=f"{tr('Palette')}: {u_states} {tr('states')}, {u_biomes} {tr('biomes')}, {total_entities} {tr('entities')}",
                     )
 
                     res = meta.get("atlas_resolution", [0, 0])

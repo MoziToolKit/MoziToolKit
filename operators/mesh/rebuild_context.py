@@ -47,6 +47,8 @@ def resolve_rebuild_flags(
             weld_vertices = bool(root_container.get("mtk_weld_vertices"))
         if root_container.get("mtk_origin_centered") is not None:
             origin_centered = bool(root_container.get("mtk_origin_centered"))
+        elif root_container.get("mtk:origin_centered") is not None:
+            origin_centered = bool(root_container.get("mtk:origin_centered"))
 
     anim_tex_enabled = None
     if root_container is not None:

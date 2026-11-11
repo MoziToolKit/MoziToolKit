@@ -205,6 +205,7 @@ def test_cold_cache_save_import_binds_textures(tmp_path, monkeypatch):
             "min_block": (0, -64, 0),
             "max_block": (15, 64, 15),
             "prefs": mock_prefs,
+            "force": True,
         },
         prefs=mock_prefs,
     )

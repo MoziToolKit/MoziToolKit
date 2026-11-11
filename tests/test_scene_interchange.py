@@ -99,6 +99,14 @@ class TestSceneInterchangeEndToEnd(unittest.TestCase):
         with open(os.path.join(colormap_dir, "grass.png"), "wb") as f:
             f.write(create_tiny_png(16, 16, (100, 200, 50, 255)))
 
+        # Painting textures
+        painting_dir = os.path.join(cls.pack_dir, "assets", "minecraft", "textures", "painting")
+        os.makedirs(painting_dir, exist_ok=True)
+        with open(os.path.join(painting_dir, "kebab.png"), "wb") as f:
+            f.write(create_tiny_png(16, 16, (200, 150, 100, 255)))
+        with open(os.path.join(painting_dir, "back.png"), "wb") as f:
+            f.write(create_tiny_png(16, 16, (150, 100, 50, 255)))
+
         # CTM Rules & sub-tiles for glass
         ctm_dir = os.path.join(cls.pack_dir, "assets", "minecraft", "optifine", "ctm", "glass")
         os.makedirs(ctm_dir, exist_ok=True)
@@ -915,6 +923,109 @@ class TestSceneInterchangeEndToEnd(unittest.TestCase):
         self.assertIn("atlas", bundle)
         self.assertIn("reader", bundle)
         self.assertEqual(bundle["metadata"]["voxel_count"], 1)
+
+    def test_20_visual_entities_export_and_import_roundtrip(self):
+        """Verifies visual entities (Paintings) are exported into .mtkscene ENTI chunk, unpacked, and assembled in Blender."""
+        from MoziToolKit.bridge.scene import export_scene_package, inspect_scene_package, load_and_mesh_scene_package, read_scene_package
+        from MoziToolKit.utils.scene import apply_imported_scene_to_blender
+
+        cloud = self.mtk.VoxelPointCloud()
+        cloud.push([0.5, 0.5, 0.5], [0, 0, 0], "minecraft:stone", "minecraft:plains", 15)
+        cloud.bounds = [0, 0, 0, 1, 1, 1]
+
+        # Add a painting entity
+        painting_data = [
+            {
+                "id": "minecraft:painting",
+                "position": [0.0, 1.0, 0.0],
+                "facing": "north",
+                "rotation": [0.0, 0.0, 0.0],
+                "kind": {
+                    "type": "minecraft:painting",
+                    "variant": "kebab",
+                    "width": 1,
+                    "height": 1,
+                },
+            }
+        ]
+        cloud.set_visual_entities_palette([json.dumps(p) for p in painting_data])
+        self.assertTrue(cloud.has_visual_entities())
+        self.assertEqual(cloud.visual_entities_count(), 1)
+
+        target_path = os.path.join(self.temp_dir, "test_painting_scene.mtkscene")
+        meta = export_scene_package(
+            output_path=target_path,
+            point_cloud=cloud,
+            prefs=self.mock_prefs,
+        )
+        self.assertEqual(meta["visual_entities_count"], 1)
+        self.assertEqual(meta["unique_entities_count"], 0)
+
+        # 1. Inspect package
+        insp = inspect_scene_package(target_path)
+        self.assertEqual(insp["visual_entities_count"], 1)
+        self.assertEqual(insp["unique_entities_count"], 0)
+
+        # 2. Read package via reader.unpack
+        bundle = read_scene_package(target_path)
+        self.assertTrue(bundle["point_cloud"].has_visual_entities())
+        palette = bundle["point_cloud"].get_visual_entities_palette()
+        self.assertEqual(len(palette), 1)
+        ents = [json.loads(p) for p in palette]
+        self.assertEqual(ents[0]["kind"]["variant"], "kebab")
+
+        # 3. Load & mesh package
+        data = load_and_mesh_scene_package(target_path, prefs=self.mock_prefs)
+        self.assertIsNotNone(data.get("render_plan"))
+        self.assertEqual(data["render_plan"].node_count, 1)
+
+        # 4. Assemble into Blender scene
+        res = apply_imported_scene_to_blender(
+            data,
+            scene_name="TestPaintingScene",
+            context=bpy.context,
+            prefs=self.mock_prefs,
+        )
+        self.assertIsNotNone(res.get("root_obj"))
+        self.assertEqual(res.get("entities_count"), 1)
+        entity_objs = res.get("entity_objs", [])
+        self.assertEqual(len(entity_objs), 1)
+        ent_obj = entity_objs[0]
+        self.assertEqual(ent_obj.type, "MESH")
+        self.assertGreater(len(ent_obj.data.polygons), 0)
+        self.assertGreater(len(ent_obj.data.materials), 0)
+        self.assertTrue(ent_obj.get("mtk:is_visual_entity", False))
+
+        # 5. Verify companion point cloud roundtrips entities
+        cloud_obj = res.get("cloud_obj")
+        self.assertIsNotNone(cloud_obj)
+        extracted = extract_voxel_point_cloud(cloud_obj)
+        self.assertIsNotNone(extracted)
+        self.assertTrue(extracted.has_visual_entities())
+        self.assertEqual(extracted.visual_entities_count(), 1)
+
+        # 6. Verify DCC Viewport Modification & Bidirectional Re-export:
+        # Move entity in Blender viewport, then re-export from scene container
+        ent_obj.location.x += 2.0
+        reexport_path = os.path.join(self.temp_dir, "test_moved_painting_scene.mtkscene")
+        from MoziToolKit.utils.scene.entities import extract_scene_visual_entities
+        live_ents_json = extract_scene_visual_entities(res["root_obj"], point_cloud=extracted)
+        self.assertIsNotNone(live_ents_json)
+        parsed_live = json.loads(live_ents_json)
+        extracted.set_visual_entities_palette([json.dumps(x) for x in parsed_live])
+
+        export_scene_package(
+            output_path=reexport_path,
+            point_cloud=extracted,
+            prefs=self.mock_prefs,
+        )
+        re_bundle = read_scene_package(reexport_path)
+        re_palette = re_bundle["point_cloud"].get_visual_entities_palette()
+        re_ents = [json.loads(p) for p in re_palette]
+        self.assertEqual(len(re_ents), 1)
+        # Position should reflect the +2.0 X shift in Blender viewport (inverted back to Minecraft coordinates)
+        # Since blender_x = mc_x - cx, shifting blender_x by +2.0 shifts mc_x by +2.0
+        self.assertAlmostEqual(re_ents[0]["position"][0], 2.0, places=2)
 
 
 if __name__ == "__main__":

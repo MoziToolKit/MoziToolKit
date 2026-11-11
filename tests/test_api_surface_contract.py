@@ -16,6 +16,10 @@ def test_required_native_symbols_exist():
         "MeshData",
         "compute_biome_tint_attributes_paletted",
         "build_material_palette",
+        "build_entity_render_plan",
+        "EntityRenderNode",
+        "EntityRenderPlan",
+        "EntityRenderTransform",
     ]
     for name in required:
         assert hasattr(mtk, name), f"libmtk_py is missing required symbol {name}"
@@ -39,6 +43,7 @@ def test_removed_native_symbols_do_not_return():
         "retired_mesh_attributes",
         "is_valid_cache_package",
         "get_cache_manifest",
+        "bake_visual_entity_mesh",
     ]
     for name in removed:
         assert not hasattr(mtk, name), f"removed symbol {name} leaked back into libmtk_py"
@@ -187,11 +192,21 @@ def test_removed_native_symbols_do_not_return():
         "clear_dirty_sections",
         "mark_section_dirty",
         "set_section_snapshot",
+        "get_entities_json",
+        "set_entities_json",
     ):
         assert not hasattr(mtk.VoxelStorage, name), f"test-only VoxelStorage method {name} leaked"
 
     cloud = mtk.VoxelPointCloud()
-    for name in ("from_arrays", "get_block_states", "get_biomes", "to_mesh_data", "from_mesh_data"):
+    for name in (
+        "from_arrays",
+        "get_block_states",
+        "get_biomes",
+        "to_mesh_data",
+        "from_mesh_data",
+        "get_entities_json",
+        "set_entities_json",
+    ):
         assert not hasattr(mtk.VoxelPointCloud, name), f"removed VoxelPointCloud API {name} leaked back"
         assert not hasattr(cloud, name)
 

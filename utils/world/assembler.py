@@ -102,7 +102,26 @@ class VoxelWorldAssemblyRequest:
     custom_cloud_ensurer: Optional[Callable[..., Any]] = None
     clean_unused_material_slots: bool = True
     sync_point_cloud: bool = True
+    bounds: Optional[Any] = None
+    visual_entities: Optional[List[str]] = None
+    render_plan: Optional[Any] = None
+    package_reader: Optional[Any] = None
     metadata_props: Dict[str, Any] = field(default_factory=dict)
+
+
+def _resolve_world_bounds(
+    req: VoxelWorldAssemblyRequest,
+    cloud_obj: Optional[Any] = None,
+) -> Optional[Any]:
+    if req.bounds is not None:
+        return req.bounds
+    if req.point_cloud is not None and hasattr(req.point_cloud, "bounds") and req.point_cloud.bounds is not None:
+        return req.point_cloud.bounds
+    if req.storage is not None and hasattr(req.storage, "bounds") and req.storage.bounds is not None:
+        return req.storage.bounds
+    if cloud_obj is not None and hasattr(cloud_obj, "get"):
+        return cloud_obj.get("mtk_bounds")
+    return None
 
 
 def assemble_voxel_world(req: VoxelWorldAssemblyRequest) -> Dict[str, Any]:
@@ -267,14 +286,19 @@ def assemble_voxel_world(req: VoxelWorldAssemblyRequest) -> Dict[str, Any]:
         slot_map = getattr(req.mesh_data, "dynamic_entity_slots", None)
     persist_dynamic_entity_slots([root_obj, mesh_obj, cloud_obj], slot_map)
 
+    bounds = _resolve_world_bounds(req, cloud_obj)
+
     # 7. Metadata Custom Properties
     now_ts = time.time()
-    targets = [t for t in (root_obj, mesh_obj) if t is not None]
+    targets = [t for t in (root_obj, mesh_obj, cloud_obj) if t is not None]
     for target in targets:
         safe_set_custom_prop(target, "mtk:container_id", str(container_id))
         safe_set_custom_prop(target, "mtk:origin_centered", bool(req.origin_centered))
+        safe_set_custom_prop(target, "mtk_origin_centered", bool(req.origin_centered))
         safe_set_custom_prop(target, "mtk:imported_at", float(now_ts))
         safe_set_custom_prop(target, "mtk:biome_preset", "WORLD")
+        if bounds and len(bounds) == 6:
+            safe_set_custom_prop(target, "mtk_bounds", [int(x) for x in bounds])
         for k, v in req.metadata_props.items():
             safe_set_custom_prop(target, k, v)
 
@@ -298,7 +322,43 @@ def assemble_voxel_world(req: VoxelWorldAssemblyRequest) -> Dict[str, Any]:
             except Exception:
                 pass
 
-    # 9. Viewport activation
+    # 9. Continuous visual entities assembly via canonical EntityRenderPlan
+    entity_objs = []
+    render_plan = req.render_plan
+    ents_palette = req.visual_entities
+
+    if render_plan is None and ents_palette is None:
+        if req.storage is not None and hasattr(req.storage, "has_visual_entities"):
+            ents_palette = req.storage.get_visual_entities_palette() if req.storage.has_visual_entities() else []
+        elif req.point_cloud is not None and hasattr(req.point_cloud, "has_visual_entities"):
+            ents_palette = req.point_cloud.get_visual_entities_palette() if req.point_cloud.has_visual_entities() else []
+        elif cloud_obj is not None:
+            from ...bridge.point_cloud.constants import PROP_VISUAL_ENTITIES
+            val = cloud_obj.get(PROP_VISUAL_ENTITIES)
+            if isinstance(val, (list, tuple)):
+                ents_palette = list(val)
+
+    if render_plan is not None or (ents_palette is not None and len(ents_palette) > 0) or req.reuse_existing:
+        try:
+            entity_objs = _assemble_visual_entities(
+                root_obj=root_obj,
+                render_plan=render_plan,
+                entities_palette=ents_palette,
+                atlas=req.atlas,
+                target_coll=target_coll,
+                template_mesh_obj=mesh_obj,
+                container_name=req.root_name,
+                origin_centered=req.origin_centered,
+                bounds=bounds,
+                prefs=req.prefs,
+                dynamic_entity_atlases=req.dynamic_entity_atlases,
+                package_reader=req.package_reader,
+            )
+        except Exception as e:
+            logger.warning("Failed assembling visual entities for container '%s': %s", req.root_name, e, exc_info=True)
+            entity_objs = []
+
+    # 10. Viewport activation
     active_target = root_obj or mesh_obj
     if active_target is not None and context and hasattr(context, "view_layer"):
         try:
@@ -315,6 +375,7 @@ def assemble_voxel_world(req: VoxelWorldAssemblyRequest) -> Dict[str, Any]:
         "root_obj": root_obj,
         "mesh_obj": mesh_obj,
         "cloud_obj": cloud_obj,
+        "entity_objs": entity_objs,
         "container_id": container_id,
         "materials": materials,
         "inject_ms": inject_ms,
@@ -322,6 +383,269 @@ def assemble_voxel_world(req: VoxelWorldAssemblyRequest) -> Dict[str, Any]:
         "cloud_ms": cloud_ms,
         "host_ms": host_ms,
     }
+
+
+def _assemble_visual_entities(
+    root_obj: Any,
+    entities_palette: Optional[List[Union[str, dict]]] = None,
+    atlas: Any = None,
+    target_coll: Any = None,
+    template_mesh_obj: Any = None,
+    container_name: str = "World",
+    origin_centered: bool = True,
+    bounds: Optional[Any] = None,
+    prefs: Optional[Any] = None,
+    dynamic_entity_atlases: Optional[Any] = None,
+    package_reader: Optional[Any] = None,
+    render_plan: Optional[Any] = None,
+) -> List[Any]:
+    """
+    Assembles continuous visual entities (such as Paintings) as standalone Blender mesh objects
+    using the canonical EntityRenderPlan contract. Performs pure declarative reconciliation.
+    """
+    plan = render_plan
+    if plan is None:
+        if entities_palette is None:
+            return []
+
+        from ...bridge.engine import get_libmtk
+        mtk = get_libmtk()
+        if mtk is None:
+            return []
+
+        norm_bounds = [int(x) for x in bounds] if bounds and len(bounds) == 6 else None
+        atlas_mapping_json = None
+        if atlas is not None:
+            if hasattr(atlas, "get_mapping_json"):
+                atlas_mapping_json = atlas.get_mapping_json()
+            elif hasattr(atlas, "mapping_json"):
+                atlas_mapping_json = atlas.mapping_json
+
+        try:
+            plan = mtk.build_entity_render_plan(
+                entities_palette,
+                atlas=atlas,
+                atlas_mapping_json=atlas_mapping_json,
+                bounds=norm_bounds,
+                origin_centered=origin_centered,
+                coordinate_system="z_up",
+                revision=0,
+                authoritative=True,
+            )
+        except Exception as e:
+            logger.warning("Failed building entity render plan from palette: %s", e)
+            return []
+
+    # 1. Resolve existing entities parent container
+    entities_parent = None
+    parent_name = f"{container_name}_Entities"
+    if root_obj is not None and hasattr(bpy, "data"):
+        for child in getattr(root_obj, "children", []):
+            if child.name == parent_name or (hasattr(child, "get") and child.get("mtk:is_entities_container")):
+                entities_parent = child
+                break
+
+    # Discover any existing visual entity objects in the container or root recursively
+    def _collect_descendant_entities(parent: Any, found_set: set) -> List[Any]:
+        results = []
+        for child in getattr(parent, "children", []):
+            if child not in found_set:
+                found_set.add(child)
+                if hasattr(child, "get") and child.get("mtk:is_visual_entity"):
+                    results.append(child)
+                results.extend(_collect_descendant_entities(child, found_set))
+        return results
+
+    found_objs = set()
+    existing_entities = []
+    if entities_parent is not None:
+        existing_entities.extend(_collect_descendant_entities(entities_parent, found_objs))
+    if root_obj is not None:
+        existing_entities.extend(_collect_descendant_entities(root_obj, found_objs))
+
+    def _destroy_entity_obj(obj: Any):
+        mesh_to_delete = getattr(obj, "data", None)
+        if hasattr(bpy, "data") and hasattr(bpy.data, "objects") and obj.name in bpy.data.objects:
+            try:
+                bpy.data.objects.remove(obj, do_unlink=True)
+            except Exception:
+                pass
+        if mesh_to_delete is not None and hasattr(bpy, "data") and hasattr(bpy.data, "meshes") and mesh_to_delete.name in bpy.data.meshes:
+            try:
+                bpy.data.meshes.remove(mesh_to_delete, do_unlink=True)
+            except Exception:
+                pass
+
+    if plan is None:
+        return existing_entities
+
+    if plan.node_count == 0:
+        if plan.authoritative:
+            for old_obj in existing_entities:
+                _destroy_entity_obj(old_obj)
+        return []
+
+    # Map existing entities by stable key or UUID
+    def _object_identity_key(obj: Any) -> str:
+        if obj.get("mtk:entity_key"):
+            return str(obj.get("mtk:entity_key"))
+        if obj.get("mtk:entity_uuid"):
+            return f"uuid:{obj.get('mtk:entity_uuid')}"
+        ent_id = obj.get("mtk:entity_id", "minecraft:entity")
+        var = obj.get("mtk:variant", "")
+        payload = obj.get("mtk:entity_payload")
+        if isinstance(payload, (list, tuple)) and len(payload) > 0:
+            try:
+                p_dict = json.loads(payload[0])
+                pos = p_dict.get("position", [0, 0, 0])
+                px = round(float(pos[0]), 3) if len(pos) > 0 else 0
+                py = round(float(pos[1]), 3) if len(pos) > 1 else 0
+                pz = round(float(pos[2]), 3) if len(pos) > 2 else 0
+                return f"synth:{ent_id}|pos:{px:.3f},{py:.3f},{pz:.3f}|var:{var}"
+            except Exception:
+                pass
+        return f"name:{obj.name}"
+
+    existing_by_key: Dict[str, Any] = {}
+    for obj in existing_entities:
+        existing_by_key[_object_identity_key(obj)] = obj
+
+    # Ensure parent container exists
+    if entities_parent is None and root_obj is not None and hasattr(bpy, "data"):
+        entities_parent = bpy.data.objects.new(parent_name, None)
+        entities_parent.parent = root_obj
+        if hasattr(entities_parent, "matrix_parent_inverse"):
+            entities_parent.matrix_parent_inverse.identity()
+        if hasattr(entities_parent, "empty_display_type"):
+            entities_parent.empty_display_type = "PLAIN_AXES"
+        if hasattr(entities_parent, "empty_display_size"):
+            entities_parent.empty_display_size = 0.5
+        safe_set_custom_prop(entities_parent, "mtk:is_entities_container", True)
+        if bounds and len(bounds) == 6:
+            safe_set_custom_prop(entities_parent, "mtk_bounds", [int(x) for x in bounds])
+        safe_set_custom_prop(entities_parent, "mtk:origin_centered", bool(origin_centered))
+        safe_set_custom_prop(entities_parent, "mtk_origin_centered", bool(origin_centered))
+        if target_coll is not None and hasattr(target_coll, "objects") and hasattr(target_coll.objects, "link"):
+            try:
+                target_coll.objects.link(entities_parent)
+            except Exception:
+                pass
+
+    baked_objs = []
+    for node in plan.nodes:
+        reused_obj = existing_by_key.pop(node.key, None)
+        if reused_obj is None and node.uuid:
+            reused_obj = existing_by_key.pop(f"uuid:{node.uuid}", None)
+
+        if reused_obj is not None and getattr(reused_obj, "data", None) is not None:
+            # Diff update existing object
+            try:
+                reused_obj.location = node.location
+                reused_obj.rotation_euler = node.rotation_euler
+                reused_obj.scale = node.scale
+
+                old_var = reused_obj.get("mtk:variant", "")
+                if old_var != (node.variant or ""):
+                    inject_mesh_data(node.mesh, reused_obj.data, update_topology=True, update_normals=True)
+
+                safe_set_custom_prop(reused_obj, "mtk:entity_key", node.key)
+                safe_set_custom_prop(reused_obj, "mtk:is_visual_entity", True)
+                safe_set_custom_prop(reused_obj, "mtk:entity_id", node.entity_id)
+                safe_set_custom_prop(reused_obj, "mtk:entity_payload", [node.entity_json])
+                if node.uuid:
+                    safe_set_custom_prop(reused_obj, "mtk:entity_uuid", node.uuid)
+                if node.custom_name:
+                    safe_set_custom_prop(reused_obj, "mtk:custom_name", node.custom_name)
+                if node.facing:
+                    safe_set_custom_prop(reused_obj, "mtk:facing", node.facing)
+                if node.variant:
+                    safe_set_custom_prop(reused_obj, "mtk:variant", node.variant)
+                if node.dimensions:
+                    safe_set_custom_prop(reused_obj, "mtk:width", int(node.dimensions[0]))
+                    safe_set_custom_prop(reused_obj, "mtk:height", int(node.dimensions[1]))
+
+                baked_objs.append(reused_obj)
+                continue
+            except Exception as e:
+                logger.debug("Failed diff-updating existing entity %s: %s, recreating", node.display_name, e)
+                _destroy_entity_obj(reused_obj)
+
+        # Create new entity object
+        b_mesh = None
+        ent_obj = None
+        try:
+            b_mesh = bpy.data.meshes.new(name=f"{node.display_name}_Mesh")
+            ent_obj = bpy.data.objects.new(name=node.display_name, object_data=b_mesh)
+
+            inject_mesh_data(node.mesh, b_mesh, update_topology=True, update_normals=True)
+
+            ent_obj.location = node.location
+            ent_obj.rotation_euler = node.rotation_euler
+            ent_obj.scale = node.scale
+
+            from ..materials.builder.world_binding import ensure_world_materials
+            try:
+                ensure_world_materials(
+                    ent_obj,
+                    prefs=prefs,
+                    atlas=atlas,
+                    dynamic_entity_atlases=dynamic_entity_atlases,
+                    package_reader=package_reader,
+                    clean_unused_slots=True,
+                )
+            except Exception as e:
+                logger.warning("Failed ensuring materials for entity %s: %s", node.display_name, e)
+                if template_mesh_obj and hasattr(template_mesh_obj, "data") and hasattr(template_mesh_obj.data, "materials"):
+                    for mat in template_mesh_obj.data.materials:
+                        if mat is not None:
+                            ent_obj.data.materials.append(mat)
+
+            if entities_parent is not None:
+                ent_obj.parent = entities_parent
+            elif root_obj is not None:
+                ent_obj.parent = root_obj
+            if hasattr(ent_obj, "matrix_parent_inverse"):
+                ent_obj.matrix_parent_inverse.identity()
+
+            safe_set_custom_prop(ent_obj, "mtk:is_visual_entity", True)
+            safe_set_custom_prop(ent_obj, "mtk:entity_key", node.key)
+            safe_set_custom_prop(ent_obj, "mtk:entity_id", node.entity_id)
+            safe_set_custom_prop(ent_obj, "mtk:entity_payload", [node.entity_json])
+            if node.uuid:
+                safe_set_custom_prop(ent_obj, "mtk:entity_uuid", node.uuid)
+            if node.custom_name:
+                safe_set_custom_prop(ent_obj, "mtk:custom_name", node.custom_name)
+            if node.facing:
+                safe_set_custom_prop(ent_obj, "mtk:facing", node.facing)
+            if node.variant:
+                safe_set_custom_prop(ent_obj, "mtk:variant", node.variant)
+            if node.dimensions:
+                safe_set_custom_prop(ent_obj, "mtk:width", int(node.dimensions[0]))
+                safe_set_custom_prop(ent_obj, "mtk:height", int(node.dimensions[1]))
+
+            if target_coll is not None and hasattr(target_coll, "objects") and hasattr(target_coll.objects, "link"):
+                try:
+                    target_coll.objects.link(ent_obj)
+                except Exception:
+                    pass
+
+            baked_objs.append(ent_obj)
+        except Exception as e:
+            logger.warning("Failed assembling visual entity '%s': %s", node.display_name, e, exc_info=True)
+            if ent_obj is not None:
+                _destroy_entity_obj(ent_obj)
+            elif b_mesh is not None and hasattr(bpy, "data") and hasattr(bpy.data, "meshes") and b_mesh.name in bpy.data.meshes:
+                try:
+                    bpy.data.meshes.remove(b_mesh, do_unlink=True)
+                except Exception:
+                    pass
+
+    # Diff cleanup: destroy stale entities when plan is authoritative
+    if plan.authoritative:
+        for stale_obj in existing_by_key.values():
+            _destroy_entity_obj(stale_obj)
+
+    return baked_objs
 
 
 __all__ = [

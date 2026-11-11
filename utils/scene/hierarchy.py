@@ -99,6 +99,9 @@ def apply_imported_scene_to_blender(
         geometry_origin=ORIGIN_SCENE,
         custom_material_binder=material_binder,
         custom_cloud_ensurer=ensure_voxel_child_cloud,
+        visual_entities=data.get("visual_entities"),
+        render_plan=data.get("render_plan"),
+        package_reader=reader,
         metadata_props=metadata_props,
     )
 
@@ -116,6 +119,8 @@ def apply_imported_scene_to_blender(
         "cloud_obj": result["cloud_obj"],
         "materials": result["materials"],
         "scene_uuid": scene_uuid,
+        "entity_objs": result.get("entity_objs", []),
+        "entities_count": len(result.get("entity_objs", [])),
     }
 
 

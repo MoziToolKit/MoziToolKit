@@ -129,6 +129,13 @@ def apply_imported_save_to_blender(
     clean_name = meta["level_name"].replace(" ", "_")
     base_container_name = f"Save_{clean_name}_{dimension}"
 
+    if atlas is None:
+        try:
+            from ...bridge.world import get_world_pipeline_assets
+            _, atlas, _ = get_world_pipeline_assets(prefs)
+        except Exception:
+            pass
+
     root_obj = target_root
     if root_obj is None and reuse_existing and hasattr(bpy, "data") and hasattr(bpy.data, "objects") and base_container_name in bpy.data.objects:
         cand = bpy.data.objects[base_container_name]
@@ -174,19 +181,33 @@ def apply_imported_save_to_blender(
         "mtk_last_refreshed": float(now_ts),
     }
 
+    if dynamic_entity_atlases is None:
+        dynamic_entity_atlases = resolve_dynamic_entity_atlases(mesh_data)
+
     def mat_binder(m_obj: Any) -> Any:
         used_chunk_ids = mesh_data.used_materials() if hasattr(mesh_data, "used_materials") else None
-        dyn_atlases = dynamic_entity_atlases
-        if dyn_atlases is None:
-            dyn_atlases = resolve_dynamic_entity_atlases(mesh_data)
         ensure_world_materials(
             m_obj,
             prefs=prefs,
             atlas=atlas,
             used_chunk_ids=used_chunk_ids,
-            dynamic_entity_atlases=dyn_atlases,
+            dynamic_entity_atlases=dynamic_entity_atlases,
             clean_unused_slots=True,
         )
+
+    save_bounds = (
+        min_block[0],
+        min_block[1],
+        min_block[2],
+        max_block[0] - min_block[0] + 1,
+        max_block[1] - min_block[1] + 1,
+        max_block[2] - min_block[2] + 1,
+    )
+    vis_ents = (
+        storage.get_visual_entities_palette()
+        if hasattr(storage, "has_visual_entities") and storage.has_visual_entities()
+        else None
+    )
 
     req = VoxelWorldAssemblyRequest(
         container_type="SAVE",
@@ -197,6 +218,8 @@ def apply_imported_save_to_blender(
         atlas=atlas,
         dynamic_entity_atlases=dynamic_entity_atlases,
         origin_centered=origin_centered,
+        bounds=save_bounds,
+        visual_entities=vis_ents,
         reuse_existing=reuse_existing,
         target_root=root_obj,
         context=context,
@@ -263,6 +286,8 @@ def apply_imported_save_to_blender(
         "host_ms": round(host_ms, 2),
         "total_ms": round(elapsed_ms + host_ms, 2),
         "save_uuid": save_uuid,
+        "entities_count": len(res.get("entity_objs", [])),
+        "entity_objs": res.get("entity_objs", []),
     }
 
     return root_obj, stats

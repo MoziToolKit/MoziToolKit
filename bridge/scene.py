@@ -150,6 +150,20 @@ def load_and_mesh_scene_package(
         except Exception:
             pass
 
+    visual_entities = point_cloud.get_visual_entities_palette()
+    render_plan = None
+    if visual_entities:
+        mtk = require_libmtk("load_and_mesh_scene_package:render_plan")
+        render_plan = mtk.build_entity_render_plan(
+            visual_entities,
+            atlas=atlas,
+            bounds=point_cloud.bounds,
+            origin_centered=origin_centered,
+            coordinate_system="z_up",
+            revision=0,
+            authoritative=True,
+        )
+
     return {
         "mesh_data": mesh_data,
         "point_cloud": point_cloud,
@@ -161,6 +175,8 @@ def load_and_mesh_scene_package(
         "colormaps": colormaps,
         "dynamic_entity_slots": dynamic_entity_slots,
         "ctm_solver": ctm_solver,
+        "visual_entities": visual_entities,
+        "render_plan": render_plan,
         "reader": reader,
         "scene_path": str(Path(path).resolve()),
         "degraded": degraded,

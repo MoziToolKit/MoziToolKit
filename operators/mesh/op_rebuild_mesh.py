@@ -191,6 +191,59 @@ def _handle_cloud_success(
 
     apply_rebuilt_mesh_biomes(world_mesh_obj, root_container, storage)
 
+    # Synchronize visual entities alongside rebuilt mesh geometry
+    try:
+        from ...utils.world.assembler import _assemble_visual_entities
+        vis_palette = None
+        if storage is not None and storage.has_visual_entities():
+            vis_palette = storage.get_visual_entities_palette()
+        elif root_container is not None:
+            from ...utils.point_cloud.hierarchy import get_associated_voxel_cloud
+            from ...bridge.point_cloud.constants import PROP_VISUAL_ENTITIES
+            c_obj = get_associated_voxel_cloud(world_mesh_obj) or get_associated_voxel_cloud(root_container)
+            if c_obj is not None:
+                val = c_obj.get(PROP_VISUAL_ENTITIES)
+                if isinstance(val, (list, tuple)):
+                    vis_palette = list(val)
+
+        target_coll = (
+            root_container.users_collection[0]
+            if root_container and getattr(root_container, "users_collection", None)
+            else (context.collection if hasattr(context, "collection") else None)
+        )
+        bounds = None
+        if storage is not None and hasattr(storage, "bounds") and storage.bounds is not None:
+            bounds = storage.bounds
+        if bounds is None:
+            if root_container is not None and root_container.get("mtk_bounds"):
+                bounds = root_container.get("mtk_bounds")
+            elif world_mesh_obj is not None and world_mesh_obj.get("mtk_bounds"):
+                bounds = world_mesh_obj.get("mtk_bounds")
+            elif cloud_obj is not None and hasattr(cloud_obj, "get") and cloud_obj.get("mtk_bounds"):
+                bounds = cloud_obj.get("mtk_bounds")
+
+        has_entities_container = root_container is not None and any(
+            getattr(c, "name", "").endswith("_Entities") or (hasattr(c, "get") and c.get("mtk:is_entities_container"))
+            for c in getattr(root_container, "children", [])
+        )
+        if vis_palette is not None or has_entities_container or (storage is not None and storage.has_visual_entities()):
+            _assemble_visual_entities(
+                root_obj=root_container,
+                entities_palette=vis_palette,
+                storage=storage,
+                atlas=ctx_data.get("atlas"),
+                target_coll=target_coll,
+                template_mesh_obj=world_mesh_obj,
+                container_name=root_container.name if root_container else "World",
+                origin_centered=flags.get("origin_centered", True),
+                bounds=bounds,
+                prefs=prefs,
+                dynamic_entity_atlases=dyn_entities,
+                package_reader=pkg_reader,
+            )
+    except Exception as e:
+        logger.warning("Failed synchronizing visual entities during mesh rebuild: %s", e)
+
     poly_cnt = len(world_mesh_obj.data.polygons) if hasattr(world_mesh_obj.data, "polygons") else 0
     operator.report(
         {"INFO"},
@@ -438,6 +491,25 @@ class MOZI_OT_rebuild_mesh(bpy.types.Operator):
         if cloud_data is None:
             self.report({"ERROR"}, "Failed to extract voxel point cloud data from companion object.")
             return {"CANCELLED"}
+
+        # Synchronize live visual entity objects from viewport into companion point cloud
+        from ...utils.scene.entities import extract_scene_visual_entities
+        from ...bridge.point_cloud.constants import PROP_VISUAL_ENTITIES
+        from ...utils.world.assembler import safe_set_custom_prop
+        target_root = root_container or (cloud_obj.parent if cloud_obj and cloud_obj.parent else None)
+        live_ents_json = extract_scene_visual_entities(target_root or cloud_obj, point_cloud=cloud_data)
+        if live_ents_json is not None:
+            import json
+            try:
+                live_ents = json.loads(live_ents_json)
+                new_palette = [json.dumps(x) for x in live_ents] if live_ents else []
+                for target_prop in (cloud_obj, getattr(cloud_obj, "data", None)):
+                    if target_prop is None:
+                        continue
+                    safe_set_custom_prop(target_prop, PROP_VISUAL_ENTITIES, new_palette)
+                cloud_data.set_visual_entities_palette(new_palette)
+            except Exception as e:
+                logger.warning("Failed syncing live visual entities to cloud_obj: %s", e)
 
         if len(cloud_data) == 0:
             if world_mesh_obj and hasattr(world_mesh_obj, "data") and hasattr(world_mesh_obj.data, "clear_geometry"):

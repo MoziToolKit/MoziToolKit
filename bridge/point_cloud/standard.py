@@ -20,6 +20,7 @@ from .constants import (
     PROP_BIOME_PALETTE,
     PROP_BLOCK_ENTITY_PALETTE,
     PROP_BLOCK_PALETTE,
+    PROP_VISUAL_ENTITIES,
 )
 
 
@@ -109,5 +110,20 @@ def inject_point_cloud_standard(
                 del target_data[PROP_BLOCK_ENTITY_PALETTE]
             except Exception:
                 pass
+
+    # 6. Continuous visual entities palette (array format in Blender UI to prevent accidental text editing)
+    if cloud_data.has_visual_entities():
+        palette = cloud_data.get_visual_entities_palette()
+        if _safe_get_prop(target_data, PROP_VISUAL_ENTITIES) != palette:
+            _safe_set_prop(target_data, PROP_VISUAL_ENTITIES, palette)
+        if obj is not None and _safe_get_prop(obj, PROP_VISUAL_ENTITIES) != palette:
+            _safe_set_prop(obj, PROP_VISUAL_ENTITIES, palette)
+    else:
+        for t in (target_data, obj):
+            if t is not None and hasattr(t, "__contains__") and PROP_VISUAL_ENTITIES in t:
+                try:
+                    del t[PROP_VISUAL_ENTITIES]
+                except Exception:
+                    pass
 
     return True

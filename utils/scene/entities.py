@@ -1,94 +1,25 @@
 # coding: utf-8
 """
-Visual entities scene extraction and transform conversion utilities for MoziToolKit.
+Visual entities scene extraction utilities for MoziToolKit.
 
-Provides mathematical conversion between Minecraft entity coordinates/rotations and
-Blender Object Space / World Space using standard 3D change of basis:
-- Minecraft: +X East, +Y Up, +Z South (Right-handed, local model front = -Z)
-- Blender:   +X East, +Y North, +Z Up (Right-handed Z-Up, local model front = -Y)
+Discovers live visual entities in the Blender scene graph and extracts their
+rigid transforms back into canonical Minecraft coordinates via native FFI (host_transform_to_mc).
 """
 
 from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
+
+from ...bridge.engine import get_libmtk
 
 logger = logging.getLogger(__name__)
 
 try:
     import bpy
-    from mathutils import Matrix, Euler, Quaternion
 except ImportError:
     bpy = None
-    Matrix = None
-    Euler = None
-    Quaternion = None
-
-# Change of basis matrix: Minecraft to Blender (Z-Up)
-# v_bl = M_M2B @ v_mc => (x, -z, y)
-_M_M2B_DATA = (
-    (1.0,  0.0,  0.0),
-    (0.0,  0.0, -1.0),
-    (0.0,  1.0,  0.0),
-)
-
-# Change of basis matrix: Blender to Minecraft
-# v_mc = M_B2M @ v_bl => (x, z, -y)
-_M_B2M_DATA = (
-    (1.0,  0.0,  0.0),
-    (0.0,  0.0,  1.0),
-    (0.0, -1.0,  0.0),
-)
-
-
-def get_m2b_matrix() -> Matrix:
-    return Matrix(_M_M2B_DATA)
-
-
-def get_b2m_matrix() -> Matrix:
-    return Matrix(_M_B2M_DATA)
-
-
-def mc_rotation_to_blender_euler(pitch: float, yaw: float, roll: float) -> Euler:
-    """
-    Converts canonical Minecraft local-model Euler rotation (pitch, yaw, roll in radians)
-    into a Blender Euler (XYZ) using change-of-basis matrix conjugation:
-        R_bl = M_m2b @ R_mc @ M_b2m
-    """
-    if Matrix is None or Euler is None:
-        return (-pitch, roll, yaw)
-    m2b = get_m2b_matrix()
-    b2m = get_b2m_matrix()
-    r_mc = Euler((float(pitch), float(yaw), float(roll)), "XYZ").to_matrix()
-    r_bl = m2b @ r_mc @ b2m
-    return r_bl.to_euler("XYZ")
-
-
-def blender_matrix_to_mc_euler(rot_matrix_or_quat: Any) -> Tuple[float, float, float]:
-    """
-    Converts a Blender rotation (Matrix or Quaternion) into canonical Minecraft
-    local-model Euler XYZ angles (pitch, yaw, roll in radians) via inverse change of basis:
-        R_mc = M_b2m @ R_bl @ M_m2b
-    """
-    if Matrix is None or Euler is None:
-        if hasattr(rot_matrix_or_quat, "to_euler"):
-            e = rot_matrix_or_quat.to_euler("XYZ")
-            return (-float(e.x), float(e.z), float(e.y))
-        return (0.0, 0.0, 0.0)
-
-    b2m = get_b2m_matrix()
-    m2b = get_m2b_matrix()
-    if hasattr(rot_matrix_or_quat, "to_3x3"):
-        r_bl = rot_matrix_or_quat.to_3x3()
-    elif hasattr(rot_matrix_or_quat, "to_matrix"):
-        r_bl = rot_matrix_or_quat.to_matrix().to_3x3()
-    else:
-        r_bl = Matrix(rot_matrix_or_quat).to_3x3()
-
-    r_mc = b2m @ r_bl @ m2b
-    e_mc = r_mc.to_euler("XYZ")
-    return (float(e_mc.x), float(e_mc.y), float(e_mc.z))
 
 
 def extract_scene_visual_entities(
@@ -173,11 +104,8 @@ def extract_scene_visual_entities(
             origin_centered = bool(cand.get("mtk:origin_centered"))
             break
 
-    cx, by, cz = 0.0, 0.0, 0.0
-    if origin_centered and bounds and len(bounds) == 6:
-        cx = float(bounds[0]) + float(bounds[3]) / 2.0
-        by = float(bounds[1])
-        cz = float(bounds[2]) + float(bounds[5]) / 2.0
+    norm_bounds = [int(x) for x in bounds] if bounds and len(bounds) == 6 else None
+    mtk = get_libmtk()
 
     updated_entities = []
     for obj in ent_objs:
@@ -205,26 +133,28 @@ def extract_scene_visual_entities(
             rot_quat = obj.rotation_euler.to_quaternion() if hasattr(obj.rotation_euler, "to_quaternion") else None
             scale = obj.scale
 
-        # Invert target coordinate system (Blender Z-Up -> Minecraft)
-        # Matches Rust `mtk_core::mc_world_to_z_up(wx, wy, wz) = Vec3(wx, -wz, wy)`
-        # blender_x = mc_x - cx   =>  mc_x = blender_x + cx
-        # blender_y = -(mc_z - cz)=>  mc_z = -blender_y + cz
-        # blender_z = mc_y - by   =>  mc_y = blender_z + by
-        mc_x = float(loc[0]) + cx
-        mc_z = -float(loc[1]) + cz
-        mc_y = float(loc[2]) + by
-        ent["position"] = [mc_x, mc_y, mc_z]
-
-        # Invert rotation mapping using authoritative matrix basis conjugation
-        if rot_quat is not None:
-            pitch, yaw, roll = blender_matrix_to_mc_euler(rot_quat)
-            ent["rotation"] = [pitch, yaw, roll]
+        loc_xyz = (float(loc[0]), float(loc[1]), float(loc[2]))
+        if rot_quat is not None and hasattr(rot_quat, "to_euler"):
+            e = rot_quat.to_euler("XYZ")
+            rot_xyz = (float(e.x), float(e.y), float(e.z))
         else:
             r = getattr(obj, "rotation_euler", (0.0, 0.0, 0.0))
-            ent["rotation"] = [-float(r[0]), float(r[2]), float(r[1])]
+            rot_xyz = (float(r[0]), float(r[1]), float(r[2]))
+        scale_xyz = (float(scale[0]), float(scale[1]), float(scale[2]))
 
-        # Scale mapping: (X_bl -> X_mc, Y_bl -> Z_mc, Z_bl -> Y_mc)
-        ent["scale"] = [float(scale[0]), float(scale[2]), float(scale[1])]
+        # Invert target coordinate system via canonical Rust operator (Single Source of Truth)
+        if mtk is not None and hasattr(mtk, "host_transform_to_mc"):
+            mc_pos, mc_rot, mc_scale = mtk.host_transform_to_mc(
+                loc_xyz,
+                rot_xyz,
+                scale_xyz,
+                bounds=norm_bounds,
+                origin_centered=origin_centered,
+                coordinate_system="z_up",
+            )
+            ent["position"] = [float(mc_pos[0]), float(mc_pos[1]), float(mc_pos[2])]
+            ent["rotation"] = [float(mc_rot[0]), float(mc_rot[1]), float(mc_rot[2])]
+            ent["scale"] = [float(mc_scale[0]), float(mc_scale[1]), float(mc_scale[2])]
 
         if obj.get("mtk:entity_uuid"):
             ent["uuid"] = str(obj.get("mtk:entity_uuid"))

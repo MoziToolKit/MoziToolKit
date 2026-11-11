@@ -17,6 +17,7 @@ def test_required_native_symbols_exist():
         "compute_biome_tint_attributes_paletted",
         "build_material_palette",
         "build_entity_render_plan",
+        "host_transform_to_mc",
         "EntityRenderNode",
         "EntityRenderPlan",
         "EntityRenderTransform",

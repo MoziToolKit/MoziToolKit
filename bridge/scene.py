@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from .assets.cache import open_active_asset_cache
 from .engine import get_libmtk, require_libmtk
@@ -153,8 +153,7 @@ def load_and_mesh_scene_package(
     visual_entities = point_cloud.get_visual_entities_palette()
     render_plan = None
     if visual_entities:
-        mtk = require_libmtk("load_and_mesh_scene_package:render_plan")
-        render_plan = mtk.build_entity_render_plan(
+        render_plan = build_entity_render_plan(
             visual_entities,
             atlas=atlas,
             bounds=point_cloud.bounds,
@@ -260,3 +259,81 @@ def export_scene_package(
     )
 
     return meta.to_dict()
+
+
+def build_entity_render_plan(
+    entities: Any,
+    atlas: Any = None,
+    config: Any = None,
+    atlas_mapping_json: Optional[str] = None,
+    bounds: Optional[List[int]] = None,
+    origin_centered: bool = True,
+    coordinate_system: str = "z_up",
+    revision: int = 0,
+    authoritative: bool = True,
+) -> Any:
+    """
+    Bakes and compiles a batch of visual entities into a unified EntityRenderPlan.
+    Calculates host-space transforms, assigns unique deterministic keys, and binds atlas slots.
+    """
+    mtk = require_libmtk("build_entity_render_plan")
+    return mtk.build_entity_render_plan(
+        entities,
+        atlas=atlas,
+        config=config,
+        atlas_mapping_json=atlas_mapping_json,
+        bounds=bounds,
+        origin_centered=origin_centered,
+        coordinate_system=coordinate_system,
+        revision=revision,
+        authoritative=authoritative,
+    )
+
+
+def host_transform_to_mc(
+    loc: Tuple[float, float, float],
+    rot_euler: Tuple[float, float, float],
+    scale: Tuple[float, float, float],
+    bounds: Optional[List[int]] = None,
+    origin_centered: bool = True,
+    coordinate_system: str = "z_up",
+) -> Tuple[Tuple[float, float, float], Tuple[float, float, float], Tuple[float, float, float]]:
+    """
+    Transforms host location, Euler rotation (XYZ radians), and scale back into
+    canonical Minecraft world coordinates (Single Source of Truth in native core).
+    """
+    mtk = require_libmtk("host_transform_to_mc")
+    return mtk.host_transform_to_mc(
+        loc,
+        rot_euler,
+        scale,
+        bounds=bounds,
+        origin_centered=origin_centered,
+        coordinate_system=coordinate_system,
+    )
+
+
+def __getattr__(name: str) -> Any:
+    if name in ("EntityRenderPlan", "EntityRenderNode", "EntityRenderTransform"):
+        mtk = get_libmtk()
+        if mtk is None:
+            require_libmtk(f"scene bridge type {name}")
+        val = getattr(mtk, name, None)
+        if val is None:
+            raise AttributeError(f"libmtk_py does not expose '{name}'")
+        return val
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+
+
+__all__ = [
+    "inspect_scene_package",
+    "read_scene_package",
+    "load_and_mesh_scene_package",
+    "export_scene_package",
+    "build_entity_render_plan",
+    "host_transform_to_mc",
+    "EntityRenderPlan",
+    "EntityRenderNode",
+    "EntityRenderTransform",
+]
+

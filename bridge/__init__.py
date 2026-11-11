@@ -88,7 +88,12 @@ from .save import (
     load_and_mesh_minecraft_save,
 )
 from .scene import (
+    EntityRenderNode,
+    EntityRenderPlan,
+    EntityRenderTransform,
+    build_entity_render_plan,
     export_scene_package,
+    host_transform_to_mc,
     inspect_scene_package,
     load_and_mesh_scene_package,
     read_scene_package,
@@ -214,11 +219,16 @@ __all__ = [
     # Save (Anvil unpacking & meshing)
     "inspect_minecraft_save",
     "load_and_mesh_minecraft_save",
-    # Scene Interchange (.mtkscene)
+    # Scene Interchange (.mtkscene) & Visual Entities
     "export_scene_package",
     "inspect_scene_package",
     "load_and_mesh_scene_package",
     "read_scene_package",
+    "build_entity_render_plan",
+    "host_transform_to_mc",
+    "EntityRenderPlan",
+    "EntityRenderNode",
+    "EntityRenderTransform",
     # Sync (WebSocket LiveSync Client)
     "SyncBridgeSession",
     "get_sync_bridge_session",

@@ -19,6 +19,12 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 import bpy
 
 from ...bridge.mesh import inject_mesh_data
+from ...bridge.scene import (
+    EntityRenderNode,
+    EntityRenderPlan,
+    EntityRenderTransform,
+    build_entity_render_plan,
+)
 from ...bridge.world import resolve_dynamic_entity_atlases
 from ..materials.builder.world_binding import ensure_world_materials
 from ..mesh.ownership import stamp_geometry_origin
@@ -408,11 +414,6 @@ def _assemble_visual_entities(
         if entities_palette is None:
             return []
 
-        from ...bridge.engine import get_libmtk
-        mtk = get_libmtk()
-        if mtk is None:
-            return []
-
         norm_bounds = [int(x) for x in bounds] if bounds and len(bounds) == 6 else None
         atlas_mapping_json = None
         if atlas is not None:
@@ -422,7 +423,7 @@ def _assemble_visual_entities(
                 atlas_mapping_json = atlas.mapping_json
 
         try:
-            plan = mtk.build_entity_render_plan(
+            plan = build_entity_render_plan(
                 entities_palette,
                 atlas=atlas,
                 atlas_mapping_json=atlas_mapping_json,
@@ -532,7 +533,9 @@ def _assemble_visual_entities(
                 pass
 
     baked_objs = []
-    for node in plan.nodes:
+    for raw_node in plan.nodes:
+        node: EntityRenderNode = raw_node
+        transform: EntityRenderTransform = node.transform
         reused_obj = existing_by_key.pop(node.key, None)
         if reused_obj is None and node.uuid:
             reused_obj = existing_by_key.pop(f"uuid:{node.uuid}", None)
@@ -540,9 +543,9 @@ def _assemble_visual_entities(
         if reused_obj is not None and getattr(reused_obj, "data", None) is not None:
             # Diff update existing object
             try:
-                reused_obj.location = node.location
-                reused_obj.rotation_euler = node.rotation_euler
-                reused_obj.scale = node.scale
+                reused_obj.location = transform.location
+                reused_obj.rotation_euler = transform.rotation_euler
+                reused_obj.scale = transform.scale
 
                 old_var = reused_obj.get("mtk:variant", "")
                 if old_var != (node.variant or ""):
@@ -579,9 +582,9 @@ def _assemble_visual_entities(
 
             inject_mesh_data(node.mesh, b_mesh, update_topology=True, update_normals=True)
 
-            ent_obj.location = node.location
-            ent_obj.rotation_euler = node.rotation_euler
-            ent_obj.scale = node.scale
+            ent_obj.location = transform.location
+            ent_obj.rotation_euler = transform.rotation_euler
+            ent_obj.scale = transform.scale
 
             from ..materials.builder.world_binding import ensure_world_materials
             try:

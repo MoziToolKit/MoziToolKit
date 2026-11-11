@@ -12,7 +12,7 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 
-from ...bridge.engine import get_libmtk
+from ...bridge.scene import host_transform_to_mc
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +105,6 @@ def extract_scene_visual_entities(
             break
 
     norm_bounds = [int(x) for x in bounds] if bounds and len(bounds) == 6 else None
-    mtk = get_libmtk()
 
     updated_entities = []
     for obj in ent_objs:
@@ -143,8 +142,8 @@ def extract_scene_visual_entities(
         scale_xyz = (float(scale[0]), float(scale[1]), float(scale[2]))
 
         # Invert target coordinate system via canonical Rust operator (Single Source of Truth)
-        if mtk is not None and hasattr(mtk, "host_transform_to_mc"):
-            mc_pos, mc_rot, mc_scale = mtk.host_transform_to_mc(
+        try:
+            mc_pos, mc_rot, mc_scale = host_transform_to_mc(
                 loc_xyz,
                 rot_xyz,
                 scale_xyz,
@@ -155,6 +154,8 @@ def extract_scene_visual_entities(
             ent["position"] = [float(mc_pos[0]), float(mc_pos[1]), float(mc_pos[2])]
             ent["rotation"] = [float(mc_rot[0]), float(mc_rot[1]), float(mc_rot[2])]
             ent["scale"] = [float(mc_scale[0]), float(mc_scale[1]), float(mc_scale[2])]
+        except Exception as e:
+            logger.warning("Failed converting host transform to Minecraft coordinate system: %s", e)
 
         if obj.get("mtk:entity_uuid"):
             ent["uuid"] = str(obj.get("mtk:entity_uuid"))

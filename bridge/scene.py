@@ -262,7 +262,7 @@ def export_scene_package(
 
 
 def build_entity_render_plan(
-    entities: Any,
+    entities: Any = None,
     atlas: Any = None,
     config: Any = None,
     atlas_mapping_json: Optional[str] = None,
@@ -271,10 +271,12 @@ def build_entity_render_plan(
     coordinate_system: str = "z_up",
     revision: int = 0,
     authoritative: bool = True,
+    deleted_keys: Optional[List[str]] = None,
 ) -> Any:
     """
     Bakes and compiles a batch of visual entities into a unified EntityRenderPlan.
     Calculates host-space transforms, assigns unique deterministic keys, and binds atlas slots.
+    Supports incremental/delta plans via `deleted_keys` with `authoritative=False`.
     """
     mtk = require_libmtk("build_entity_render_plan")
     return mtk.build_entity_render_plan(
@@ -287,6 +289,7 @@ def build_entity_render_plan(
         coordinate_system=coordinate_system,
         revision=revision,
         authoritative=authoritative,
+        deleted_keys=deleted_keys,
     )
 
 

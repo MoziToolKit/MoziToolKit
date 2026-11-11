@@ -193,7 +193,7 @@ def _handle_cloud_success(
 
     # Synchronize visual entities alongside rebuilt mesh geometry
     try:
-        from ...utils.world.assembler import _assemble_visual_entities
+        from ...utils.entities import reconcile_entity_render_plan
         vis_palette = None
         if storage is not None and storage.has_visual_entities():
             vis_palette = storage.get_visual_entities_palette()
@@ -227,10 +227,9 @@ def _handle_cloud_success(
             for c in getattr(root_container, "children", [])
         )
         if vis_palette is not None or has_entities_container or (storage is not None and storage.has_visual_entities()):
-            _assemble_visual_entities(
-                root_obj=root_container,
+            reconcile_entity_render_plan(
+                root_or_container=root_container,
                 entities_palette=vis_palette,
-                storage=storage,
                 atlas=ctx_data.get("atlas"),
                 target_coll=target_coll,
                 template_mesh_obj=world_mesh_obj,

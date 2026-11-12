@@ -373,7 +373,9 @@ def extract_backend_terms(lib_path: Path) -> Dict[str, List[Tuple[str, str]]]:
                 results[rep].append(("backend_progress_report", f"{rel}:{lineno}"))
 
     # 3. Live Sync Lifecycle States from mtk-sync
-    sync_state_file = lib_path / "crates/mtk-sync/src/session/state.rs"
+    sync_state_file = lib_path / "crates/mtk-sync/src/client/session/state.rs"
+    if not sync_state_file.exists():
+        sync_state_file = lib_path / "crates/mtk-sync/src/session/state.rs"
     if sync_state_file.exists():
         content = sync_state_file.read_text(encoding="utf-8")
         m = re.search(r"pub enum SyncLifecycle\s*\{([^}]+)\}", content)

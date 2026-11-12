@@ -239,9 +239,11 @@ def apply_entity_delta(
     eff_bounds = bounds
     if eff_bounds is None:
         for cand in (root_or_container, getattr(root_or_container, "parent", None)):
-            if cand is not None and hasattr(cand, "get") and cand.get("mtk_bounds"):
-                eff_bounds = cand.get("mtk_bounds")
-                break
+            if cand is not None and hasattr(cand, "get"):
+                cb = cand.get("mtk_bounds") or cand.get("mtk_sync_bounds")
+                if cb and len(cb) == 6:
+                    eff_bounds = [int(x) for x in cb]
+                    break
 
     eff_oc = origin_centered
     if eff_oc is None:

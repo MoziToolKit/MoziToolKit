@@ -124,6 +124,13 @@ def reconcile_entity_render_plan(
             return result
 
         norm_bounds = [int(x) for x in bounds] if bounds and len(bounds) == 6 else None
+        if norm_bounds is None and root_or_container is not None:
+            for cand in (root_or_container, getattr(root_or_container, "parent", None)):
+                if cand is not None and hasattr(cand, "get"):
+                    cb = cand.get("mtk_bounds") or cand.get("mtk_sync_bounds")
+                    if cb and len(cb) == 6:
+                        norm_bounds = [int(x) for x in cb]
+                        break
         atlas_mapping_json = None
         if atlas is not None:
             if hasattr(atlas, "get_mapping_json"):
@@ -272,6 +279,8 @@ def reconcile_entity_render_plan(
                 destroy_entity_obj(old_obj)
                 result.deleted.append(old_obj.name)
             existing_by_key.clear()
+            if entities_parent is not None and not getattr(entities_parent, "children", None):
+                destroy_entity_obj(entities_parent)
         else:
             # Add surviving untouched entities to result
             for surviving_obj in set(existing_by_key.values()):

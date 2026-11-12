@@ -246,8 +246,9 @@ Offset | Type     | Description
 4..5   | uint16   | Min Protocol Version Supported (0x0003)
 6..7   | uint16   | Max Protocol Version Supported (0x0003)
 8..11  | uint32   | Client Capabilities Flags:
-       |          |   Bit 0: Supports Zstd
-       |          |   Bit 1: Supports DNA Direct Memory
+       |          |   Bit 0: Supports Zstd (0x00000001)
+       |          |   Bit 1: Supports DNA Direct Memory (0x00000002)
+       |          |   Bit 2: Supports Visual Entities (0x00000004, RFC v3.2)
 12..15 | uint32   | Client Request Flags:
        |          |   Bit 0: FORCE_FULL_BASELINE
        |          |   Bit 1: NO_CACHE
@@ -266,6 +267,8 @@ Offset | Type     | Description
 82..   | bytes    | UTF-8 Auth Token
 --     | uint16   | Cached Dimension Name Length (D_len)
 --     | bytes    | UTF-8 Cached Dimension Name
+--     | uint16   | Subscribed Visual Entities Count (S_len, 仅当 Capabilities Bit 2 置位时)
+--     | List     | S_len 个 UTF-8 String (uint16 length + UTF-8 bytes)
 ```
 
 > **实现备注**：当前 Yefira 服务端解析并保存 HELLO 全部字段，但 `Client Request Flags`
@@ -638,6 +641,55 @@ Offset | Type     | Description
 > **设计要点**：
 > 1. 当玩家破坏、放置或右键交互修改方块实体（如插入陶片、书写告示牌、悬挂旗帜）时，服务端向客户端发送 `DELTA_ENTITY`。
 > 2. 若伴随方块状态改变（如放置新方块），服务端同时按序发送常规 `DELTA_OP` 与对应 `DELTA_ENTITY`。
+
+### 4.17 `0x13` BASELINE_VISUAL_ENTITIES（RFC v3.2 连续视觉实体伴生基线流 S → C）
+
+```
+Offset | Type     | Description
+-------+----------+-------------------------------------------------------------
+0..3   | Header   | Magic ('M', 'T'), Ver (0x03), Opcode (0x13)
+4..11  | uint64   | Related Epoch ID
+12..19 | uint64   | Snapshot Sequence ID
+20..27 | uint64   | Entities Hash (RFC v3.2 独立确定性 xxHash64 校验码)
+28..31 | uint32   | Total Visual Entities Count K
+32..   | List     | K 个连续空间视觉实体条目:
+       |   uint64 - UUID Most Significant Bits (big-endian long)
+       |   uint64 - UUID Least Significant Bits (big-endian long)
+       |   float64 - Absolute Position X (double)
+       |   float64 - Absolute Position Y (double)
+       |   float64 - Absolute Position Z (double)
+       |   float32 - Rotation Pitch (float)
+       |   float32 - Rotation Yaw (float)
+       |   float32 - Rotation Roll (float)
+       |   float32 - Scale X (float)
+       |   float32 - Scale Y (float)
+       |   float32 - Scale Z (float)
+       |   uint8   - Facing (0:Down, 1:Up, 2:North, 3:South, 4:West, 5:East, 255:None)
+       |   uint16  - Entity Resource ID Length (len)
+       |   bytes   - Entity Resource ID UTF-8 (e.g. "minecraft:painting")
+       |   uint32  - Payload Length L
+       |   bytes   - Entity Kind JSON Payload UTF-8
+```
+
+### 4.18 `0x14` DELTA_VISUAL_ENTITY（RFC v3.2 增量连续视觉实体变动 S → C）
+
+```
+Offset | Type     | Description
+-------+----------+-------------------------------------------------------------
+0..3   | Header   | Magic ('M', 'T'), Ver (0x03), Opcode (0x14)
+4..11  | uint64   | Related Epoch ID
+12..19 | uint64   | Sequence ID
+20     | uint8    | Action: 0x01 = UPSERT, 0x02 = REMOVE
+21..28 | uint64   | UUID Most Significant Bits
+29..36 | uint64   | UUID Least Significant Bits
+37..   | Fields   | 当 Action == 0x01 (UPSERT) 时，追加完整实体数据（与 0x13 条目格式相同）；
+       |          | 当 Action == 0x02 (REMOVE) 时，仅需 UUID，包在此截止（固定 37 字节）。
+```
+
+> **设计要点 (RFC v3.2)**：
+> 1. **连续空间实体解耦**：Painting, ItemFrame, ArmorStand 等连续空间实体独立于离散体素网格，拥有独立的 0x13 基线与 0x14 增量 Opcode。
+> 2. **独立确定性 xxHash64 校验**：基线包携带 `entities_hash`，按 UUID 字典序排序后对 IEEE 754 原始二进制位执行哈希，不牵连体素全局哈希；若校验不匹配，触发 `ResyncReason::VisualEntitiesHashMismatch (0x06)`。
+> 3. **动态能力协商**：客户端在 `0x01 HELLO` 中声明 `subscribed_visual_entities`（如 painting, item_frame, glow_item_frame, armor_stand），服务端自动按订阅过滤，免除修改模组重新发布的成本。
 
 ---
 

@@ -139,6 +139,38 @@ def _close_progress_reporter(delay_sec: float = 0.0):
             rep.close()
 
 
+def _resolve_sync_bounds(storage: Any = None, props: Any = None, active_container: Any = None) -> Optional[List[int]]:
+    if storage is not None and hasattr(storage, "bounds"):
+        try:
+            raw_b = storage.bounds
+            b = raw_b() if callable(raw_b) else raw_b
+            if b and len(b) == 6:
+                return [int(x) for x in b]
+            elif b and len(b) == 2 and len(b[0]) == 3 and len(b[1]) == 3:
+                return [int(b[0][0]), int(b[0][1]), int(b[0][2]), int(b[1][0]), int(b[1][1]), int(b[1][2])]
+        except Exception:
+            pass
+    if active_container is not None and hasattr(active_container, "get"):
+        cb = active_container.get("mtk_bounds") or active_container.get("mtk_sync_bounds")
+        if cb and len(cb) == 6:
+            return [int(x) for x in cb]
+    if props is not None:
+        try:
+            sx = int(getattr(props, "size_x", 0))
+            sy = int(getattr(props, "size_y", 0))
+            sz = int(getattr(props, "size_z", 0))
+            if sx > 0 and sy > 0 and sz > 0:
+                return [
+                    int(getattr(props, "min_x", 0)),
+                    int(getattr(props, "min_y", 0)),
+                    int(getattr(props, "min_z", 0)),
+                    sx, sy, sz,
+                ]
+        except Exception:
+            pass
+    return None
+
+
 def _get_active_props(context: Optional[bpy.types.Context] = None, root_container: Optional[bpy.types.Object] = None) -> Optional[bpy.types.PropertyGroup]:
     """Resolves active live sync properties bound to container or scene."""
     if root_container is not None and hasattr(root_container, "mozi_sync"):
@@ -296,6 +328,27 @@ def _sync_timer_tick() -> Optional[float]:
             _sync_prop("stream_progress_total", 100)
             _sync_prop("is_streaming", False)
 
+        elif ev_type == "VISUAL_ENTITIES_UPDATED":
+            upserted = ev.get("upserted", [])
+            deleted_uuids = ev.get("deleted_uuids", [])
+            if upserted or deleted_uuids:
+                try:
+                    from ...utils.entities.local_ops import apply_entity_delta
+                    eff_storage = getattr(session, "get_storage", lambda: None)()
+                    eff_bounds = _resolve_sync_bounds(eff_storage, props, active_container)
+                    apply_entity_delta(
+                        root_or_container=active_container,
+                        upsert_entities=upserted,
+                        delete_keys=deleted_uuids,
+                        atlas=getattr(session, "atlas", None),
+                        container_name=getattr(active_container, "name", "World"),
+                        bounds=eff_bounds,
+                        origin_centered=True,
+                    )
+                    _sync_prop("last_update_info", f"Visual Entities: +{len(upserted)} / -{len(deleted_uuids)}")
+                except Exception as e:
+                    logger.debug("Failed applying visual entity delta: %s", e)
+
         elif ev_type == "VERIFIED":
             is_ver = ev.get("is_verified", False)
             _sync_prop("sync_verified", is_ver)
@@ -385,6 +438,31 @@ def _sync_timer_tick() -> Optional[float]:
                 _sync_prop("last_update_info", f"World Mesh updated: {v_count:,} vertices, {f_count:,} faces")
                 _sync_prop("is_streaming", False)
 
+                if needs_voxel_sync and storage is not None and getattr(storage, "get_visual_entities_palette", None) is not None:
+                    try:
+                        from ...utils.entities import reconcile_entity_render_plan
+                        palette = storage.get_visual_entities_palette()
+                        has_visual = getattr(storage, "has_visual_entities", None) and storage.has_visual_entities()
+                        has_existing_entities = False
+                        if active_container is not None and hasattr(active_container, "children"):
+                            for child in active_container.children:
+                                if child.get("mtk:is_entities_container") or child.get("mtk:is_visual_entity") or child.name.endswith("_Entities"):
+                                    has_existing_entities = True
+                                    break
+                        if has_visual or has_existing_entities:
+                            eff_bounds = _resolve_sync_bounds(storage, props, active_container)
+                            reconcile_entity_render_plan(
+                                root_or_container=active_container,
+                                entities_palette=palette,
+                                atlas=getattr(session, "atlas", None),
+                                container_name=getattr(active_container, "name", "World"),
+                                bounds=eff_bounds,
+                                origin_centered=True,
+                                authoritative=True,
+                            )
+                    except Exception as e:
+                        logger.debug("Failed reconciling baseline visual entities on mesh update: %s", e)
+
                 if _progress_reporter is not None:
                     _progress_reporter.update(_progress_reporter.total, _progress_reporter.total, message=f"Mesh ready ({v_count:,} v, {f_count:,} f)")
             else:
@@ -397,25 +475,56 @@ def _sync_timer_tick() -> Optional[float]:
         try:
             storage = session.get_storage()
             if storage is not None:
-                from ...utils.point_cloud import ensure_voxel_child_cloud
-                ensure_voxel_child_cloud(active_container, storage=storage, origin_centered=True, initial_hidden=True)
+                try:
+                    from ...utils.point_cloud import ensure_voxel_child_cloud
+                    ensure_voxel_child_cloud(active_container, storage=storage, origin_centered=True, initial_hidden=True)
+                except Exception as e:
+                    logger.debug("Failed ensuring voxel child cloud on stream finished: %s", e)
 
                 # Cache the storage under the container/mesh names so the biome
                 # panel can restore WORLD even if the initial mesh event arrived
                 # before this STREAM_FINISHED event.
-                from ...utils.materials.biome.updater import (
-                    mark_world_biome,
-                    register_object_storage,
-                )
-                if mark_world_biome is not None:
-                    container_name = getattr(active_container, "name", "")
-                    if isinstance(container_name, str) and container_name:
-                        register_object_storage(container_name, storage)
-                        register_object_storage(f"{container_name}_Mesh", storage)
-                    container_id = active_container.get("mtk:container_id") if hasattr(active_container, "get") else None
-                    if isinstance(container_id, str) and container_id:
-                        register_object_storage(container_id, storage)
-                    mark_world_biome(active_container, storage)
+                try:
+                    from ...utils.materials.biome.updater import (
+                        mark_world_biome,
+                        register_object_storage,
+                    )
+                    if mark_world_biome is not None:
+                        container_name = getattr(active_container, "name", "")
+                        if isinstance(container_name, str) and container_name:
+                            register_object_storage(container_name, storage)
+                            register_object_storage(f"{container_name}_Mesh", storage)
+                        container_id = active_container.get("mtk:container_id") if hasattr(active_container, "get") else None
+                        if isinstance(container_id, str) and container_id:
+                            register_object_storage(container_id, storage)
+                        mark_world_biome(active_container, storage)
+                except Exception as e:
+                    logger.debug("Failed registering/marking biome storage on stream finished: %s", e)
+
+                if getattr(storage, "get_visual_entities_palette", None) is not None:
+                    try:
+                        from ...utils.entities import reconcile_entity_render_plan
+                        palette = storage.get_visual_entities_palette()
+                        has_visual = getattr(storage, "has_visual_entities", None) and storage.has_visual_entities()
+                        has_existing_entities = False
+                        if active_container is not None and hasattr(active_container, "children"):
+                            for child in active_container.children:
+                                if child.get("mtk:is_entities_container") or child.get("mtk:is_visual_entity") or child.name.endswith("_Entities"):
+                                    has_existing_entities = True
+                                    break
+                        if has_visual or has_existing_entities:
+                            eff_bounds = _resolve_sync_bounds(storage, props, active_container)
+                            reconcile_entity_render_plan(
+                                root_or_container=active_container,
+                                entities_palette=palette,
+                                atlas=getattr(session, "atlas", None),
+                                container_name=getattr(active_container, "name", "World"),
+                                bounds=eff_bounds,
+                                origin_centered=True,
+                                authoritative=True,
+                            )
+                    except Exception as e:
+                        logger.debug("Failed reconciling baseline visual entities on stream finished: %s", e)
         except Exception as e:
             logger.debug("Failed syncing voxel cloud on event: %s", e)
 

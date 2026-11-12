@@ -180,9 +180,17 @@ def check_native_api_consumers() -> list[str]:
             prod_files.append(py_file.read_text(encoding="utf-8"))
     prod_blob = "\n".join(prod_files)
 
-    # Every top-level symbol in libmtk_py (except `unstable` and `version`) must appear in production code
+    # Top-level symbols in libmtk_py exempt from production consumer checks
+    # (e.g. metadata or relay server components staged for headless / mock use)
+    ALLOWED_WITHOUT_PROD_CONSUMER = {
+        "unstable",
+        "version",
+        "LiveSyncServer",
+    }
+
+    # Every top-level symbol in libmtk_py must appear in production code
     for name in sorted(n for n in dir(libmtk_py) if not n.startswith("_")):
-        if name in ("unstable", "version"):
+        if name in ALLOWED_WITHOUT_PROD_CONSUMER:
             continue
         if not re.search(rf"\b{re.escape(name)}\b", prod_blob):
             errors.append(

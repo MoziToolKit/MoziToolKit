@@ -9,7 +9,7 @@
     "required_native_symbols_present": true
   },
   "forbidden_hits": [],
-  "generated_at": "2026-11-12T05:28:38.367864+00:00",
+  "generated_at": "2026-11-12T14:54:56.304519+00:00",
   "libmtk_blender_dna": {
     "api_version": 2,
     "functions": [
@@ -67,6 +67,7 @@
       "EntityRenderTransform",
       "FaceCuller",
       "GridAtlasSpec",
+      "LiveSyncServer",
       "LiveSyncSession",
       "MaterialResolver",
       "MeshData",

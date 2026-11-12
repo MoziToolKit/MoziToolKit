@@ -23,6 +23,7 @@ from ..assets import (
     get_configured_ctm_solver,
 )
 from .session import SyncBridgeSession
+from .server import SyncBridgeServer
 
 logger = logging.getLogger("MoziToolKit.Bridge.Sync")
 
@@ -55,6 +56,7 @@ def reset_sync_bridge_session() -> SyncBridgeSession:
 __all__ = [
     "is_sync_available",
     "SyncBridgeSession",
+    "SyncBridgeServer",
     "get_sync_bridge_session",
     "reset_sync_bridge_session",
     "load_baked_model_database",

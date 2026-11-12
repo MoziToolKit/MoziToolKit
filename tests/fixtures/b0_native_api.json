@@ -9,7 +9,7 @@
     "required_native_symbols_present": true
   },
   "forbidden_hits": [],
-  "generated_at": "2026-11-10T04:45:20.071675+00:00",
+  "generated_at": "2026-11-12T05:28:38.367864+00:00",
   "libmtk_blender_dna": {
     "api_version": 2,
     "functions": [
@@ -62,6 +62,9 @@
       "BakedModelDatabase",
       "BiomeResolver",
       "CtmSolver",
+      "EntityRenderNode",
+      "EntityRenderPlan",
+      "EntityRenderTransform",
       "FaceCuller",
       "GridAtlasSpec",
       "LiveSyncSession",
@@ -84,6 +87,7 @@
       "analyze_mesh_hard_edges",
       "api_version",
       "batch_analyze_transparent_faces_f32",
+      "build_entity_render_plan",
       "build_material_palette",
       "builtin_biome_suffixes",
       "calculate_uv_area",
@@ -99,6 +103,7 @@
       "get_fluid_top_uvs",
       "get_uv_bounds",
       "get_uv_center",
+      "host_transform_to_mc",
       "inspect_minecraft_save",
       "load_and_mesh_minecraft_save",
       "normalize_banner_pattern",
@@ -111,6 +116,7 @@
       "resolve_active_cache_package",
       "sample_colormap_colors",
       "scale_uv",
+      "supported_visual_entity_ids",
       "unstable",
       "version"
     ],

@@ -316,6 +316,15 @@ def host_transform_to_mc(
     )
 
 
+def supported_visual_entity_ids() -> List[str]:
+    """
+    Returns the canonical list of visual entity IDs supported by native libmtk
+    (Single Source of Truth, SSOT).
+    """
+    mtk = require_libmtk("supported_visual_entity_ids")
+    return list(mtk.supported_visual_entity_ids())
+
+
 def __getattr__(name: str) -> Any:
     if name in ("EntityRenderPlan", "EntityRenderNode", "EntityRenderTransform"):
         mtk = get_libmtk()
@@ -335,6 +344,7 @@ __all__ = [
     "export_scene_package",
     "build_entity_render_plan",
     "host_transform_to_mc",
+    "supported_visual_entity_ids",
     "EntityRenderPlan",
     "EntityRenderNode",
     "EntityRenderTransform",

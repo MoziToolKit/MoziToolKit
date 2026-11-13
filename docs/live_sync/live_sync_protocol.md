@@ -59,19 +59,21 @@
 
 | 层 | 端 | 入口文件 | 职责 |
 | :--- | :--- | :--- | :--- |
-| 协议编解码 | Rust | `crates/mtk-sync/src/protocol/codec.rs` | 定长帧头、LE 编解码、xxHash64 分块校验、资源上限 |
-| 协议常量 | Rust | `crates/mtk-sync/src/protocol/constants.rs` | Opcode、SyncDecision、硬限、Cancel/Resync/Error 码 |
-| 状态指纹 | Rust | `crates/mtk-sync/src/protocol/hasher.rs` | Canonical `state_hash` 计算 |
-| 会话状态机 | Rust | `crates/mtk-sync/src/session/dispatcher.rs` | 握手、基线组装、Staging/Replay、看门狗、失败熔断 |
-| 基线组装 | Rust | `crates/mtk-sync/src/session/assembler.rs` | 分块校验、体素/群系解包、SectionStorage 重建、指纹校验 |
-| 增量暂存 | Rust | `crates/mtk-sync/src/session/staging.rs` | 快照期间增量排队与栅栏对齐 |
-| 网络传输 | Rust | `crates/mtk-sync/src/client.rs` | 原生 WebSocket 客户端、重连、命令通道 |
-| 状态序列化 | Java | `encoder/BlockStateSerializer.java` | 服务端 Canonical BlockState 序列化 (协议与包编码已下沉至 Rust mtk-sync) |
-| 规范扫描 | Java | `encoder/CanonicalVoxelScanner.java` | 选区连续扫描、xxHash64、协作取消 |
-| 基线与增量 | Java | `network/WebSocketServerManager.java` | 单流代际、调色板、Delta 批处理、快速重连判定 |
-| 前端桥接 | Python | `bridge/sync.py` | 原生会话单例、事件轮询、连接状态权威同步 |
-| Blender 操作符 | Python | `operators/sync/op_sync_connect.py` | 连接/刷新/断开、网格注入、持久化、UI 状态 |
-| 场景持久化 | Python | `operators/sync/hierarchy.py` | 根容器/子网格层级、`mtk_sync_*` 属性读写 |
+| 协议编解码 | Rust | `crates/mtk-sync/src/protocol/codec/` | 定长帧头、LE 编解码、xxHash64 分块校验、视觉实体解包、资源上限 |
+| 协议常量 | Rust | `crates/mtk-sync/src/protocol/constants.rs` | Opcode、SyncDecision、硬限、Cancel/Resync/Error 码、能力标志位 |
+| 状态指纹 | Rust | `crates/mtk-sync/src/protocol/hasher.rs` | Canonical `state_hash`（xxHash64 稀疏体素指纹与视觉实体指纹）权威计算 SSOT |
+| 协同客户端 | Rust | `crates/mtk-sync/src/client/` | 原生多线程 WebSocket 客户端、握手协商、增量排队、看门狗、0ms 缓存直连 |
+| 协同服务端 | Rust | `crates/mtk-sync/src/server/` | 原生多线程 WebSocket 服务端 (`LiveSyncServer`)、权威握手裁决、分块流式编码 |
+| JNI 原生绑定 | Rust/Java | `bindings/mtk-jni/` + `NativeSync.java` | 跨平台 JNI 零拷贝胶水层，为模组端提供极速服务端与 xxHash64 计算 |
+| 状态序列化 | Java | `encoder/BlockStateSerializer.java` | 服务端 Canonical BlockState 序列化与属性字典序排序 |
+| 规范体素扫描 | Java | `encoder/CanonicalVoxelScanner.java` | 选区连续扫描、原生 xxHash64 协同、协作式取消 |
+| 视觉实体扫描 | Java | `encoder/VisualEntityScanner.java` | RFC v3.2 画作/展示框等连续视觉实体与 NBT 序列化 |
+| 模组网络控制 | Java | `network/WebSocketServerManager.java` | 选区生命周期管理、调用 `NativeSync` 进行基线提交与增量广播 |
+| 前端会话桥接 | Python | `bridge/sync/session.py` / `lifecycle.py` | 原生会话单例、事件轮询、连接生命周期管理 |
+| 前端服务端桥接 | Python | `bridge/sync/server.py` | `SyncBridgeServer` 原生 LiveSyncServer 封装，服务于无头自动化与测试 |
+| 伴生体素点云 | Python | `bridge/point_cloud/` | `_VoxelCloud` 伴生点云提取、0ms 重连指纹比对与 VoxelStorage 恢复 |
+| 实体协调器 | Python | `utils/entities/reconciler.py` | RFC v3.2 连续视觉实体声明式装配、增量局部重构与方向对齐 |
+| Blender 操作符 | Python | `operators/sync/op_sync_connect.py` | 连接/刷新/断开、0ms 点云缓存直连、网格注入与 UI 状态 |
 
 ---
 
@@ -520,32 +522,40 @@ Offset | Type     | Description
     “点击 Refresh 或更换选区后重试”；
   * 手动 `Refresh` 会清零失败计数并重新请求全量快照。
 
-### 4.10 `0x09` STATE_VERIFY_REQ（已废弃，Opcode 已从实现中移除）
+### 4.10 `0x09` STATE_VERIFY_REQ 与 `0x0A` STATE_VERIFY_RESP（废弃独立轮询，全面升级多层权威校验体系）
+
+在早期初稿草案中，曾规划通过独立的 `0x09 STATE_VERIFY_REQ` 与 `0x0A STATE_VERIFY_RESP` 协议包进行定期主动状态轮询验证。然而，轮询式验证存在高频网络开销大、与主线程事件泵争抢带宽及状态竞争（Race Condition）等问题。
+
+**重要架构澄清**：`0x09/0x0A` 独立轮询 Opcode 虽然已从枚举中物理删除，但**校验机制（Verification Mechanism）不仅未被废弃，反而被全面重构并升级为内嵌于整个流式生命周期的「六层端到端权威校验体系 (Six-Tier Verification Architecture)」**：
+
+1. **握手与 0ms 直连校验 (Tier 1: Handshake & 0ms Reconnect SSOT)**：
+   - 客户端在重连时通过伴生点云计算稀疏指纹，在 `0x01 HELLO` 中携带 `cached_state_hash` 与选区坐标；
+   - 服务端在 `decide_handshake` 中以微秒级严格校验 `UUID`、`Epoch` 与 `state_hash`。完全一致即下发 `0x00 VERIFIED_SKIP_REBUILD`，短路跳过全量网格重刷，达成 0ms 直连。
+2. **基线切片分块校验 (Tier 2: Baseline Chunk xxHash64 Integrity)**：
+   - 每个 `0x04 BASELINE_CHUNK` 数据帧头均携带当前分块原始解压数据的 64 位 `xxHash64` 校验码；
+   - Rust 解码器在 `decode_packet` 阶段直接执行内存校验，任何损坏帧立即丢弃并触发 `ResyncReason::ChunkCorrupted (0x04)`。
+3. **基线终态指纹校验 (Tier 3: Baseline End StateHash SSOT)**：
+   - `0x05 BASELINE_END` 包携带全量选区终态权威 `final_state_hash`；
+   - 组装器解包完毕并重建 `VoxelStorage` 拓扑后，强制调用 `compute_sparse_state_hash_for_storage` 重新计算全空间稀疏哈希并做逐位比对；
+   - 若不匹配，立即丢弃半成品网格并发送 `0x0D RESYNC_REQUEST` (`ResyncReason::StateHashMismatch = 0x03`) 触发自愈重拉。
+4. **连续视觉实体独立校验 (Tier 4: Visual Entities xxHash64 SSOT)**：
+   - RFC v3.2 的 `0x13 BASELINE_VISUAL_ENTITIES` 独立携带 `entities_hash`；
+   - 客户端组装后计算并核验实体的连续坐标与 NBT 哈希，不一致触发 `ResyncReason::VisualEntitiesHashMismatch (0x06)`，不干扰体素主流程。
+5. **伴生体素点云前置校验 (Tier 5: Companion Point Cloud Pre-Flight Check)**：
+   - 在 Blender 端发起连接前，首先通过子级 `_VoxelCloud` 读取离散点云与调色板，调用 `compute_sparse_state_hash_for_point_cloud` 本地验证自洽性，防御用户手工误删或误改点云属性。
+6. **增量操作与边界合法性门禁 (Tier 6: Delta Coordinate Bounds Guard)**：
+   - 服务端与客户端均内置选区软硬上限防护（`MAX_SELECTION_VOLUME = 33,554,432`），任何超出包围盒的非法 Delta 坐标均被严格拒绝并下发 `ERROR(INVALID_BOUNDS)`。
+
+历史协议包格式（仅供逆向与审计查阅，当前实现不发送）：
 
 ```
 Offset | Type     | Description
 -------+----------+-------------------------------------------------------------
-0..3   | Header   | Magic ('M', 'T'), Ver (0x03), Opcode (0x09)
+0..3   | Header   | Magic ('M', 'T'), Ver (0x03), Opcode (0x09 / 0x0A)
 4..11  | uint64   | Epoch ID
 12..19 | uint64   | Current Sequence ID
-20..27 | uint64   | Volume state_hash
+20..27 | uint64   | Volume state_hash (REQ) / uint8 IsMatch (RESP)
 ```
-
-### 4.11 `0x0A` STATE_VERIFY_RESP（已废弃，Opcode 已从实现中移除）
-
-```
-Offset | Type     | Description
--------+----------+-------------------------------------------------------------
-0..3   | Header   | Magic ('M', 'T'), Ver (0x03), Opcode (0x0A)
-4..11  | uint64   | Epoch ID
-12..19 | uint64   | Current Sequence ID
-20     | uint8    | IsMatch (1 = 匹配, 0 = 不匹配)
-```
-
-> **已废弃**：`0x09/0x0A` 从未纳入会话流程，握手完整性现由 `WELCOME` +
-> `BASELINE_END` + `RESYNC_REQUEST(0x0D)` 负责。`mtk-sync` 的 `Opcode` 枚举、
-> 编解码器与 `mtk-py` 绑定中的对应分支已物理删除；本节仅保留历史线格式记录，
-> 任何实现都不得再发送这两个 Opcode。
 
 ### 4.12 `0x0B` CANCEL（任务主动取消，双向）
 
@@ -874,11 +884,13 @@ Blender 4.2+ / 5.0 的 C 内存布局规范：
 | Delta Staging + Snapshot Replay | `staging.rs`, `dispatcher.rs` | ✅ |
 | PALETTE_UPDATE 与批次共享序号 | `broadcastDeltaUpdate` | ✅（文档已按实现修正） |
 | RESYNC_REQUEST | 客户端 + 服务端整包重发 | ✅（无 Delta 窗口补发） |
-| STATE_VERIFY_REQ/RESP | 编解码与 Opcode | 🗑️ 已物理删除 |
+| STATE_VERIFY_REQ/RESP | 编解码与 Opcode | 🔄 升级为六层内联权威校验体系（废弃独立轮询包 0x09/0x0A，由握手校验、分块 xxHash64、基线终态 state_hash SSOT、视觉实体 entities_hash SSOT 统一接管） |
 | CANCEL 双向取消 | 客户端 + 服务端代际失效 | ✅（v2.0 修复） |
 | PING / PONG | 编解码 + 应答 | ⚠️ 无应用层定时器 |
 | ERROR(0x10) | 编解码 + 超限/资源错误 | ✅（v2.0 修复） |
-| 快速重连持久化 | Java 失效规则保留；宿主侧实现已删除 | ⚠️ 服务端判定完备；宿主侧入口已移除（等待 VoxelStorage 持久化） |
+| 0ms 零重建快速重连与持久化 | 伴生点云 `_VoxelCloud`、`load_from_point_cloud` 与 `start_with_cache` | ✅ 完备实现（点云原生持久化 VoxelStorage 拓扑，握手比对 state_hash 命中后 0ms 直连） |
+| RFC v3.2 连续视觉实体伴生流 | 0x13 基线 / 0x14 增量 / 独立 entities_hash | ✅ 完备实现（画作/展示框等解耦流式同步、声明式协调与方向对齐） |
+| 原生 LiveSyncServer 控制面 | Rust `mtk-sync/src/server/` + `mtk-jni` | ✅ 完备实现（下沉协议编码至 Rust，模组零拷贝 JNI 消费） |
 | 基线看门狗 / 限流 / 失败熔断 | `dispatcher.rs` | ✅（v2.0 修复） |
 | Worker 异常终态保证 | `WorkerExitGuard` + `catch_unwind` | ✅（v2.0 修复） |
 | 宿主连接状态权威同步 | `bridge/sync.py`, `_sync_timer_tick` | ✅（v2.0 修复） |
@@ -890,14 +902,11 @@ Blender 4.2+ / 5.0 的 C 内存布局规范：
 3. **超时数值**：基线看门狗为 20s/10s，而非“每分块 10s”；ACK 超时未实现。
 4. **Keepalive**：依赖 WebSocket 协议层 Ping/Pong；应用层 20s PING 定时器未实现。
 5. **`mtk:unloaded`**：未引入；扫描时强制加载选区覆盖的区块。
-6. **`STATE_VERIFY_*`**：从未接入会话，Opcode 已从 `mtk-sync` 与 `mtk-py` 物理删除。
+6. **`STATE_VERIFY_*`**：从未接入正式会话，Opcode 已从 `mtk-sync` 与 `mtk-py` 物理删除，功能由六层端到端权威校验体系接管。
 7. **`SyncLifecycle::Verifying`**：枚举预留，`VERIFIED_SKIP_REBUILD` 直接进入 `LIVE`。
 8. **`COMMITTING_DNA`**：不属于 Rust 状态机，由 Blender 主线程以 `WorldMeshReady` 驱动。
 9. **`MaxMessageSize`**：实现常量为 512 KiB（目标值允许上限），服务端 payload 切片 256 KiB。
-10. **零重建快速路径**：服务端 `VERIFIED_SKIP_REBUILD` 判定保留，但宿主侧入口
-    （`start_with_persisted_state` / `export_persisted_state_json` / `start()` 的 `cached_*` 参数）
-    已物理删除，HELLO 的 `cached_*` 恒为 0。原因是原生 `VoxelStorage` 尚未持久化，
-    跳过基线会导致后续增量在空存储上重构并覆盖视口。
+10. **0ms 零重建快速重连闭环架构**：早期版本曾因纯内存 `VoxelStorage` 无法脱离进程持久化而临时屏蔽快速路径；现行架构通过 Blender 原生伴生体素点云（`_VoxelCloud`）将完整体素拓扑无损持久化于 `.blend` 文件中。重连时客户端通过 `session.load_from_point_cloud` 瞬间恢复 `VoxelStorage`，并调用 `start_with_cache` 携权威 `cached_state_hash` 发起握手；服务端匹配成功即返回 `0x00 VERIFIED_SKIP_REBUILD`，实现真正的 0ms 瞬间直连。
 
 ### 7.3 v2.0 稳定性修复索引（本次对齐）
 

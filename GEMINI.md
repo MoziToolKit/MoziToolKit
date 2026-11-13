@@ -13,7 +13,7 @@
   - 严禁为了“脱离 Blender 运行”或“兼容旧版本历史废弃设计”保留任何 legacy 实现、冗余兼容层或过渡 shim。
 - **协同边界**：
   - 底层计算消费相对路径 `../libmozitoolkit` 产出的原生绑定 (`libmtk_py` / `libmtk_blender_dna`)；
-  - 实时世界协同对接相对路径 `../yefira` 服务端 (RFC v3.1)。
+  - 实时世界协同对接相对路径 `../yefira` 服务端 (RFC v3.1 / v3.2)，并支持依托 `SyncBridgeServer` 桥接 Rust 原生 `LiveSyncServer` 控制面。
 
 ---
 
@@ -48,13 +48,14 @@
 - **结构体属性只读**：在真实 Blender 中，`Object.type` 是只读属性（在创建时由 `bpy.data.objects.new(name, data)` 自动确定，传入 `None` 为 `"EMPTY"`，传入 mesh 数据块为 `"MESH"`），严禁对其进行直接赋值。
 - **操作符架构规范**：复杂操作符必须采用独立子包架构（如 `operators/scene/`、`operators/extrude/`、`operators/sync/`），严禁巨石单文件。测试中由于 Blender `bpy.types.Operator` 无法直接实例化，统一采用 `MOZI_OT_xxx.execute(mock_op, context)` 模式。
 
-### 规则 7：RFC v3.1 协议与权威资产门禁
-- Live Sync 严格遵循 RFC v3.1 契约、服务端权威机制与状态机。
+### 规则 7：RFC v3.1 / v3.2 协议与权威资产门禁
+- Live Sync 严格遵循 RFC v3.1 / v3.2 契约、服务端权威机制与状态机，支持通过伴生体素点云（`_VoxelCloud`）与 `start_with_cache` 实现 0ms 零重建直连；
+- 连续视觉实体（画作、展示框等）由 Rust 核心统一求解局部变换矩阵与烘焙几何网格，前端通过 `VisualEntityReconciler` 进行声明式协调装配与方向对齐；
 - 世界构建与网格重构必须依赖 Minecraft 原版权威资产门禁，严禁无资产灰模降级。
 
 ### 规则 8：场景交换格式 (.mtkscene) 与伴生体素点云
 - **自包含场景包**：`.mtkscene` 作为中间场景交换格式，内含紧凑稀疏体素 (Sparse Voxels)、按需裁剪装箱的自包含 Mini-Atlas (含 UV 自动重映射)、Tree-Shaken 方块模型库，实现脱离原版资源的独立便携共享。
-- **伴生体素点云 (Voxel Point Cloud)**：几何网格与体素数据通过 companion point cloud 建立 0ms 快速链接（标识属性 `mtk:is_voxel_cloud`），支持非破坏性视口遮罩与体素雕刻。
+- **伴生体素点云 (Voxel Point Cloud)**：几何网格与体素数据通过 companion point cloud 建立 0ms 快速链接（标识属性 `mtk:is_voxel_cloud`），支持非破坏性视口遮罩、体素雕刻与重连 `VoxelStorage` 拓扑原生恢复。
 
 ### 规则 9：全面废除 Mock 测试，统一 Blender 宿主验证 (100% Real Blender Test, No Magic Mock)
 - **严禁使用 MagicMock 伪造 Blender**：严禁在测试中通过 `unittest.mock.MagicMock` 伪造 `bpy`、`bmesh`、`mathutils`、`bpy_extras` 或 Blender 内部对象（`Object`、`Mesh`、`Material`、`Scene`、`Modifier` 等）。

@@ -44,52 +44,51 @@ MoziToolKit 实时同步模块（Live Sync）基于高性能异步 WebSocket 二
 
 ---
 
-## 2. 连接时场景已有物体读取与增量校验机制 (Handshake & Validation)
+## 2. 连接时场景伴生点云恢复与 0ms 握手校验机制 (0ms Handshake & Verification)
 
-当插件与游戏端建立连接时，插件避免无条件推翻场景重建，而是通过**握手校验（Handshake Validation）**流程实现智能增量协同。
+当插件与游戏端建立连接时，系统杜绝无条件推翻场景重建，而是通过**伴生体素点云（Companion Voxel Point Cloud）与 RFC v3.1 握手判定**实现 0ms 极速直连。
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Scene as Blender 场景 / Yefira_World
-    participant Storage as 内存 VoxelStorage
-    participant Client as 插件网络线程 (SyncClientThread)
-    participant Server as 游戏端 (Minecraft Mod Server)
+    participant Scene as Blender 场景 (Yefira_World / _VoxelCloud)
+    participant Client as 客户端 (LiveSyncSession)
+    participant Server as 服务端 (LiveSyncServer / Yefira NativeSync)
 
-    Scene->>Storage: 启动连接前，从已有物体持久化属性恢复 Bounds 与 state_hash
-    Client->>Server: 建立 WebSocket 握手
-    Server->>Client: 发送 HELLO, MANIFEST 与 BASELINE_BEGIN (携带权威 state_hash 与 xxHash64 校验码)
-    Client->>Storage: 比对服务器 state_hash 与本地指纹，并校验场景子网格物体健康状态
+    Scene->>Client: 提取 _VoxelCloud 点云网格，本地计算 compute_sparse_state_hash_for_point_cloud
+    Note over Scene,Client: 校验点云自洽性，恢复底层内存 VoxelStorage (load_from_point_cloud)
+    Client->>Server: 发送 0x01 HELLO (携带 cached_uuid, cached_epoch, cached_state_hash, bounds)
     
-    alt 100% 校验一致且场景子网格完好 (state_hash 完全匹配且场景物体存在)
-        Storage->>Scene: 标记 Verified (100% in sync with scene)，跳过全量构建
-        Note over Scene,Storage: 0ms 瞬间连接，0 额外网络流量，直接保持已有网格并进入 Delta 监听
-    else 存在局部差异或脏区块 (state_hash 不一致或场景子网格丢失)
-        Storage->>Client: 标记差异区块与变更边界
-        Client->>Server: 接收增量 Baseline/Delta 流式数据
-        Client->>Scene: 仅增量重构/修复发生变更的 Section 子网格及邻域 (< 5ms)
-    else 场景为空、子网格丢失或选区 Bounds 完全变更
-        Client->>Server: 发送 RESYNC_REQUEST
-        Server->>Client: 流式发送 BASELINE_CHUNK 数据流
-        Client->>Scene: 清理缓存并执行全量网格构建
+    Server->>Server: decide_handshake: 比对 UUID、Epoch、选区与服务端当前 state_hash
+    
+    alt 100% 校验一致 (UUID 匹配且 cached_state_hash == server_state_hash)
+        Server->>Client: 发送 0x02 WELCOME (decision_code = 0x00 VERIFIED_SKIP_REBUILD)
+        Note over Client,Server: 短路跳过全部 Baseline 数据传输，0 网络带宽开销
+        Client->>Scene: 保持当前视口网格不重绘，直接切入 LIVE 状态接收增量 Delta
+        Note over Scene,Client: 真正的 0ms 瞬间直连恢复！
+    else 存在状态差异、选区变更或无缓存 (cached_hash 不匹配或选区变化)
+        Server->>Client: 发送 0x02 WELCOME (decision_code = 0x02 FULL_BASELINE_REQUIRED)
+        Server->>Client: 流式推送 0x03 BASELINE_BEGIN -> 0x04 BASELINE_CHUNK (含分块 xxHash64)
+        opt 选区内包含连续视觉实体 (RFC v3.2)
+            Server->>Client: 推送 0x13 BASELINE_VISUAL_ENTITIES (含独立 entities_hash)
+        end
+        Server->>Client: 发送 0x05 BASELINE_END (含终态权威 final_state_hash)
+        Client->>Client: 组装器计算 compute_sparse_state_hash_for_storage 与 final_state_hash 比对
+        Client->>Scene: 触发并行网格化，更新 WorldMesh 与 _VoxelCloud 点云
     end
 ```
 
 ### 核心校验与零卡顿准则：
 - **数据层（Data Plane）与视图层（View Plane）解耦校验**：
   - **网格剔除面（View Plane）**：为优化视口与渲染性能，Direct Mesh 会执行邻域遮挡剔除，内部方块不生成多边形面。
-  - **体素全量数据（Data Plane）**：服务端计算的 xxHash64 权威指纹与客户端内存中的 `VoxelStorage` 均忠实记录 3D 空间内的所有方块状态（包括内部被遮挡的方块）。
+  - **体素全量数据（Data Plane）**：服务端计算的 xxHash64 权威指纹与伴生点云中的 `VoxelPointCloud` 均忠实记录 3D 空间内的所有方块状态（包括内部被遮挡的方块）。
   - **校验原理**：握手校验直接比对 **Data Plane** 的 `state_hash` 与 Bounds，只要数据层 100% 一致且场景中网格物体完好，即可在数学上严格证明当前网格无需任何重新计算。
-- **服务端发包时序保证**：
-  - 服务端在发送数据时，严格保证 **`SELECTION_INFO` → `SECTION_MANIFEST` → `FULL_SNAPSHOT`** 的顺序。
-  - 客户端优先处理 Manifest 清单，在 0 毫秒内完成比对；若一致，后续到达的 Snapshot 自动触发短路跳过。
-- **快照内容幂等性短路保护 (`is_snapshot_identical`)**：
-  - 即使在极端网络抖动或旧版本服务端下先收到 `FULL_SNAPSHOT`，客户端会首先进行快速位级数据比对；
-  - 若方块数据与当前 `VoxelStorage` 完全一致，**瞬间跳过网格重建与着色器缓存清理**，彻底消除“卡一下”的卡顿体感。
-
-### 核心校验准则：
-- **场景物体优先恢复**：若内存为空但场景中存在 `Yefira_World`，连接时先调用 `restore_sync_state_from_scene()` 从物体自定义属性（`mtk:sync_manifest`）恢复边界与区块哈希。
-- **全量快照跳过标志 (`_skip_next_full_snapshot`)**：一旦通过 Manifest 确认 100% 一致，立即设置跳过标志，避免服务器初次连接推送的 `FULL_SNAPSHOT` 重复执行昂贵的全场景 BMesh 重构。
+- **服务端握手决策裁决（`decide_handshake`）**：
+  - 服务端作为唯一事实源，严格裁决客户端提交的指纹。
+  - 若世界发生过任何方块变更、选区移动、或服务端重启，服务端 `state_hash` 均会相应改变，绝不会错误触发跳过重建。
+- **伴生体素点云原生持久化闭环**：
+  - Blender 端通过子级伴生点云物体（`_VoxelCloud`）将完整体素拓扑（顶点坐标、方块状态调色板、生物群系调色板与方块实体 NBT）随 `.blend` 工程无损保存。
+  - 重新打开工程或重新连接时，`session.load_from_point_cloud(cloud_obj)` 直接就地反序列化还原原生 `VoxelStorage` 内存，彻底解决了无头核心宿主持久化缺失的痛点。
 
 ---
 

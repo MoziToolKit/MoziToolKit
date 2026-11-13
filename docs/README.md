@@ -42,15 +42,16 @@
   - `File -> Export/Import` DCC 交互、纯数据桥梁 `bridge/scene.py` 与无依赖独立渲染。
 - **[实时同步系统架构与数据规范 (Live Sync)](live_sync/live_sync_architecture.md)**：
   - 材质约定体系与自定义属性规范（`mtk:atlas_chunk_id`, `mtk:pack_hash`）。
-  - 连接握手 xxHash64 状态指纹差异校验与已有场景物体智能免重刷机制。
+  - 伴生体素点云（`_VoxelCloud`）与 0ms 零重建极速直连架构。
   - “刷新数据 (Refresh Data)” 与 “重建网格 (Rebuild Mesh)” 行为边界划分。
-  - 内存体素模型（`VoxelStorage`）、场景持久化层级容器（`hierarchy.py`）与操作符全景。
-- **[实时同步协议与架构 RFC v3.1 (Live Sync RFC)](live_sync/live_sync_protocol.md)**：
-  - Minecraft ↔ Rust ↔ Blender 三端权威协议：帧头、资源硬限、全部 Opcode 与负载布局。
-  - Canonical `state_hash`（xxHash64）、X→Z→Y 扫描顺序与 Section-local Quart Biome 契约。
-  - HELLO/WELCOME 决策矩阵、Baseline→Delta 栅栏、Staging/Replay、缺口检测与 RESYNC。
-  - Per-client 基线代际、协作取消、Delta 16,384 分片、快速重连持久化与失效规则。
-  - 连接状态权威同步、看门狗/限流/失败熔断，以及 10 项已知实现偏差与 v2.0 修复索引。
+  - 内存体素模型（`VoxelStorage`）、场景持久化层级容器（`hierarchy.py`）与原生 `SyncBridgeServer` 控制面。
+- **[实时同步协议与架构 RFC v3.1 / v3.2 (Live Sync RFC)](live_sync/live_sync_protocol.md)**：
+  - Minecraft (Yefira) ↔ Rust (mtk-sync / mtk-jni) ↔ Blender (MoziToolKit) 三端权威协议：帧头、资源硬限、全部 Opcode 与负载布局。
+  - Canonical `state_hash`（xxHash64 稀疏体素指纹）、X→Z→Y 扫描顺序与 Section-local Quart Biome 契约。
+  - 六层端到端权威校验体系（握手校验、分块 xxHash64、基线终态 state_hash SSOT、视觉实体 entities_hash SSOT、点云自洽性门禁与边界防护）。
+  - HELLO/WELCOME 决策矩阵、0ms 零重建直连、Baseline→Delta 栅栏、Staging/Replay、缺口检测与 RESYNC 自愈。
+  - RFC v3.2 连续视觉实体（Painting, ItemFrame 等）解耦流式同步、声明式协调与欧拉角方向对齐。
+  - Per-client 基线代际、协作取消、Delta 16,384 分片、快速重连持久化闭环与原生服务端控制面。
 - **[原生网格实时同步构建体系 (Direct Mesh)](mesh/direct_mesh.md)**：
   - 16x16x16 Section 分块容器、6 向邻域遮挡剔除、拓扑微距焊接。
   - 毫秒级增量更新（Delta Update）与原生多图集 UVMap 写入。

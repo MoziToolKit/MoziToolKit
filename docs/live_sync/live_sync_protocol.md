@@ -66,7 +66,7 @@
 | 基线组装 | Rust | `crates/mtk-sync/src/session/assembler.rs` | 分块校验、体素/群系解包、SectionStorage 重建、指纹校验 |
 | 增量暂存 | Rust | `crates/mtk-sync/src/session/staging.rs` | 快照期间增量排队与栅栏对齐 |
 | 网络传输 | Rust | `crates/mtk-sync/src/client.rs` | 原生 WebSocket 客户端、重连、命令通道 |
-| 协议编码 | Java | `encoder/BlockDataEncoder.java` | 服务端包编码、Canonical BlockState/Biome 序列化、ERROR |
+| 状态序列化 | Java | `encoder/BlockStateSerializer.java` | 服务端 Canonical BlockState 序列化 (协议与包编码已下沉至 Rust mtk-sync) |
 | 规范扫描 | Java | `encoder/CanonicalVoxelScanner.java` | 选区连续扫描、xxHash64、协作取消 |
 | 基线与增量 | Java | `network/WebSocketServerManager.java` | 单流代际、调色板、Delta 批处理、快速重连判定 |
 | 前端桥接 | Python | `bridge/sync.py` | 原生会话单例、事件轮询、连接状态权威同步 |
@@ -145,7 +145,7 @@
    * 方块状态如实保留真实原版语义与完整属性（包括 `bubble_column`、`light`、`barrier` 等），不在传输与存储阶段擅自修改为普通水或空气；流体网格与无实体多边形占位方块的网格行为由客户端构建期统一解释；
    * 属性键严格按 ASCII 字典序升序排序，无多余空格，例如：
      `"minecraft:chest[facing=north,type=single,waterlogged=false]"`；
-   * Rust 端只对空气别名与旧版 `{"state":"..."}` 包装做规范化，**不重排属性**——属性排序由服务端 `BlockDataEncoder.serializeBlockState` 保证；两端必须逐字节一致。
+   * Rust 端只对空气别名与旧版 `{"state":"..."}` 包装做规范化，**不重排属性**——属性排序由服务端 `BlockStateSerializer.serializeBlockState` 保证；两端必须逐字节一致。
    * **未加载区块**：初稿定义的 `"mtk:unloaded"` 当前未实现。服务端扫描通过 `level.getChunk(cx, cz)` 强制加载选区覆盖的区块，因此 Baseline 中不会出现“未加载”占位符（📋 后续可选实现）。
 
 4. **生物群系规范化与不可变契约**：
@@ -861,7 +861,7 @@ Blender 4.2+ / 5.0 的 C 内存布局规范：
 
 | RFC 条目 | 实现位置 | 状态 |
 | :--- | :--- | :--- |
-| 4 字节帧头 / Magic `MT` / Ver `0x03` | `codec.rs`, `BlockDataEncoder.java` | ✅ |
+| 4 字节帧头 / Magic `MT` / Ver `0x03` | `codec.rs` (Rust SSOT) | ✅ |
 | 资源硬限与解压炸弹防护 | `protocol/constants.rs`, `codec.rs` | ✅ |
 | `MaxSelectionVolume` 双重校验 + ERROR | `assembler.rs`, `WebSocketServerManager` | ✅（v2.0 修复） |
 | Canonical `state_hash` | `hasher.rs`, `CanonicalVoxelScanner.java` | ✅ |

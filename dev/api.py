@@ -99,6 +99,63 @@ def load_debug_world(
     return obj
 
 
+def load_debug_item(
+    item_name: str = "all",
+    columns: int = 36,
+    spacing: float = 1.5,
+    layout_plane: str = "HORIZONTAL",
+    scale: float = 1.0,
+    item_filter: str = "ITEMS_ONLY",
+    weld_vertices: bool = True,
+    context=None,
+) -> Any:
+    """
+    Loads prebaked 3D item models with official PBR Atlas material
+    into the active Blender scene from the asset cache database.
+    Pass item_name="all" to tile items in a showcase gallery,
+    or pass an item identifier (e.g. "diamond_sword") to load a single item.
+    item_filter can be "ITEMS_ONLY", "ALL", or "BLOCKS_ONLY".
+    """
+    import bpy
+
+    if item_name.lower() in ("all", "gallery", "grid"):
+        bpy.ops.mozi.dev_load_debug_item(
+            generation_mode="ALL",
+            columns=columns,
+            spacing=spacing,
+            layout_plane=layout_plane,
+            item_filter=item_filter,
+            weld_vertices=weld_vertices,
+            scale=scale,
+        )
+    else:
+        preset_names = {
+            "diamond_sword",
+            "golden_apple",
+            "enchanted_golden_apple",
+            "iron_pickaxe",
+            "netherite_axe",
+            "bow",
+            "potion",
+            "netherite_chestplate",
+            "clock",
+            "compass",
+        }
+        preset = item_name if item_name in preset_names else "custom"
+
+        bpy.ops.mozi.dev_load_debug_item(
+            generation_mode="SINGLE",
+            item_preset=preset,
+            custom_id=item_name,
+            weld_vertices=weld_vertices,
+            scale=scale,
+        )
+    ctx = context or bpy.context
+    if hasattr(ctx, "view_layer") and ctx.view_layer and ctx.view_layer.objects.active:
+        return ctx.view_layer.objects.active
+    return None
+
+
 def run_mesher_benchmark(
     iterations: int = 3,
     with_models: bool = True,

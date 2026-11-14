@@ -269,14 +269,7 @@ def inject_face_materials_standard(mesh: Any, mesh_data: Any) -> None:
             mesh.polygons.foreach_set("material_index", np.full(num_polys, int(used[0]), dtype=np.int32))
         return
 
-    # Direct single-pass write to polygon material indices
-    try:
-        if len(mats_mv) == num_polys:
-            mesh.polygons.foreach_set("material_index", mats_mv)
-            return
-    except Exception:
-        pass
-
+    # Direct single-pass write to polygon material indices and persistent mtk_atlas_chunk_id attribute
     try:
         mats_arr = np.asarray(mats_mv, dtype=np.int32)
         if len(mats_arr) == num_polys:
@@ -286,6 +279,12 @@ def inject_face_materials_standard(mesh: Any, mesh_data: Any) -> None:
             # Duplicate each face material index to cover both triangles.
             tri_mats = np.repeat(mats_arr, 2)
             mesh.polygons.foreach_set("material_index", tri_mats)
+
+        from .attributes import inject_face_attribute_int
+        if len(mats_arr) == num_polys:
+            inject_face_attribute_int(mesh, "mtk_atlas_chunk_id", mats_arr)
+        elif len(mats_arr) * 2 == num_polys:
+            inject_face_attribute_int(mesh, "mtk_atlas_chunk_id", np.repeat(mats_arr, 2))
     except Exception as e:
         logger.debug("Standard material_index foreach_set error: %s", e)
 

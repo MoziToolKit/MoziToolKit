@@ -338,17 +338,21 @@ def ensure_world_materials(
                     compact_materials.append(mat)
                     chunk_to_compact_slot[chunk_id] = slot_idx
 
-                # Reconstruct mesh.materials only if slots actually changed
+                # 1. Authoritatively resolve face chunk IDs BEFORE modifying material slots
+                num_polys = len(mesh.polygons) if hasattr(mesh, "polygons") else 0
+                raw_cids = None
+                if num_polys > 0:
+                    raw_cids = face_chunk_ids(mesh)
+
+                # 2. Reconstruct mesh.materials only if slots actually changed
                 curr_mats = list(mesh.materials)
                 if curr_mats != compact_materials:
                     mesh.materials.clear()
                     for mat in compact_materials:
                         mesh.materials.append(mat)
 
-                # CRITICAL: Remap polygon material_index AFTER materials are populated
-                # Retrieve authoritative face chunk IDs from mtk_atlas_chunk_id attribute if available
-                if hasattr(mesh, "polygons") and len(mesh.polygons) > 0:
-                    num_polys = len(mesh.polygons)
+                # 3. Remap polygon material_index AFTER materials are populated
+                if num_polys > 0 and raw_cids is not None:
                     if len(sorted_chunks) == 1:
                         if hasattr(mesh.polygons, "foreach_set"):
                             import numpy as np
@@ -358,8 +362,6 @@ def ensure_world_materials(
                                 p.material_index = 0
                     else:
                         import numpy as np
-                        raw_cids = face_chunk_ids(mesh)
-
                         if remap_indices_lut is not None:
                             remapped = remap_indices_lut(raw_cids, chunk_to_compact_slot, default_value=0)
                         else:
@@ -370,6 +372,15 @@ def ensure_world_materials(
                         else:
                             for idx, val in enumerate(remapped):
                                 mesh.polygons[idx].material_index = int(val)
+
+                    # Persist authoritative mtk_atlas_chunk_id attribute on mesh to survive future edits
+                    if hasattr(mesh, "attributes") and "mtk_atlas_chunk_id" not in mesh.attributes:
+                        try:
+                            import numpy as np
+                            attr = mesh.attributes.new(name="mtk_atlas_chunk_id", type="INT", domain="FACE")
+                            attr.data.foreach_set("value", np.asarray(raw_cids, dtype=np.int32))
+                        except Exception as e:
+                            logger.debug("Failed saving mtk_atlas_chunk_id attribute: %s", e)
 
                 if len(mesh.materials) > 0:
                     return

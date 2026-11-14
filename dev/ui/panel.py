@@ -55,6 +55,10 @@ class VIEW3D_PT_mtk_dev_panel(bpy.types.Panel):
         op.enable_ao = True
         op.mesh_fluids = True
 
+        row_item = scenarios_box.row(align=True)
+        row_item.scale_y = 1.2
+        row_item.operator("mozi.dev_load_debug_item", text=tr("Load Debug Items"), icon="MOD_BUILD")
+
         row2 = scenarios_box.row(align=True)
         row2.operator("mozi.dev_mesh_benchmark", text=tr("Mesher Benchmark"), icon="TIME")
 

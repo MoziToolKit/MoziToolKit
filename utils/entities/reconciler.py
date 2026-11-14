@@ -205,6 +205,15 @@ def reconcile_entity_render_plan(
         for child in getattr(parent, "children", []):
             if child not in found_set:
                 found_set.add(child)
+                if (
+                    child.get("mtk:is_yefira_mesh")
+                    or child.get("mtk:is_section_mesh")
+                    or child.get("mtk:is_voxel_cloud")
+                    or child.get("mtk_is_voxel_cloud")
+                    or child.get("mtk:is_entities_container")
+                    or child.name.endswith(("_Mesh", "_VoxelCloud"))
+                ):
+                    continue
                 if hasattr(child, "get") and child.get("mtk:is_visual_entity"):
                     items.append(child)
                 items.extend(_collect_descendant_entities(child, found_set))
@@ -225,14 +234,18 @@ def reconcile_entity_render_plan(
             return f"uuid:{obj.get('mtk:entity_uuid')}"
         ent_id = obj.get("mtk:entity_id", "minecraft:entity")
         var = obj.get("mtk:variant", "")
+        item_id = obj.get("mtk:item_id", "")
         payload = obj.get("mtk:entity_payload")
         if isinstance(payload, (list, tuple)) and len(payload) > 0:
             try:
                 p_dict = json.loads(payload[0])
                 pos = p_dict.get("position", [0, 0, 0])
                 px = round(float(pos[0]), 3) if len(pos) > 0 else 0
-                py = round(float(pos[1]), 3) if len(pos) > 1 else 0
+                py = round(float(pos[1]), 3) if len(pos) > 0 else 0
                 pz = round(float(pos[2]), 3) if len(pos) > 2 else 0
+                if item_id:
+                    item_rot = obj.get("mtk:item_rotation", 0)
+                    return f"synth:{ent_id}|pos:{px:.3f},{py:.3f},{pz:.3f}|item:{item_id}|rot:{item_rot}"
                 return f"synth:{ent_id}|pos:{px:.3f},{py:.3f},{pz:.3f}|var:{var}"
             except Exception:
                 pass
@@ -318,6 +331,20 @@ def reconcile_entity_render_plan(
         if reused_obj is None and node.uuid:
             reused_obj = existing_by_key.pop(str(node.uuid), None)
 
+        if reused_obj is not None:
+            # SAFETY GUARD: Never reuse the world mesh, voxel cloud, or container as an entity!
+            if (
+                reused_obj.get("mtk:is_yefira_mesh")
+                or reused_obj.get("mtk:is_section_mesh")
+                or reused_obj.get("mtk:is_voxel_cloud")
+                or reused_obj.get("mtk_is_voxel_cloud")
+                or reused_obj.name.endswith(("_Mesh", "_VoxelCloud", "_Entities"))
+                or reused_obj == root_obj
+                or reused_obj == entities_parent
+            ):
+                logger.error("Attempted to reuse non-entity object '%s' as visual entity! Aborting reuse.", reused_obj.name)
+                reused_obj = None
+
         if reused_obj is not None and getattr(reused_obj, "data", None) is not None:
             # Clean up all alias references pointing to reused_obj
             stale_keys = [k for k, v in existing_by_key.items() if v == reused_obj]
@@ -338,10 +365,20 @@ def reconcile_entity_render_plan(
                 new_var = node.variant or ""
                 new_dims = node.dimensions or (0, 0)
 
+                old_item_id = reused_obj.get("mtk:item_id", "")
+                old_item_rot = reused_obj.get("mtk:item_rotation", 0)
+                old_glowing = bool(reused_obj.get("mtk:is_glowing", False))
+                new_item_id = getattr(node, "item_id", None) or ""
+                new_item_rot = getattr(node, "item_rotation", None) or 0
+                new_glowing = bool(getattr(node, "is_glowing", None) or False)
+
                 needs_mesh_reinjection = (
                     old_var != new_var
                     or old_w != new_dims[0]
                     or old_h != new_dims[1]
+                    or old_item_id != new_item_id
+                    or old_item_rot != new_item_rot
+                    or old_glowing != new_glowing
                 )
 
                 if needs_mesh_reinjection:
@@ -363,6 +400,14 @@ def reconcile_entity_render_plan(
                 if node.dimensions:
                     safe_set_custom_prop(reused_obj, "mtk:width", int(node.dimensions[0]))
                     safe_set_custom_prop(reused_obj, "mtk:height", int(node.dimensions[1]))
+                if hasattr(node, "item_id") and node.item_id:
+                    safe_set_custom_prop(reused_obj, "mtk:item_id", node.item_id)
+                if hasattr(node, "item_rotation") and node.item_rotation is not None:
+                    safe_set_custom_prop(reused_obj, "mtk:item_rotation", int(node.item_rotation))
+                if hasattr(node, "is_glowing") and node.is_glowing is not None:
+                    safe_set_custom_prop(reused_obj, "mtk:is_glowing", bool(node.is_glowing))
+                if hasattr(node, "is_invisible") and node.is_invisible is not None:
+                    safe_set_custom_prop(reused_obj, "mtk:is_invisible", bool(node.is_invisible))
 
                 result.updated.append(reused_obj)
                 result.all_entities.append(reused_obj)
@@ -422,6 +467,14 @@ def reconcile_entity_render_plan(
             if node.dimensions:
                 safe_set_custom_prop(ent_obj, "mtk:width", int(node.dimensions[0]))
                 safe_set_custom_prop(ent_obj, "mtk:height", int(node.dimensions[1]))
+            if hasattr(node, "item_id") and node.item_id:
+                safe_set_custom_prop(ent_obj, "mtk:item_id", node.item_id)
+            if hasattr(node, "item_rotation") and node.item_rotation is not None:
+                safe_set_custom_prop(ent_obj, "mtk:item_rotation", int(node.item_rotation))
+            if hasattr(node, "is_glowing") and node.is_glowing is not None:
+                safe_set_custom_prop(ent_obj, "mtk:is_glowing", bool(node.is_glowing))
+            if hasattr(node, "is_invisible") and node.is_invisible is not None:
+                safe_set_custom_prop(ent_obj, "mtk:is_invisible", bool(node.is_invisible))
 
             if target_coll is not None and hasattr(target_coll, "objects") and hasattr(target_coll.objects, "link"):
                 try:

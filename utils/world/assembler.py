@@ -187,6 +187,13 @@ def assemble_voxel_world(req: VoxelWorldAssemblyRequest) -> Dict[str, Any]:
 
     # 2. Acquire or create Child Mesh Object
     mesh_obj = req.target_mesh
+    if mesh_obj is not None:
+        if safe_get_custom_prop(mesh_obj, "mtk:is_visual_entity") or safe_get_custom_prop(mesh_obj, "mtk:is_entities_container"):
+            logger.warning(
+                "assemble_voxel_world received visual entity or entities container '%s' as target_mesh! Ignoring and resolving true mesh child.",
+                getattr(mesh_obj, "name", "unknown"),
+            )
+            mesh_obj = None
     mesh_child_name = f"{actual_root_name}_Mesh" if req.container_type != "SYNC" else actual_root_name
 
     if mesh_obj is None:

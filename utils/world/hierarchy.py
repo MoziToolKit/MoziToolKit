@@ -71,6 +71,13 @@ def is_mtk_container(obj: Optional[Any]) -> bool:
     if getattr(obj, "type", "") != "EMPTY":
         return False
 
+    if _as_bool(_safe_get(obj, "mtk:is_entities_container")) or _as_bool(_safe_get(obj, "mtk:is_visual_entity")):
+        return False
+
+    name = getattr(obj, "name", "")
+    if name.endswith(("_Entities", "_VoxelCloud", "_Mesh")):
+        return False
+
     if _as_bool(_safe_get(obj, "mtk:is_container")):
         return True
 
@@ -87,12 +94,13 @@ def is_mtk_container(obj: Optional[Any]) -> bool:
     if _safe_get(obj, "mozi_save_uuid") or _safe_get(obj, "mozi_scene_uuid"):
         return True
 
-    name = getattr(obj, "name", "")
     if name.startswith(("Yefira_World", "Save_", "[Scene]")):
         return True
 
     # Check if any child is an MTK mesh
     for child in getattr(obj, "children", []):
+        if _as_bool(_safe_get(child, "mtk:is_visual_entity")):
+            continue
         if is_point_cloud(child) or classify_origin(child) != ORIGIN_EXTERNAL:
             return True
 
@@ -102,6 +110,11 @@ def is_mtk_container(obj: Optional[Any]) -> bool:
 def get_container_type(obj: Optional[Any]) -> Optional[str]:
     """Return the container type ('SYNC', 'SAVE', 'SCENE') or None."""
     if obj is None:
+        return None
+    if _as_bool(_safe_get(obj, "mtk:is_entities_container")):
+        return None
+    name = getattr(obj, "name", "")
+    if name.endswith(("_Entities", "_VoxelCloud", "_Mesh")):
         return None
     raw_type = _safe_get(obj, "mtk:container_type")
     if isinstance(raw_type, str):
@@ -116,7 +129,6 @@ def get_container_type(obj: Optional[Any]) -> Optional[str]:
     if _as_bool(_safe_get(obj, "mtk:is_save_world")) or _safe_get(obj, "mozi_save_uuid"):
         return "SAVE"
 
-    name = getattr(obj, "name", "")
     if name.startswith("Yefira_World"):
         return "SYNC"
     if name.startswith("Save_"):
@@ -181,6 +193,8 @@ def resolve_hierarchy(target: Optional[Any]) -> HierarchyContext:
 
         for ch in getattr(root, "children", []):
             if getattr(ch, "type", "") == "MESH":
+                if _as_bool(_safe_get(ch, "mtk:is_visual_entity")):
+                    continue
                 if is_point_cloud(ch):
                     if point_cloud is None:
                         point_cloud = ch
@@ -265,6 +279,15 @@ def resolve_hierarchy(target: Optional[Any]) -> HierarchyContext:
 
     # 4. Case C: Active object is a Surface Mesh
     if obj_type == "MESH":
+        if _as_bool(_safe_get(obj, "mtk:is_visual_entity")):
+            # Delegate to parent container so visual entities don't become the primary world mesh
+            curr = getattr(obj, "parent", None)
+            while curr is not None:
+                if is_mtk_container(curr):
+                    return resolve_hierarchy(curr)
+                curr = getattr(curr, "parent", None)
+            return HierarchyContext()
+
         parent = getattr(obj, "parent", None)
         root = parent if is_mtk_container(parent) else None
 
@@ -273,7 +296,7 @@ def resolve_hierarchy(target: Optional[Any]) -> HierarchyContext:
 
         if root is not None:
             for ch in getattr(root, "children", []):
-                if getattr(ch, "type", "") == "MESH" and not is_point_cloud(ch):
+                if getattr(ch, "type", "") == "MESH" and not is_point_cloud(ch) and not _as_bool(_safe_get(ch, "mtk:is_visual_entity")):
                     child_meshes.append(ch)
             if point_cloud is None:
                 point_cloud = find_voxel_cloud(root)

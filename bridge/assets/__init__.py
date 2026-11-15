@@ -26,14 +26,22 @@ from .cache import (
     load_baked_model_database,
     load_biome_resolver_from_cache,
     load_colormaps_from_cache,
+    load_ctm_solver_from_cache,
     open_active_asset_cache,
     open_cache_folder,
 )
-from .pack import get_configured_ctm_solver, get_configured_pack_stack
+from .pack import (
+    get_configured_ctm_solver,
+    get_configured_pack_descriptors,
+    get_configured_pack_stack,
+    get_configured_stack_fingerprint,
+)
 from .precompile import precompile_stack, precompile_stack_async
 
 
 __all__ = [
+    "get_configured_pack_descriptors",
+    "get_configured_stack_fingerprint",
     "get_configured_pack_stack",
     "get_configured_ctm_solver",
     "precompile_stack",
@@ -49,6 +57,7 @@ __all__ = [
     "load_baked_atlas_from_cache",
     "load_biome_resolver_from_cache",
     "load_colormaps_from_cache",
+    "load_ctm_solver_from_cache",
     "get_cache_manifest",
     "get_cache_fingerprint",
     "get_cache_timestamp",

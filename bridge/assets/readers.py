@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 from ..engine import get_libmtk
-from .pack import get_configured_pack_stack
+from .pack import get_configured_stack_fingerprint
 
 logger = logging.getLogger("MoziToolKit.Bridge.Assets.Readers")
 
@@ -82,11 +82,9 @@ def load_baked_model_database_inner(
         return None, cached_pkg, cached_mtime
 
     if verify_fingerprint:
-        stack = get_configured_pack_stack(prefs)
-        if stack is not None:
-            current_fp = stack.compute_stack_fingerprint()
-            if cache.fingerprint != current_fp:
-                return None, cached_pkg, cached_mtime
+        current_fp = get_configured_stack_fingerprint(prefs)
+        if current_fp and cache.fingerprint != current_fp:
+            return None, cached_pkg, cached_mtime
 
     if (
         not verify_fingerprint
@@ -200,4 +198,35 @@ def load_colormaps_inner(
             return colormaps, active_pkg_path, active_mtime
         except Exception as exc:
             logger.warning("Failed loading colormaps from %s: %s", active_pkg_path, exc)
+    return None, cached_pkg, cached_mtime
+
+
+def load_ctm_solver_inner(
+    open_cache_fn,
+    active_pkg_path: Optional[str],
+    active_mtime: float,
+    cached_solver: Optional[Any],
+    cached_pkg: Optional[str],
+    cached_mtime: float,
+    prefs=None,
+) -> Tuple[Optional[Any], Optional[str], float]:
+    """Loads precompiled CtmSolver from active cache package into memory."""
+    mtk = get_libmtk()
+    if mtk is None:
+        return None, cached_pkg, cached_mtime
+
+    cache = open_cache_fn(prefs)
+    if cache is not None:
+        if (
+            cached_solver is not None
+            and cached_pkg == active_pkg_path
+            and cached_mtime == active_mtime
+        ):
+            return cached_solver, cached_pkg, cached_mtime
+
+        try:
+            solver = cache.load_ctm_solver()
+            return solver, active_pkg_path, active_mtime
+        except Exception as exc:
+            logger.warning("Failed loading CTM solver from %s: %s", active_pkg_path, exc)
     return None, cached_pkg, cached_mtime

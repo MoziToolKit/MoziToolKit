@@ -44,6 +44,16 @@ def _get_configured_pack_stack(prefs=None):
     return get_configured_pack_stack(prefs)
 
 
+def _get_configured_pack_descriptors(prefs=None):
+    from ...bridge.assets.pack import get_configured_pack_descriptors
+    return get_configured_pack_descriptors(prefs)
+
+
+def _get_configured_stack_fingerprint(prefs=None):
+    from ...bridge.assets.pack import get_configured_stack_fingerprint
+    return get_configured_stack_fingerprint(prefs)
+
+
 def _open_active_asset_cache(prefs=None):
     from ...bridge.assets.cache import open_active_asset_cache
     return open_active_asset_cache(prefs)
@@ -115,8 +125,8 @@ def check_asset_cache_status(prefs=None) -> str:
     if mtk is None:
         return "MISSING"
 
-    stack = _get_configured_pack_stack(prefs)
-    pack_count = stack.get_pack_count() if stack is not None else 0
+    descriptors = _get_configured_pack_descriptors(prefs)
+    pack_count = len(descriptors)
     if pack_count == 0:
         _GUARD_STATUS_CACHE[cache_key] = "NO_PACKS"
         return "NO_PACKS"
@@ -126,7 +136,7 @@ def check_asset_cache_status(prefs=None) -> str:
         _GUARD_STATUS_CACHE[cache_key] = "NO_VANILLA"
         return "NO_VANILLA"
 
-    expected_fp = stack.compute_stack_fingerprint() if hasattr(stack, "compute_stack_fingerprint") else ""
+    expected_fp = _get_configured_stack_fingerprint(prefs)
 
     # Test sandbox isolation guard
     has_custom_packs = prefs is not None and hasattr(prefs, "resource_packs")
@@ -230,7 +240,7 @@ def get_ui_asset_cache_status(
 def prepare_asset_context(prefs=None) -> Dict[str, Any]:
     """Resolve cache status/stack/path on the Blender main thread."""
     status = check_asset_cache_status(prefs)
-    stack = _get_configured_pack_stack(prefs)
+    stack = _get_configured_pack_stack(prefs) if status not in ("READY", "VALID") else None
     try:
         cache_dir = str(get_cache_dir(prefs))
     except Exception:

@@ -187,12 +187,6 @@ def update_object_biome(
         has_custom_dry_foliage = bool(biome_colors.get("has_custom_dry_foliage", False))
 
     effective_stack = pack_stack
-    if effective_stack is None:
-        try:
-            from ....bridge.assets import get_configured_pack_stack
-            effective_stack = get_configured_pack_stack()
-        except Exception:
-            effective_stack = None
 
     # Update mesh face attributes
     num_polys = len(mesh.polygons) if hasattr(mesh, "polygons") else 0

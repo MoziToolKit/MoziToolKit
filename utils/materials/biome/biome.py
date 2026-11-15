@@ -84,23 +84,8 @@ def get_or_load_biome_resolver(
                 except Exception:
                     pass
 
-    # 2. Fallback: Parse active pack stack if provided
-    resolver = BiomeResolver()
-    effective_stack = pack_stack
-    if effective_stack is None:
-        try:
-            from ....bridge.assets import get_configured_pack_stack
-            effective_stack = get_configured_pack_stack(prefs)
-        except Exception:
-            effective_stack = None
-
-    if effective_stack:
-        try:
-            resolver.load_from_pack_stack(effective_stack)
-        except Exception:
-            pass
-
-    return resolver
+    # 2. Return default BiomeResolver if cache mapping is missing (no runtime VFS fallback)
+    return BiomeResolver()
 
 
 def get_biome_colors(

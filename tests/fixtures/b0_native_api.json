@@ -9,7 +9,7 @@
     "required_native_symbols_present": true
   },
   "forbidden_hits": [],
-  "generated_at": "2026-11-12T14:54:56.304519+00:00",
+  "generated_at": "2026-11-15T05:43:49.359056+00:00",
   "libmtk_blender_dna": {
     "api_version": 2,
     "functions": [
@@ -95,6 +95,7 @@
       "clean_material_identifier",
       "compute_biome_tint_attributes_paletted",
       "compute_mesh_biome_attributes_from_storage",
+      "compute_stack_fingerprint_from_names",
       "evaluate_cache_status",
       "export_scene_package",
       "generate_random_extrude_heights",

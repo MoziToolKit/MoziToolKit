@@ -66,21 +66,7 @@ def load_debug_world_storage(prefs=None, states=None, stack=None):
     except Exception as e:
         logger.debug(f"Could not load model_db from cache for debug world: {e}")
 
-    # 2. Drive from active configured resource pack stack
-    if stack is None:
-        try:
-            from .assets import get_configured_pack_stack
-            stack = get_configured_pack_stack(prefs)
-        except Exception:
-            stack = None
-
-    if stack is not None:
-        pack_count = stack.get_pack_count()
-        has_base = stack.has_vanilla_client_base()
-        if pack_count > 0 and has_base:
-            return voxel_storage.create_debug_world_from_pack_stack(stack)
-
-    # 3. Direct backend creation; libmtk re-validates the host-level asset roots itself.
+    # 2. Direct backend creation; libmtk re-validates the host-level asset roots itself.
     return voxel_storage.create_debug_world()
 
 

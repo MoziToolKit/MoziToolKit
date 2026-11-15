@@ -100,20 +100,72 @@ class TestCtmBridge(unittest.TestCase):
         self.assertIsNotNone(solver)
 
     def test_configured_ctm_solver_helper(self):
-        """Verify bridge helper get_configured_ctm_solver loads rules."""
+        """Verify bridge helper get_configured_ctm_solver enforces SSOT (None without cache)."""
         if self.mtk is None or not hasattr(self.mtk, "ResourcePackStack"):
             self.skipTest("libmtk_py ResourcePackStack not available")
 
         mock_prefs = SimpleNamespace(
+            cache_dir=str(self.tmp_dir.name),
             resource_pack_path=str(self.synthetic_pack_zip),
             resource_packs=[],
         )
 
+        # Without an active compiled .mtkcache package, get_configured_ctm_solver returns None (no fallback)
         solver = get_configured_ctm_solver(mock_prefs)
-        self.assertIsNotNone(solver)
+        self.assertIsNone(solver)
+
+        # Precompile stack can still construct solver during prebake
         stack = get_configured_pack_stack(mock_prefs)
         self.assertIsNotNone(stack)
         self.assertGreaterEqual(stack.get_ctm_rule_count(), 1)
+        init_solver = stack.build_ctm_solver()
+        self.assertIsNotNone(init_solver)
+
+    def test_load_ctm_solver_from_cache(self):
+        """Verify load_ctm_solver_from_cache loads CtmSolver directly from .mtkcache package."""
+        from MoziToolKit.bridge.assets.cache import (
+            load_ctm_solver_from_cache,
+            invalidate_asset_cache_memory,
+        )
+
+        stack = self.mtk.ResourcePackStack()
+        stack.add_zip_pack(str(self.synthetic_pack_zip))
+        init_solver = stack.build_ctm_solver()
+        self.assertGreater(init_solver.rule_count, 0)
+        rules_json = init_solver.to_json()
+
+        cache_dir = Path(self.tmp_dir.name) / "ctm_cache"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        fp = stack.compute_stack_fingerprint()
+        pkg_path = cache_dir / f"{fp}.mtkcache"
+
+        # Create test package with ctm/rules chunk
+        testing = self.mtk.unstable.testing
+        testing.create_test_cache_package(str(pkg_path), fp, 0, rules_json)
+
+        # Open cache directly and verify has_ctm_rules and load_ctm_solver
+        cache = self.mtk.AssetCache.open(str(pkg_path))
+        self.assertTrue(cache.has_ctm_rules())
+        solver = cache.load_ctm_solver()
+        self.assertIsNotNone(solver)
+        self.assertEqual(solver.rule_count, init_solver.rule_count)
+
+        invalidate_asset_cache_memory()
+        mock_prefs = SimpleNamespace(
+            cache_dir=str(cache_dir),
+            resource_pack_path=str(self.synthetic_pack_zip),
+            resource_packs=[],
+            enable_ctm=True,
+        )
+        cached_solver = load_ctm_solver_from_cache(mock_prefs)
+        self.assertIsNotNone(cached_solver)
+        self.assertEqual(cached_solver.rule_count, init_solver.rule_count)
+
+        # get_configured_ctm_solver should return cached solver without reading stack
+        with patch("MoziToolKit.bridge.assets.pack.get_configured_pack_stack") as mock_stack:
+            cfg_solver = get_configured_ctm_solver(mock_prefs)
+            self.assertIsNotNone(cfg_solver)
+            mock_stack.assert_not_called()
 
     def test_ctm_meshing_standalone_mode(self):
         """Verify voxel storage meshing in Standalone mode resolves CTM face texture keys."""

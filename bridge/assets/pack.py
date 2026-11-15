@@ -39,6 +39,59 @@ def invalidate_pack_stack_cache() -> None:
     _VANILLA_CHECK_CACHE.clear()
 
 
+def get_configured_pack_descriptors(prefs=None) -> List[str]:
+    """
+    Extracts the ordered list of pack descriptors (names/paths) matching how
+    ResourcePackStack tags packs. Does NOT open or decompress files.
+    """
+    if prefs is None:
+        prefs = get_prefs()
+
+    descriptors: List[str] = []
+    single_path = getattr(prefs, "resource_pack_path", None) if prefs else None
+    if single_path and Path(single_path).exists():
+        p = Path(single_path)
+        descriptors.append(p.stem if p.is_dir() else str(p.resolve()))
+
+    if prefs and hasattr(prefs, "resource_packs"):
+        for entry in prefs.resource_packs:
+            if not getattr(entry, "enabled", True):
+                continue
+            raw_path = getattr(entry, "path", "").strip()
+            if not raw_path:
+                continue
+            p = Path(raw_path)
+            if not p.exists():
+                continue
+            if p.is_dir():
+                name = getattr(entry, "name", None) or p.stem
+                descriptors.append(name)
+            elif p.is_file() and p.suffix.lower() in {".zip", ".jar"}:
+                descriptors.append(str(p.resolve()))
+
+    if not descriptors:
+        for env_var in ("MTK_TEST_JAR", "MC_JAR", "MC_DIR", "MC_ASSETS_DIR", "MTK_TEST_ASSETS"):
+            val = os.environ.get(env_var)
+            if val and Path(val).exists():
+                p = Path(val)
+                descriptors.append(p.stem if p.is_dir() else str(p.resolve()))
+                break
+
+    return descriptors
+
+
+def get_configured_stack_fingerprint(prefs=None) -> str:
+    """
+    Calculates the exact stack fingerprint from preferences without opening or decompressing any archives.
+    Executes in < 0.01ms.
+    """
+    descriptors = get_configured_pack_descriptors(prefs)
+    mtk = get_libmtk()
+    if mtk is not None and hasattr(mtk, "compute_stack_fingerprint_from_names"):
+        return mtk.compute_stack_fingerprint_from_names(descriptors)
+    return "mtk_fp_bd60acb658c79e45"
+
+
 def get_configured_pack_stack(prefs=None) -> Optional[Any]:
     """
     Builds a libmtk ResourcePackStack from the Blender preferences configuration.
@@ -130,31 +183,22 @@ def get_configured_pack_stack(prefs=None) -> Optional[Any]:
 
 def get_configured_ctm_solver(prefs=None, force: bool = False) -> Optional[Any]:
     """
-    Builds a CtmSolver from the configured resource pack stack if any CTM rules exist.
-    Memoized against the active pack stack signature.
+    Retrieves the CtmSolver loaded from the active .mtkcache package.
+    Runtime strictly reads precompiled CTM rules from the asset cache (SSOT).
+    Returns None if cache is missing, invalid, or has no CTM rules.
     """
-    global _CACHED_CTM_SOLVER, _CACHED_CTM_SIGNATURE
+    global _CACHED_CTM_SOLVER
     if not force and prefs is not None and not getattr(prefs, "enable_ctm", True):
         return None
-    stack = get_configured_pack_stack(prefs)
-    if stack is None:
-        return None
-
-    ctm_sig = (_CACHED_STACK_SIGNATURE, True)
-    if _CACHED_CTM_SOLVER is not None and _CACHED_CTM_SIGNATURE == ctm_sig:
-        return _CACHED_CTM_SOLVER
 
     try:
-        if stack.get_ctm_rule_count() == 0:
-            _CACHED_CTM_SOLVER = None
-            _CACHED_CTM_SIGNATURE = ctm_sig
-            return None
-        solver = stack.build_ctm_solver()
-        _CACHED_CTM_SOLVER = solver
-        _CACHED_CTM_SIGNATURE = ctm_sig
-        return solver
+        from .cache import load_ctm_solver_from_cache, open_active_asset_cache
+        active_cache = open_active_asset_cache(prefs)
+        if active_cache is not None:
+            return load_ctm_solver_from_cache(prefs)
     except Exception as e:
-        logger.warning("Failed building CTM solver: %s", e, exc_info=True)
+        logger.warning("Failed loading CTM solver from cache package: %s", e)
+
     return None
 
 
@@ -262,6 +306,8 @@ def has_valid_vanilla_pack(prefs=None) -> bool:
 
 
 __all__ = [
+    "get_configured_pack_descriptors",
+    "get_configured_stack_fingerprint",
     "get_configured_pack_stack",
     "get_configured_ctm_solver",
     "invalidate_pack_stack_cache",

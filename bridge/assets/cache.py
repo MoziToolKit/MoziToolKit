@@ -18,7 +18,7 @@ import sys
 
 from ..engine import get_libmtk
 from ..prefs import get_prefs
-from .pack import get_configured_pack_stack
+from .pack import get_configured_pack_stack, get_configured_stack_fingerprint
 from .readers import (
     get_cached_texture_f32 as _readers_get_cached_texture_f32,
     get_cached_texture_rgba as _readers_get_cached_texture_rgba,
@@ -27,6 +27,7 @@ from .readers import (
     load_baked_model_database_inner,
     load_biome_resolver_inner,
     load_colormaps_inner,
+    load_ctm_solver_inner,
 )
 
 _cached_cache_stats: Optional[Dict[str, Any]] = None
@@ -240,6 +241,9 @@ _CACHED_MODEL_DB_MTIME: float = 0.0
 _CACHED_COLORMAPS: Optional[Any] = None
 _CACHED_COLORMAPS_PKG_PATH: Optional[str] = None
 _CACHED_COLORMAPS_MTIME: float = 0.0
+_CACHED_CTM_SOLVER: Optional[Any] = None
+_CACHED_CTM_SOLVER_PKG_PATH: Optional[str] = None
+_CACHED_CTM_SOLVER_MTIME: float = 0.0
 
 
 def invalidate_asset_cache_memory() -> None:
@@ -249,6 +253,7 @@ def invalidate_asset_cache_memory() -> None:
     global _CACHED_ATLAS, _CACHED_ATLAS_PKG_PATH, _CACHED_ATLAS_MTIME
     global _CACHED_MODEL_DB, _CACHED_MODEL_DB_PKG_PATH, _CACHED_MODEL_DB_MTIME
     global _CACHED_COLORMAPS, _CACHED_COLORMAPS_PKG_PATH, _CACHED_COLORMAPS_MTIME
+    global _CACHED_CTM_SOLVER, _CACHED_CTM_SOLVER_PKG_PATH, _CACHED_CTM_SOLVER_MTIME
     _ACTIVE_ASSET_CACHE = None
     _ACTIVE_CACHE_PKG_PATH = None
     _ACTIVE_CACHE_MTIME = 0.0
@@ -265,6 +270,9 @@ def invalidate_asset_cache_memory() -> None:
     _CACHED_COLORMAPS = None
     _CACHED_COLORMAPS_PKG_PATH = None
     _CACHED_COLORMAPS_MTIME = 0.0
+    _CACHED_CTM_SOLVER = None
+    _CACHED_CTM_SOLVER_PKG_PATH = None
+    _CACHED_CTM_SOLVER_MTIME = 0.0
     try:
         from .pack import invalidate_pack_stack_cache
         invalidate_pack_stack_cache()
@@ -321,10 +329,8 @@ def get_active_cache_package_path(prefs=None, compute_fingerprint: bool = True) 
         compute_fingerprint = False
 
     if compute_fingerprint:
-        stack = get_configured_pack_stack(prefs)
-        if stack is not None and stack.get_pack_count() > 0:
-            fp = stack.compute_stack_fingerprint()
-
+        fp = get_configured_stack_fingerprint(prefs)
+        if fp:
             # O(1) fast path: current package already matches the stack fingerprint.
             if _ACTIVE_CACHE_PKG_PATH is not None:
                 p = Path(_ACTIVE_CACHE_PKG_PATH)
@@ -522,6 +528,24 @@ def load_colormaps_from_cache(prefs=None) -> Optional[Any]:
     return cms
 
 
+def load_ctm_solver_from_cache(prefs=None) -> Optional[Any]:
+    """Loads precompiled CtmSolver from active cache package into memory, reusing cached instance."""
+    global _CACHED_CTM_SOLVER, _CACHED_CTM_SOLVER_PKG_PATH, _CACHED_CTM_SOLVER_MTIME
+    solver, pkg, mtime = load_ctm_solver_inner(
+        open_active_asset_cache,
+        _ACTIVE_CACHE_PKG_PATH,
+        _ACTIVE_CACHE_MTIME,
+        _CACHED_CTM_SOLVER,
+        _CACHED_CTM_SOLVER_PKG_PATH,
+        _CACHED_CTM_SOLVER_MTIME,
+        prefs,
+    )
+    _CACHED_CTM_SOLVER = solver
+    _CACHED_CTM_SOLVER_PKG_PATH = pkg
+    _CACHED_CTM_SOLVER_MTIME = mtime
+    return solver
+
+
 def get_cache_manifest(prefs=None) -> Optional[Dict[str, Any]]:
     """Reads manifest from active .mtkcache package."""
     global _ACTIVE_CACHE_MANIFEST
@@ -605,6 +629,7 @@ __all__ = [
     "load_baked_atlas_from_cache",
     "load_biome_resolver_from_cache",
     "load_colormaps_from_cache",
+    "load_ctm_solver_from_cache",
     "get_cache_manifest",
     "get_cache_fingerprint",
     "get_cache_timestamp",

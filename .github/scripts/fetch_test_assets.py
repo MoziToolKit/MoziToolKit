@@ -166,7 +166,10 @@ def main() -> int:
 
     resource_pack = work / "SPBR-21.zip"
     if download(f"{base}/SPBR-21.zip", resource_pack):
-        export_vars({"MTK_TEST_RESOURCE_PACK": str(resource_pack)})
+        export_vars({
+            "MTK_TEST_RESOURCE_PACK": str(resource_pack),
+            "MTK_TEST_CTM_PACK": str(resource_pack),
+        })
     else:
         print("::warning::External resource pack unavailable; companion-pack tests will be skipped.")
 

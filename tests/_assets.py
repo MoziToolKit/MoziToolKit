@@ -84,7 +84,7 @@ def resource_pack_zip() -> Optional[Path]:
 
 
 def ctm_resource_pack_zip() -> Optional[Path]:
-    """CTM resource pack `.zip` (e.g. clean-connected-glass or custom CTM pack)."""
+    """CTM resource pack `.zip` (e.g. clean-connected-glass, SPBR, or custom CTM pack)."""
     value = os.environ.get("MTK_TEST_CTM_PACK")
     if value and Path(value).exists():
         return Path(value)
@@ -93,10 +93,17 @@ def ctm_resource_pack_zip() -> Optional[Path]:
         _WORKSPACE_PARENT / "clean_connected_glass.zip",
         _WORKSPACE_PARENT / "clean-connected-glass.zip",
         Path.home() / "Downloads" / "clean_connected_glass.zip",
+        _WORKSPACE_PARENT / "SPBR-21.zip",
+        Path.home() / "Downloads" / "SPBR-21.zip",
     ]
     for candidate in candidates:
         if candidate.exists():
             return candidate
+
+    rp = resource_pack_zip()
+    if rp is not None:
+        return rp
+
     return None
 
 

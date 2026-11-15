@@ -57,12 +57,27 @@ def get_cache_dir(prefs=None) -> Path:
     """
     Returns the persistent cache directory for compiled assets.
     Delegates path resolution to the host (Blender/Python):
-    1. Environment override (`MOZI_CACHE_DIR`) for test sandboxing / isolation.
-    2. User-customized path in AddonPreferences (`prefs.cache_dir`).
-    3. Blender standard plugin user data directory:
+    1. Caller-specified explicit `prefs.cache_dir` takes highest precedence (isolates synthetic unit tests).
+    2. Environment override (`MOZI_CACHE_DIR`) for test sandboxing / isolation.
+    3. User-customized path in AddonPreferences (`prefs.cache_dir`).
+    4. Blender standard plugin user data directory:
        `bpy.utils.user_resource("DATAFILES") / "MoziToolKit" / "cache"`
-    4. Fallback to `~/.config/blender/MoziToolKit/cache`.
+    5. Fallback to `~/.config/blender/MoziToolKit/cache`.
     """
+    # 1. Highest precedence: Explicit caller-provided prefs with non-empty cache_dir
+    if prefs is not None and hasattr(prefs, "cache_dir"):
+        custom_path = getattr(prefs, "cache_dir", "")
+        if custom_path and str(custom_path).strip():
+            try:
+                import bpy
+                resolved = bpy.path.abspath(str(custom_path).strip())
+            except Exception:
+                resolved = str(custom_path).strip()
+            p = Path(resolved)
+            p.mkdir(parents=True, exist_ok=True)
+            return p
+
+    # 2. Environment override (`MOZI_CACHE_DIR`) for test sandboxing / isolation.
     env_dir = os.environ.get("MOZI_CACHE_DIR")
     if env_dir:
         p = Path(env_dir)

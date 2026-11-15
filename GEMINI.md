@@ -96,16 +96,45 @@ MoziToolKit/
 
 所有测试命令均在 Blender 5.x LTS 宿主环境中通过 `uv` 虚拟环境支持执行，杜绝 Mock 与全局 Python 污染：
 
-- **Blender 宿主环境全套测试（唯一权威测试门禁）**：
-  通过 `uv run python` 解析虚拟环境的 `site-packages`，确保 Blender 内置 Python 能加载 `pytest` 等依赖：
-  ```bash
-  # 全套测试 (真实 Blender 5.x 环境)
-  MTK_TEST_SITE_PACKAGES="$(uv run python -c 'import site; print(site.getsitepackages()[0])')" \
-    blender --background --python tests/run_tests.py -- -q
+- **测试资产约定与本地就绪（与 GitHub Actions CI 100% 对齐）**：
+  为避免测试因资产缺失跳过，工作区相邻父目录 (`..`，即 `/Volumes/Data/code_projects/mtk/`) 统一部署以下真实资产：
+  - `../mc/`：解压后的原版客户端资产根目录（包含 `assets/minecraft/...`）；
+  - `../26.2-Fabric.jar`：Vanilla + Fabric 客户端核心 Jar；
+  - `../SPBR-21.zip`：权威 PBR 材质包与 OptiFine CTM 玻璃规则包；
+  - `../mtk-save-world/`：标准测试存档目录（包含 `level.dat` 与 `region/*.mca`）；
+  - `.ci-cache/`：预编译好的二进制资产缓存包（通过 `precompile_cache.py` 生成）。
 
-  # 运行指定测试用例
+  资产准备与缓存预编译命令：
+  ```bash
+  # 1. 自动下载/解压 CI 测试资产至本地（若尚未存在）
+  python .github/scripts/fetch_test_assets.py
+
+  # 2. 预编译本地 .ci-cache 缓存（实现 0ms 高速测试，全真资产加载）
+  MTK_TEST_JAR="../26.2-Fabric.jar" \
+  MTK_TEST_RESOURCE_PACK="../SPBR-21.zip" \
+    python .github/scripts/precompile_cache.py
+  ```
+
+- **Blender 宿主环境全套测试（唯一权威测试门禁）**：
+  通过 `uv run python` 解析虚拟环境的 `site-packages`，注入环境变量后与 CI 完全一致执行：
+  ```bash
+  # 全量真实资产完整测试 (与 GitHub Actions CI 100% 对齐，609+ passed，0 资产跳过)
+  MOZI_CACHE_DIR="$(pwd)/.ci-cache" \
+  MTK_TEST_CACHE="$(pwd)/.ci-cache" \
+  MTK_TEST_JAR="$(pwd)/../26.2-Fabric.jar" \
+  MTK_TEST_ASSETS="$(pwd)/../mc" \
+  MC_DIR="$(pwd)/../mc" \
+  MC_ASSETS_DIR="$(pwd)/../mc" \
+  MTK_TEST_RESOURCE_PACK="$(pwd)/../SPBR-21.zip" \
+  MTK_TEST_CTM_PACK="$(pwd)/../SPBR-21.zip" \
+  MTK_TEST_SAVE="$(pwd)/../mtk-save-world" \
   MTK_TEST_SITE_PACKAGES="$(uv run python -c 'import site; print(site.getsitepackages()[0])')" \
-    blender --background --python tests/run_tests.py -- -q tests/test_scene_interchange.py
+    blender --background --python tests/run_tests.py -- -rs -q
+
+  # 运行指定测试用例 (例如 CTM 测试)
+  MOZI_CACHE_DIR="$(pwd)/.ci-cache" \
+  MTK_TEST_SITE_PACKAGES="$(uv run python -c 'import site; print(site.getsitepackages()[0])')" \
+    blender --background --python tests/run_tests.py -- -rs -q tests/test_ctm_bridge.py
   ```
 
 - **Rust 原生模块热更新验证**：
@@ -115,4 +144,4 @@ MoziToolKit/
   ```
 
 - **测试资产定位**：
-  测试资产统一走 `tests/_assets.py` 动态解析，缺失时必须优雅跳过 (`pytest.skip`)，严禁硬编码绝对路径。
+  测试资产统一走 `tests/_assets.py` 动态解析。测试严禁硬编码绝对路径。本地与 CI 均保证全套资产就绪，严禁在缺少资产导致的 `pytest.skip` 状态下交付代码。

@@ -104,9 +104,10 @@ class TestCtmBridge(unittest.TestCase):
         if self.mtk is None or not hasattr(self.mtk, "ResourcePackStack"):
             self.skipTest("libmtk_py ResourcePackStack not available")
 
+        pack_path = str(self.synthetic_pack_zip.resolve())
         mock_prefs = SimpleNamespace(
             cache_dir=str(self.tmp_dir.name),
-            resource_pack_path=str(self.synthetic_pack_zip),
+            resource_pack_path=pack_path,
             resource_packs=[],
         )
 
@@ -129,7 +130,8 @@ class TestCtmBridge(unittest.TestCase):
         )
 
         stack = self.mtk.ResourcePackStack()
-        stack.add_zip_pack(str(self.synthetic_pack_zip))
+        pack_path = str(self.synthetic_pack_zip.resolve())
+        stack.add_zip_pack(pack_path)
         init_solver = stack.build_ctm_solver()
         self.assertGreater(init_solver.rule_count, 0)
         rules_json = init_solver.to_json()
@@ -152,8 +154,8 @@ class TestCtmBridge(unittest.TestCase):
 
         invalidate_asset_cache_memory()
         mock_prefs = SimpleNamespace(
-            cache_dir=str(cache_dir),
-            resource_pack_path=str(self.synthetic_pack_zip),
+            cache_dir=str(cache_dir.resolve()),
+            resource_pack_path=pack_path,
             resource_packs=[],
             enable_ctm=True,
         )
@@ -212,7 +214,7 @@ class TestCtmBridge(unittest.TestCase):
         )
 
     def test_ctm_meshing_with_real_clean_connected_glass(self):
-        """Verify CTM meshing with real clean-connected-glass pack if available."""
+        """Verify CTM meshing with real clean-connected-glass or SPBR pack if available."""
         if self.mtk is None or not hasattr(self.mtk, "VoxelStorage"):
             self.skipTest("libmtk_py VoxelStorage not available")
 

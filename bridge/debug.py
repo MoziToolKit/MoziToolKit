@@ -61,12 +61,26 @@ def load_debug_world_storage(prefs=None, states=None, stack=None):
     try:
         from .assets.cache import load_baked_model_database
         cached_db = load_baked_model_database(prefs)
-        if cached_db is not None and not cached_db.is_empty():
+        if cached_db is not None and len(cached_db) > 0:
             return voxel_storage.create_debug_world_from_model_db(cached_db)
     except Exception as e:
-        logger.debug(f"Could not load model_db from cache for debug world: {e}")
+        logger.warning(f"Could not load model_db from cache for debug world: {e}")
 
-    # 2. Direct backend creation; libmtk re-validates the host-level asset roots itself.
+    # 2. Drive directly from active configured resource pack stack
+    if stack is None:
+        try:
+            from .assets.pack import get_configured_pack_stack
+            stack = get_configured_pack_stack(prefs)
+        except Exception as e:
+            logger.debug(f"Could not resolve pack stack for debug world: {e}")
+
+    if stack is not None and hasattr(stack, "has_vanilla_client_base") and stack.has_vanilla_client_base():
+        try:
+            return voxel_storage.create_debug_world_from_pack_stack(stack)
+        except Exception as e:
+            logger.warning(f"Failed to generate debug world from pack stack: {e}")
+
+    # 3. Direct backend creation; libmtk re-validates the host-level asset roots itself.
     return voxel_storage.create_debug_world()
 
 
@@ -87,7 +101,7 @@ def generate_debug_world_mesh(
     When with_models is True (default), resolves baked models, atlas UVs, and biome tinting.
     """
     if storage is None:
-        storage = load_debug_world_storage()
+        storage = load_debug_world_storage(prefs=prefs)
 
     if with_models:
         from .world import mesh_voxel_storage

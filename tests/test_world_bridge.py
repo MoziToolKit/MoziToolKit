@@ -309,6 +309,55 @@ class TestWorldBridgePipeline:
         with pytest.raises((ValueError, RuntimeError)):
             build_debug_world_data(prefs=empty_prefs)
 
+    def test_debug_world_and_benchmark_with_configured_packs_without_env(self, monkeypatch):
+        """
+        Regression test: When a vanilla base pack is configured in preferences,
+        debug world loading and mesher benchmark must succeed even when no
+        asset environment variables (MC_DIR, MC_ASSETS_DIR, etc.) are present.
+        """
+        from _assets import fabric_jar
+        from MoziToolKit.bridge.debug import (
+            is_debug_world_available,
+            load_debug_world_storage,
+        )
+        from MoziToolKit.dev.api import run_mesher_benchmark
+
+        jar_path = fabric_jar()
+        if not jar_path or not jar_path.exists():
+            pytest.skip("Vanilla client JAR required for pack stack debug world test")
+
+        # Strip all host-level asset environment variables to simulate clean Blender GUI environment
+        for key in ("MC_DIR", "MC_ASSETS_DIR", "MTK_TEST_ASSETS", "MTK_TEST_JAR", "MC_JAR"):
+            monkeypatch.delenv(key, raising=False)
+
+        class MockPackEntry:
+            def __init__(self, path: str):
+                self.path = path
+                self.enabled = True
+                self.pack_type = "base"
+                self.name = "FabricClient"
+
+        prefs = type(
+            "MockPrefs",
+            (),
+            {
+                "resource_packs": [MockPackEntry(str(jar_path.resolve()))],
+                "resource_pack_path": "",
+                "thread_count": 0,
+            },
+        )()
+
+        assert is_debug_world_available(prefs=prefs)
+
+        storage = load_debug_world_storage(prefs=prefs)
+        assert storage is not None
+        assert storage.size_x > 0
+
+        # Unmodeled raw meshing benchmark must succeed
+        bench_stats = run_mesher_benchmark(iterations=1, with_models=False, prefs=prefs)
+        assert bench_stats["quad_count"] > 0
+        assert bench_stats["avg_ms"] > 0
+
     def test_scan_unknown_blocks_fail_closed(self):
         from MoziToolKit.bridge.world import scan_unknown_blocks
 

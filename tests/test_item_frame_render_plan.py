@@ -549,6 +549,83 @@ class TestItemFrameRenderPlan(unittest.TestCase):
         self.assertAlmostEqual(x_span, 0.25, delta=0.02)
         self.assertAlmostEqual(y_span, 0.25, delta=0.02)
 
+    def test_10_item_frame_with_decorated_pot_sherds(self):
+        """Item frames holding decorated pots with NBT sherds fuse custom sherd pattern textures into mesh."""
+        import glob
+        import os
+
+        cache_files = glob.glob(os.path.join(os.getcwd(), ".ci-cache", "*.mtkcache"))
+        if not cache_files:
+            self.skipTest("No .ci-cache asset bundle found for decorated pot sherd fusion")
+
+        cache = self.mtk.AssetCache.open(cache_files[0])
+        try:
+            models = cache.load_models()
+            atlas = cache.load_atlas()
+        except Exception:
+            self.skipTest("Failed loading models or atlas from cache")
+
+        ent = {
+            "id": "minecraft:item_frame",
+            "uuid": "00000000-0000-0000-0000-000000000010",
+            "position": [0.0, 64.0, 0.0],
+            "facing": "north",
+            "kind": {
+                "type": "minecraft:item_frame",
+                "item_id": "minecraft:decorated_pot",
+                "count": 1,
+                "rotation": 0,
+                "is_glowing": False,
+                "is_invisible": False,
+                "components": {
+                    "block_entity": {
+                        "id": "minecraft:decorated_pot",
+                        "sherds": [
+                            "minecraft:angler_pottery_sherd",
+                            "minecraft:archer_pottery_sherd",
+                            "minecraft:blade_pottery_sherd",
+                            "minecraft:brewer_pottery_sherd",
+                        ],
+                    },
+                },
+            },
+        }
+
+        plan = build_entity_render_plan([ent], atlas=atlas, models=models)
+        self.assertEqual(len(plan.warnings), 0)
+        self.assertEqual(len(plan.nodes), 1)
+        node = plan.nodes[0]
+
+        # 1. Texture routes must contain the configured pottery patterns
+        route_textures = [r["texture_key"] for r in node.material_routes]
+        sherd_patterns = [
+            "angler_pottery_pattern",
+            "archer_pottery_pattern",
+            "blade_pottery_pattern",
+            "brewer_pottery_pattern",
+        ]
+        for pattern in sherd_patterns:
+            matched = any(pattern in tex for tex in route_textures)
+            self.assertTrue(
+                matched,
+                f"Expected sherd pattern '{pattern}' in node routes: {route_textures}",
+            )
+
+        # 2. Reconcile into real Blender scene
+        root = bpy.data.objects.new("TestPotFrame_Root", None)
+        bpy.context.scene.collection.objects.link(root)
+
+        res = reconcile_entity_render_plan(root, plan=plan, atlas=atlas)
+        self.assertEqual(len(res.created), 1)
+        frame_obj = res.created[0]
+        self.assertEqual(frame_obj.type, "MESH")
+        self.assertEqual(frame_obj.get("mtk:item_id"), "minecraft:decorated_pot")
+
+        # Frame alone is 22 polygons; frame + decorated pot has 38 polygons (22 + 16 pot faces)
+        self.assertGreater(len(frame_obj.data.polygons), 22)
+        self.assertEqual(len(frame_obj.data.polygons), 38)
+        self.assertGreater(len(frame_obj.material_slots), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

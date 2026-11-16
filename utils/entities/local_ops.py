@@ -227,6 +227,7 @@ def apply_entity_delta(
     dynamic_entity_atlases: Optional[Any] = None,
     package_reader: Optional[Any] = None,
     sync_palette: bool = True,
+    models: Optional[Any] = None,
 ) -> EntityReconcileResult:
     """
     Applies a targeted incremental delta (batch upsert and/or delete) to visual entities
@@ -269,6 +270,7 @@ def apply_entity_delta(
         dynamic_entity_atlases=dynamic_entity_atlases,
         package_reader=package_reader,
         authoritative=False,
+        models=models,
     )
 
     if sync_palette:

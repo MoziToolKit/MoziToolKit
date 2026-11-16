@@ -112,6 +112,7 @@ class VoxelWorldAssemblyRequest:
     visual_entities: Optional[List[str]] = None
     render_plan: Optional[Any] = None
     package_reader: Optional[Any] = None
+    models: Optional[Any] = None
     metadata_props: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -366,6 +367,7 @@ def assemble_voxel_world(req: VoxelWorldAssemblyRequest) -> Dict[str, Any]:
                 prefs=req.prefs,
                 dynamic_entity_atlases=req.dynamic_entity_atlases,
                 package_reader=req.package_reader,
+                models=req.models,
             )
         except Exception as e:
             logger.warning("Failed assembling visual entities for container '%s': %s", req.root_name, e, exc_info=True)
@@ -411,6 +413,7 @@ def _assemble_visual_entities(
     dynamic_entity_atlases: Optional[Any] = None,
     package_reader: Optional[Any] = None,
     render_plan: Optional[Any] = None,
+    models: Optional[Any] = None,
 ) -> List[Any]:
     """
     Assembles continuous visual entities (such as Paintings) as standalone Blender mesh objects
@@ -431,6 +434,7 @@ def _assemble_visual_entities(
         prefs=prefs,
         dynamic_entity_atlases=dynamic_entity_atlases,
         package_reader=package_reader,
+        models=models,
     )
     return result.all_entities
 

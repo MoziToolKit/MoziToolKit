@@ -422,6 +422,8 @@ class MTK_OT_import_minecraft_save(bpy.types.Operator, ImportHelper, CommonMeshi
                 weld_vertices=self.weld_vertices,
                 enable_ctm=self.enable_ctm,
                 enable_animated_textures=self.enable_animated_textures,
+                atlas=mesh_context.get("atlas"),
+                models=mesh_context.get("model_db"),
             )
             self.report(
                 {"INFO"},

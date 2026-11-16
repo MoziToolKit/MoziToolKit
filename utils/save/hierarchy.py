@@ -114,6 +114,7 @@ def apply_imported_save_to_blender(
     enable_animated_textures: bool = True,
     dynamic_entity_atlases: Optional[Any] = None,
     colormaps: Optional[Any] = None,
+    models: Optional[Any] = None,
 ) -> Tuple[Any, Dict[str, Any]]:
     """
     Main-thread Blender scene injector for pre-meshed Minecraft save geometry.
@@ -129,10 +130,14 @@ def apply_imported_save_to_blender(
     clean_name = meta["level_name"].replace(" ", "_")
     base_container_name = f"Save_{clean_name}_{dimension}"
 
-    if atlas is None:
+    if atlas is None or models is None:
         try:
             from ...bridge.world import get_world_pipeline_assets
-            _, atlas, _ = get_world_pipeline_assets(prefs)
+            cached_mdb, cached_atlas, _ = get_world_pipeline_assets(prefs)
+            if atlas is None:
+                atlas = cached_atlas
+            if models is None:
+                models = cached_mdb
         except Exception:
             pass
 
@@ -228,6 +233,7 @@ def apply_imported_save_to_blender(
         custom_injector=inject_mesh_data,
         custom_material_binder=mat_binder,
         custom_cloud_ensurer=ensure_voxel_child_cloud,
+        models=models,
         metadata_props=metadata_props,
     )
 

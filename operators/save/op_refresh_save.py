@@ -199,6 +199,8 @@ class MOZI_OT_refresh_save_mesh(bpy.types.Operator):
                         weld_vertices=weld_vertices,
                         enable_ctm=enable_ctm,
                         enable_animated_textures=enable_animated_textures,
+                        atlas=mesh_context.get("atlas"),
+                        models=mesh_context.get("model_db"),
                         target_root=root,
                     )
 
@@ -279,6 +281,8 @@ class MOZI_OT_refresh_save_mesh(bpy.types.Operator):
                 weld_vertices=weld_vertices,
                 enable_ctm=enable_ctm,
                 enable_animated_textures=enable_animated_textures,
+                atlas=mesh_context.get("atlas"),
+                models=mesh_context.get("model_db"),
                 target_root=root,
             )
             if props:

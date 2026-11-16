@@ -102,6 +102,7 @@ def apply_imported_scene_to_blender(
         visual_entities=data.get("visual_entities"),
         render_plan=data.get("render_plan"),
         package_reader=reader,
+        models=data.get("models"),
         metadata_props=metadata_props,
     )
 

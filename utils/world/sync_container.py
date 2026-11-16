@@ -406,6 +406,7 @@ def update_world_mesh(
         custom_cloud_ensurer=ensure_voxel_child_cloud,
         clean_unused_material_slots=False,
         sync_point_cloud=sync_point_cloud,
+        models=getattr(session, "model_db", None),
     )
 
     res = assemble_voxel_world(req)

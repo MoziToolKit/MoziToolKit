@@ -344,6 +344,7 @@ def _sync_timer_tick() -> Optional[float]:
                         container_name=getattr(active_container, "name", "World"),
                         bounds=eff_bounds,
                         origin_centered=True,
+                        models=getattr(session, "model_db", None),
                     )
                     _sync_prop("last_update_info", f"Visual Entities: +{len(upserted)} / -{len(deleted_uuids)}")
                 except Exception as e:
@@ -459,6 +460,7 @@ def _sync_timer_tick() -> Optional[float]:
                                 bounds=eff_bounds,
                                 origin_centered=True,
                                 authoritative=True,
+                                models=getattr(session, "model_db", None),
                             )
                     except Exception as e:
                         logger.debug("Failed reconciling baseline visual entities on mesh update: %s", e)
@@ -522,6 +524,7 @@ def _sync_timer_tick() -> Optional[float]:
                                 bounds=eff_bounds,
                                 origin_centered=True,
                                 authoritative=True,
+                                models=getattr(session, "model_db", None),
                             )
                     except Exception as e:
                         logger.debug("Failed reconciling baseline visual entities on stream finished: %s", e)

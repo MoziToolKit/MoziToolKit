@@ -161,6 +161,7 @@ def load_and_mesh_scene_package(
             coordinate_system="z_up",
             revision=0,
             authoritative=True,
+            models=models,
         )
 
     return {
@@ -272,6 +273,7 @@ def build_entity_render_plan(
     revision: int = 0,
     authoritative: bool = True,
     deleted_keys: Optional[List[str]] = None,
+    models: Any = None,
 ) -> Any:
     """
     Bakes and compiles a batch of visual entities into a unified EntityRenderPlan.
@@ -290,6 +292,7 @@ def build_entity_render_plan(
         revision=revision,
         authoritative=authoritative,
         deleted_keys=deleted_keys,
+        models=models,
     )
 
 

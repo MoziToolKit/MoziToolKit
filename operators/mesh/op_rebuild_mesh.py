@@ -239,6 +239,7 @@ def _handle_cloud_success(
                 prefs=prefs,
                 dynamic_entity_atlases=dyn_entities,
                 package_reader=pkg_reader,
+                models=ctx_data.get("model_db"),
             )
     except Exception as e:
         logger.warning("Failed synchronizing visual entities during mesh rebuild: %s", e)

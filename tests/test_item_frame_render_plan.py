@@ -3,6 +3,7 @@ Integration tests for Item Frame and Glow Item Frame procedural mesh generation 
 Executed strictly in real Blender 5.x LTS host environment without mocks.
 """
 
+import json
 import math
 import unittest
 import bpy
@@ -249,6 +250,304 @@ class TestItemFrameRenderPlan(unittest.TestCase):
         self.assertTrue(new_frame.get("mtk:is_glowing"))
         self.assertEqual(world_mesh.name, "Yefira_World_Mesh")
         self.assertEqual(world_mesh.parent, root)
+
+    def test_05_item_frame_with_held_item_procedural_mesh(self):
+        """Item frames with held items fuse item models and bind item materials in Blender host."""
+        import glob
+        import os
+
+        cache_files = glob.glob(os.path.join(os.getcwd(), ".ci-cache", "*.mtkcache"))
+        if not cache_files:
+            self.skipTest("No .ci-cache asset bundle found for full procedural item fusion")
+
+        cache = self.mtk.AssetCache.open(cache_files[0])
+        try:
+            models = cache.load_models()
+            atlas = cache.load_atlas()
+        except Exception:
+            self.skipTest("Failed loading models or atlas from cache")
+
+        # 1. Build an empty item frame plan
+        empty_frame_ent = {
+            "id": "minecraft:item_frame",
+            "uuid": "00000000-0000-0000-0000-000000000001",
+            "position": [0.0, 64.0, 0.0],
+            "facing": "north",
+            "kind": {
+                "type": "minecraft:item_frame",
+                "item_id": "",
+                "rotation": 0,
+                "is_glowing": False,
+                "is_invisible": False,
+            },
+        }
+        empty_plan = build_entity_render_plan([empty_frame_ent], atlas=atlas, models=models)
+        empty_node = empty_plan.nodes[0]
+
+        # 2. Build an item frame with a diamond sword
+        sword_frame_ent = {
+            "id": "minecraft:item_frame",
+            "uuid": "00000000-0000-0000-0000-000000000002",
+            "position": [0.0, 64.0, 0.0],
+            "facing": "north",
+            "kind": {
+                "type": "minecraft:item_frame",
+                "item_id": "minecraft:diamond_sword",
+                "rotation": 2,
+                "is_glowing": False,
+                "is_invisible": False,
+            },
+        }
+        sword_plan = build_entity_render_plan([sword_frame_ent], atlas=atlas, models=models)
+        self.assertEqual(len(sword_plan.warnings), 0)
+        sword_node = sword_plan.nodes[0]
+
+        # Mesh face count with sword must be strictly greater than empty frame
+        self.assertGreater(sword_node.mesh.face_count, empty_node.mesh.face_count)
+
+        # 3. Reconcile into real Blender scene
+        root = bpy.data.objects.new("TestWorld_Root", None)
+        bpy.context.scene.collection.objects.link(root)
+
+        res = reconcile_entity_render_plan(root, plan=sword_plan, atlas=atlas)
+        self.assertEqual(len(res.created), 1)
+
+        sword_frame_obj = res.created[0]
+        self.assertEqual(sword_frame_obj.type, "MESH")
+        self.assertEqual(sword_frame_obj.get("mtk:item_id"), "minecraft:diamond_sword")
+        self.assertEqual(sword_frame_obj.get("mtk:item_rotation"), 2)
+
+        # Polygons in Blender Mesh must be greater than empty frame
+        self.assertGreater(len(sword_frame_obj.data.polygons), empty_node.mesh.face_count)
+
+        # Materials assigned must include item frame and diamond sword routes
+        self.assertGreater(len(sword_frame_obj.material_slots), 0)
+
+    def test_06_e2e_assemble_voxel_world_with_item_frame(self):
+        """assemble_voxel_world correctly builds visual entities with items via auto-resolved model database."""
+        from MoziToolKit.utils.world.assembler import VoxelWorldAssemblyRequest, assemble_voxel_world
+
+        libmtk = get_libmtk()
+        storage = libmtk.VoxelStorage()
+
+        ent = {
+            "id": "minecraft:item_frame",
+            "uuid": "00000000-0000-0000-0000-000000000006",
+            "position": [0.0, 64.0, 0.0],
+            "facing": "north",
+            "kind": {
+                "type": "minecraft:item_frame",
+                "item_id": "minecraft:diamond_sword",
+                "count": 1,
+                "rotation": 0,
+                "is_glowing": False,
+                "is_invisible": False,
+            },
+        }
+
+        # Empty mesh data
+        mesh_data = libmtk.MeshData()
+
+        req = VoxelWorldAssemblyRequest(
+            container_type="SAVE",
+            root_name="TestE2E_Assembly",
+            mesh_data=mesh_data,
+            storage=storage,
+            visual_entities=[json.dumps(ent)],
+            bounds=[0, 0, 0, 16, 64, 16],
+            origin_centered=True,
+            reuse_existing=False,
+        )
+
+        res = assemble_voxel_world(req)
+        entity_objs = res["entity_objs"]
+        self.assertEqual(len(entity_objs), 1)
+
+        ent_obj = entity_objs[0]
+        self.assertEqual(ent_obj.get("mtk:item_id"), "minecraft:diamond_sword")
+        # Empty frame is 22 polygons, frame + sword has > 100 polygons
+        self.assertGreater(len(ent_obj.data.polygons), 22)
+        self.assertEqual(len(ent_obj.data.polygons), 124)
+
+    def test_07_e2e_save_import_constructs_item_frame_with_item(self):
+        """apply_imported_save_to_blender populates item frames with items into Blender hierarchy."""
+        from MoziToolKit.utils.save.hierarchy import apply_imported_save_to_blender
+
+        libmtk = get_libmtk()
+        storage = libmtk.VoxelStorage()
+
+        ent = {
+            "id": "minecraft:item_frame",
+            "uuid": "00000000-0000-0000-0000-000000000007",
+            "position": [2.0, 64.0, 2.0],
+            "facing": "south",
+            "kind": {
+                "type": "minecraft:item_frame",
+                "item_id": "minecraft:golden_apple",
+                "count": 1,
+                "rotation": 1,
+                "is_glowing": False,
+                "is_invisible": False,
+            },
+        }
+        storage.set_visual_entities_palette([json.dumps(ent)])
+
+        mesh_data = libmtk.MeshData()
+        meta = {
+            "level_name": "TestSaveWorld",
+            "version_name": "1.21",
+            "data_version": 3837,
+            "spawn": [0, 64, 0],
+            "time": 1000,
+            "day_time": 1000,
+        }
+
+        root_obj, stats = apply_imported_save_to_blender(
+            mesh_data=mesh_data,
+            meta=meta,
+            storage=storage,
+            elapsed_ms=10.0,
+            world_dir="/tmp/test_world",
+            dimension="overworld",
+            min_block=(0, 0, 0),
+            max_block=(16, 64, 16),
+            origin_centered=True,
+            reuse_existing=False,
+        )
+
+        self.assertIsNotNone(root_obj)
+        # Find visual entity child
+        children = list(root_obj.children)
+        entities_containers = [c for c in children if c.get("mtk:is_entities_container") or c.name.endswith("_Entities")]
+        self.assertEqual(len(entities_containers), 1)
+        ent_container = entities_containers[0]
+
+        frame_objs = [c for c in ent_container.children if c.get("mtk:is_visual_entity")]
+        self.assertEqual(len(frame_objs), 1)
+        frame_obj = frame_objs[0]
+
+        self.assertEqual(frame_obj.get("mtk:item_id"), "minecraft:golden_apple")
+        # Must contain golden apple elements (faces > 22)
+        self.assertGreater(len(frame_obj.data.polygons), 22)
+
+    def test_08_e2e_live_sync_delta_constructs_item_frame_with_item(self):
+        """apply_entity_delta adds and updates item frames with items into active container."""
+        libmtk = get_libmtk()
+
+        root_obj = bpy.data.objects.new("TestSyncWorld_Root", None)
+        bpy.context.scene.collection.objects.link(root_obj)
+
+        ent = {
+            "id": "minecraft:glow_item_frame",
+            "uuid": "00000000-0000-0000-0000-000000000008",
+            "position": [0.0, 64.0, 0.0],
+            "facing": "east",
+            "kind": {
+                "type": "minecraft:item_frame",
+                "item_id": "minecraft:diamond_sword",
+                "count": 1,
+                "rotation": 3,
+                "is_glowing": True,
+                "is_invisible": False,
+            },
+        }
+
+        res = apply_entity_delta(
+            root_or_container=root_obj,
+            upsert_entities=[ent],
+            origin_centered=True,
+            bounds=[0, 0, 0, 16, 64, 16],
+        )
+
+        self.assertEqual(len(res.created), 1)
+        glow_frame_obj = res.created[0]
+        self.assertEqual(glow_frame_obj.get("mtk:item_id"), "minecraft:diamond_sword")
+        self.assertEqual(glow_frame_obj.get("mtk:is_glowing"), True)
+        self.assertEqual(len(glow_frame_obj.data.polygons), 124)
+
+    def test_09_item_frame_with_block_scaling_and_biome_tint(self):
+        """Item frames holding block models (e.g. grass_block) have 0.25 total scale and active biome tint attributes."""
+        import glob
+        import os
+        from MoziToolKit.bridge.mesh.attribute_schema import ATTR_BIOME_TINT_DATA, ATTR_BIOME_TINT_COLOR
+
+        cache_files = glob.glob(os.path.join(os.getcwd(), ".ci-cache", "*.mtkcache"))
+        if not cache_files:
+            self.skipTest("No .ci-cache asset bundle found for full procedural item fusion")
+
+        cache = self.mtk.AssetCache.open(cache_files[0])
+        try:
+            models = cache.load_models()
+            atlas = cache.load_atlas()
+        except Exception:
+            self.skipTest("Failed loading models or atlas from cache")
+
+        ent = {
+            "id": "minecraft:item_frame",
+            "uuid": "00000000-0000-0000-0000-000000000009",
+            "position": [0.0, 64.0, 0.0],
+            "facing": "north",
+            "kind": {
+                "type": "minecraft:item_frame",
+                "item_id": "minecraft:grass_block",
+                "count": 1,
+                "rotation": 0,
+                "is_glowing": False,
+                "is_invisible": False,
+            },
+        }
+
+        plan = build_entity_render_plan([ent], atlas=atlas, models=models)
+        self.assertEqual(len(plan.warnings), 0)
+        self.assertEqual(len(plan.nodes), 1)
+        node = plan.nodes[0]
+
+        root = bpy.data.objects.new("TestGrassFrame_Root", None)
+        bpy.context.scene.collection.objects.link(root)
+
+        res = reconcile_entity_render_plan(root, plan=plan, atlas=atlas)
+        self.assertEqual(len(res.created), 1)
+        frame_obj = res.created[0]
+        mesh = frame_obj.data
+
+        # 1. Mesh attributes for biome tinting must be present
+        self.assertIn(ATTR_BIOME_TINT_DATA, mesh.attributes)
+        self.assertIn(ATTR_BIOME_TINT_COLOR, mesh.attributes)
+
+        tint_data_attr = mesh.attributes[ATTR_BIOME_TINT_DATA]
+        tint_color_attr = mesh.attributes[ATTR_BIOME_TINT_COLOR]
+
+        # 2. At least one face (grass_block_top / grass_block_side) must have tint_weight == 1.0 (channel 2)
+        tinted_face_indices = []
+        for face_idx, item in enumerate(tint_data_attr.data):
+            col = list(item.color)
+            if col[2] > 0.5:  # Tint Weight
+                tinted_face_indices.append(face_idx)
+        self.assertGreater(len(tinted_face_indices), 0, "Grass block elements must have active tint weight")
+
+        # 3. Tinted faces must have grass-green tint color (G > R)
+        tinted_face = tinted_face_indices[0]
+        # Corner domain attribute for this face
+        loop_start = mesh.polygons[tinted_face].loop_start
+        corner_col = list(tint_color_attr.data[loop_start].color)
+        # Plains grass color has G > R (green foliage)
+        self.assertGreater(corner_col[1], corner_col[0], f"Tint color must be green, got: {corner_col}")
+
+        # 4. Dimension verification: grass block item elements must have extent around 0.25 in X/Y (centered in [-0.125, 0.125])
+        # Find vertices belonging to the grass block elements (inner recess)
+        inner_verts_x = []
+        inner_verts_y = []
+        for poly_idx in tinted_face_indices:
+            for v_idx in mesh.polygons[poly_idx].vertices:
+                v = mesh.vertices[v_idx].co
+                inner_verts_x.append(v.x)
+                inner_verts_y.append(v.y)
+
+        x_span = max(inner_verts_x) - min(inner_verts_x)
+        y_span = max(inner_verts_y) - min(inner_verts_y)
+        # Block scale must be ~0.25 (16 pixels * 0.5 * 0.5 / 16 = 0.25), NOT 0.5
+        self.assertAlmostEqual(x_span, 0.25, delta=0.02)
+        self.assertAlmostEqual(y_span, 0.25, delta=0.02)
 
 
 if __name__ == "__main__":

@@ -104,6 +104,7 @@ def reconcile_entity_render_plan(
     package_reader: Optional[Any] = None,
     authoritative: Optional[bool] = None,
     deleted_keys: Optional[List[str]] = None,
+    models: Optional[Any] = None,
 ) -> EntityReconcileResult:
     """
     Reconciles visual entities (such as Paintings and Item Frames) in the Blender
@@ -139,6 +140,23 @@ def reconcile_entity_render_plan(
                 atlas_mapping_json = atlas.mapping_json
 
         auth_flag = True if authoritative is None else bool(authoritative)
+        if models is None and package_reader is not None:
+            models = getattr(package_reader, "models", None)
+        if models is None:
+            try:
+                from ...bridge.world import get_world_pipeline_assets
+                cached_mdb, cached_atlas, _ = get_world_pipeline_assets(prefs)
+                models = cached_mdb
+                if atlas is None:
+                    atlas = cached_atlas
+                    if atlas is not None:
+                        if hasattr(atlas, "get_mapping_json"):
+                            atlas_mapping_json = atlas.get_mapping_json()
+                        elif hasattr(atlas, "mapping_json"):
+                            atlas_mapping_json = atlas.mapping_json
+            except Exception:
+                pass
+
         try:
             active_plan = build_entity_render_plan(
                 entities=entities_palette or [],
@@ -150,6 +168,7 @@ def reconcile_entity_render_plan(
                 revision=0,
                 authoritative=auth_flag,
                 deleted_keys=deleted_keys,
+                models=models,
             )
         except Exception as e:
             logger.warning("Failed building entity render plan: %s", e)

@@ -102,7 +102,7 @@ class TestItemGeneratorBridge(unittest.TestCase):
             "minecraft:bow",
             "minecraft:potion",
         ]:
-            res = testing.model_database_get_mesh(db, item_key, False)
+            res = db.get_mesh(item_key, False)
             self.assertIsNotNone(res, f"Item '{item_key}' failed to resolve from prebaked database")
             mesh_data, textures = res
             self.assertFalse(mesh_data.is_empty(), f"Item '{item_key}' produced empty mesh")
@@ -110,15 +110,15 @@ class TestItemGeneratorBridge(unittest.TestCase):
             self.assertGreater(mesh_data.vertex_count, 0)
 
         # Test vertex welding comparison on diamond_sword
-        sword_unwelded, _ = testing.model_database_get_mesh(db, "minecraft:diamond_sword", False, False)
-        sword_welded, _ = testing.model_database_get_mesh(db, "minecraft:diamond_sword", False, True)
+        sword_unwelded, _ = db.get_mesh("minecraft:diamond_sword", False, False)
+        sword_welded, _ = db.get_mesh("minecraft:diamond_sword", False, True)
         self.assertEqual(sword_unwelded.quad_count, sword_welded.quad_count)
         self.assertEqual(sword_unwelded.vertex_count, 408)
         self.assertEqual(sword_welded.vertex_count, 140)
         self.assertLess(sword_welded.vertex_count, sword_unwelded.vertex_count)
 
         # Test full items showcase gallery grid generation in Rust
-        gallery_horizontal = testing.model_database_build_items_gallery(db, 36, 1.5, False)
+        gallery_horizontal = db.build_items_gallery(36, 1.5, False)
         self.assertIsNotNone(gallery_horizontal)
         h_mesh, h_textures, h_count = gallery_horizontal
         self.assertGreater(h_count, 1000, "Expected >1000 prebaked items in vanilla assets")
@@ -128,7 +128,7 @@ class TestItemGeneratorBridge(unittest.TestCase):
         self.assertGreater(len(h_textures), 0)
 
         # Also verify vertical gallery wall orientation
-        gallery_vertical = testing.model_database_build_items_gallery(db, 20, 2.0, True)
+        gallery_vertical = db.build_items_gallery(20, 2.0, True)
         self.assertIsNotNone(gallery_vertical)
         v_mesh, v_textures, v_count = gallery_vertical
         self.assertEqual(v_count, h_count)

@@ -306,8 +306,8 @@ class TestSceneInterchangeEndToEnd(unittest.TestCase):
         # Check models
         models = data["models"]
         self.assertIsNotNone(models)
-        self.assertIsNotNone(self.mtk.unstable.testing.model_database_get_mesh(models, "minecraft:stone"))
-        self.assertIsNotNone(self.mtk.unstable.testing.model_database_get_mesh(models, "minecraft:dirt"))
+        self.assertIsNotNone(models.get_mesh("minecraft:stone"))
+        self.assertIsNotNone(models.get_mesh("minecraft:dirt"))
 
         # Check atlas
         atlas = data["atlas"]

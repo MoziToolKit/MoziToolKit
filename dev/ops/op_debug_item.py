@@ -179,11 +179,6 @@ class MOZI_OT_dev_load_debug_item(bpy.types.Operator):
             self.report({"ERROR"}, "libmtk_py native engine is not available")
             return {"CANCELLED"}
 
-        testing = getattr(getattr(mtk, "unstable", None), "testing", None)
-        if testing is None:
-            self.report({"ERROR"}, "libmtk_py.unstable.testing module is unavailable")
-            return {"CANCELLED"}
-
         prefs = get_prefs(context)
 
         # 1. Base pack gate
@@ -231,8 +226,7 @@ class MOZI_OT_dev_load_debug_item(bpy.types.Operator):
         if self.generation_mode == "ALL":
             is_vertical = (self.layout_plane == "VERTICAL")
             try:
-                mesh_data, textures, total_items = testing.model_database_build_items_gallery(
-                    model_db,
+                mesh_data, textures, total_items = model_db.build_items_gallery(
                     self.columns,
                     self.spacing,
                     is_vertical,
@@ -344,9 +338,7 @@ class MOZI_OT_dev_load_debug_item(bpy.types.Operator):
 
         mesh_res = None
         for cand in candidates:
-            mesh_res = testing.model_database_get_mesh(
-                model_db, cand, False, self.weld_vertices
-            )
+            mesh_res = model_db.get_mesh(cand, False, self.weld_vertices)
             if mesh_res is not None:
                 break
 

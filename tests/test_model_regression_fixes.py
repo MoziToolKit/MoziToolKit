@@ -293,55 +293,58 @@ class TestModelRegressionFixes(unittest.TestCase):
         self.assertEqual(mesh_s.quad_count, 18)
         self.assertIn("minecraft:entity/chest/normal", tex_s)
 
-        # Left double chest
+        # Left double chest: `createDoubleBodyLeftLayer` drops the west face, whose panel is fully
+        # transparent in normal_left.png, leaving 15 quads (3 boxes x 5 faces).
         res_left = self.db.get_mesh("minecraft:chest[facing=north,type=left,waterlogged=false]", False)
         self.assertIsNotNone(res_left)
         mesh_l, tex_l = res_left
-        self.assertEqual(mesh_l.quad_count, 18)
+        self.assertEqual(mesh_l.quad_count, 15)
         self.assertIn("minecraft:entity/chest/normal_left", tex_l)
         # Left chest outer wall is West (min_x) and must be solid (U: ~0.45..0.67 in UV)
         uvs_l = ma.loop_uvs(mesh_l)
         pos_l = ma.positions(mesh_l)
         idxs_l = ma.quad_indices(mesh_l)
-        west_quad_found = False
-        for q in range(len(idxs_l) // 4):
-            q_idxs = idxs_l[q*4 : (q+1)*4]
-            q_pos = [pos_l[i*3 : (i+1)*3] for i in q_idxs]
-            q_uvs = [uvs_l[i*2 : (i+1)*2] for i in q_idxs]
-            min_x = min(p[0] for p in q_pos)
-            max_x = max(p[0] for p in q_pos)
-            min_y = min(p[1] for p in q_pos)
-            max_y = max(p[1] for p in q_pos)
-            if min_x == max_x and min_x < 0.1 and max_y < 0.7:  # West face of bottom
-                min_u = min(u[0] for u in q_uvs)
-                self.assertGreater(min_u, 0.4, "Left chest outer West face must be solid texture, not transparent 0..14")
-                west_quad_found = True
-        self.assertTrue(west_quad_found, "Left chest must have a West face")
+        # The body spans x 0..15/16 over z 1..15/16; a west face would sit at x == 0.0 across that
+        # whole z span. (The latch is also near x == 0 but only covers z 15..16.)
+        def is_west_body_quad(q_idx):
+            q_pos = [pos_l[i * 3 : (i + 1) * 3] for i in q_idx]
+            xs = [p[0] for p in q_pos]
+            zs = [p[2] for p in q_pos]
+            return min(xs) == max(xs) == 0.0 and max(zs) - min(zs) > 0.5
+
+        west_quad_found = any(
+            is_west_body_quad(idxs_l[q * 4 : (q + 1) * 4])
+            for q in range(len(idxs_l) // 4)
+        )
+        self.assertFalse(
+            west_quad_found,
+            "Left chest must not emit a West face: its panel is blank in normal_left.png",
+        )
 
         # Right double chest
         res_right = self.db.get_mesh("minecraft:chest[facing=north,type=right,waterlogged=false]", False)
         self.assertIsNotNone(res_right)
         mesh_r, tex_r = res_right
-        self.assertEqual(mesh_r.quad_count, 18)
+        self.assertEqual(mesh_r.quad_count, 15)
         self.assertIn("minecraft:entity/chest/normal_right", tex_r)
         # Right chest outer wall is East (max_x) and must be solid (U: 0.0..0.22 in UV)
         uvs_r = ma.loop_uvs(mesh_r)
         pos_r = ma.positions(mesh_r)
         idxs_r = ma.quad_indices(mesh_r)
-        east_quad_found = False
-        for q in range(len(idxs_r) // 4):
-            q_idxs = idxs_r[q*4 : (q+1)*4]
-            q_pos = [pos_r[i*3 : (i+1)*3] for i in q_idxs]
-            q_uvs = [uvs_r[i*2 : (i+1)*2] for i in q_idxs]
-            min_x = min(p[0] for p in q_pos)
-            max_x = max(p[0] for p in q_pos)
-            min_y = min(p[1] for p in q_pos)
-            max_y = max(p[1] for p in q_pos)
-            if min_x == max_x and max_x > 0.9 and max_y < 0.7:  # East face of bottom
-                min_u = min(u[0] for u in q_uvs)
-                self.assertLess(min_u, 0.05, "Right chest outer East face must be solid texture (U: 0..14)")
-                east_quad_found = True
-        self.assertTrue(east_quad_found, "Right chest must have an East face")
+        def is_east_body_quad(q_idx):
+            q_pos = [pos_r[i * 3 : (i + 1) * 3] for i in q_idx]
+            xs = [p[0] for p in q_pos]
+            zs = [p[2] for p in q_pos]
+            return min(xs) == max(xs) == 0.9375 and max(zs) - min(zs) > 0.5
+
+        east_quad_found = any(
+            is_east_body_quad(idxs_r[q * 4 : (q + 1) * 4])
+            for q in range(len(idxs_r) // 4)
+        )
+        self.assertFalse(
+            east_quad_found,
+            "Right chest must not emit an East face: its panel is blank in normal_right.png",
+        )
 
 
 if __name__ == "__main__":

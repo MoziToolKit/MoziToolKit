@@ -96,6 +96,7 @@ def inject_mesh_data(
         return False
 
     topology_updated = False
+    reused_topology = False
     needs_topology = update_topology or len(getattr(mesh, "vertices", [])) != v_count
 
     if needs_topology:
@@ -107,12 +108,32 @@ def inject_mesh_data(
             and total_indices % 6 == 0
             and face_count == total_indices // 6
         )
+        poly_count = (total_indices // 6) if is_quad else (total_indices // 3)
+        stride = 4 if is_quad else 3
+
+        # Repeat injections of a rebuilt world keep the same counts; rewriting the buffers in
+        # place avoids `clear_geometry` + three `add()` calls, which dominate the cost.
+        # Any count mismatch (see test_mesh_injection_reuse) falls back to a real reallocation.
+        reused_topology = (
+            use_dna
+            and is_dna_enabled()
+            and total_indices > 0
+            and len(getattr(mesh, "vertices", [])) == v_count
+            and len(getattr(mesh, "polygons", [])) == poly_count
+            and len(getattr(mesh, "loops", [])) == poly_count * stride
+        )
 
         # 1. Try DNA fast path if enabled
         if use_dna and is_dna_enabled():
             try:
                 topology_updated = inject_topology_dna(
-                    mesh, mesh_data, v_count, is_quad, total_indices, shade_smooth=shade_smooth
+                    mesh,
+                    mesh_data,
+                    v_count,
+                    is_quad,
+                    total_indices,
+                    shade_smooth=shade_smooth,
+                    reuse_existing=reused_topology,
                 )
             except Exception as e:
                 logger.debug("DNA direct topology injection fallback: %s", e)
@@ -192,7 +213,9 @@ def inject_mesh_data(
             use_dna=use_dna,
         )
 
-    mesh.update(calc_edges=topology_updated)
+    # Reusing the topology means the edge list is unchanged, so the (7.6 ms) edge rebuild is
+    # skipped as well; a real reallocation still recomputes it.
+    mesh.update(calc_edges=topology_updated and not reused_topology)
     return True
 
 

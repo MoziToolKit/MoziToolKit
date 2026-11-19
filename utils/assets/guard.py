@@ -44,9 +44,9 @@ def _get_configured_pack_stack(prefs=None):
     return get_configured_pack_stack(prefs)
 
 
-def _get_configured_pack_descriptors(prefs=None):
-    from ...bridge.assets.pack import get_configured_pack_descriptors
-    return get_configured_pack_descriptors(prefs)
+def _get_configured_pack_paths(prefs=None):
+    from ...bridge.assets.pack import get_configured_pack_paths
+    return get_configured_pack_paths(prefs)
 
 
 def _get_configured_stack_fingerprint(prefs=None):
@@ -125,7 +125,7 @@ def check_asset_cache_status(prefs=None) -> str:
     if mtk is None:
         return "MISSING"
 
-    descriptors = _get_configured_pack_descriptors(prefs)
+    descriptors = _get_configured_pack_paths(prefs)
     pack_count = len(descriptors)
     if pack_count == 0:
         _GUARD_STATUS_CACHE[cache_key] = "NO_PACKS"
@@ -137,16 +137,6 @@ def check_asset_cache_status(prefs=None) -> str:
         return "NO_VANILLA"
 
     expected_fp = _get_configured_stack_fingerprint(prefs)
-
-    # Test sandbox isolation guard
-    has_custom_packs = prefs is not None and hasattr(prefs, "resource_packs")
-    is_test_sandbox = os.environ.get("MTK_TEST_SANDBOX") == "1"
-    existing_packages = list(cache_dir.glob("*.mtkcache")) if cache_dir.exists() else []
-    if not has_custom_packs and is_test_sandbox and existing_packages:
-        active = _open_active_asset_cache(prefs)
-        if active is not None:
-            _GUARD_STATUS_CACHE[cache_key] = "READY"
-            return "READY"
 
     # Fast-path check: in-memory active cache matches expected fingerprint
     active = _open_active_asset_cache(prefs)

@@ -14,11 +14,12 @@ inside CI regardless of whether the real packs were downloaded.
 
 from __future__ import annotations
 
+import contextlib
 import os
 from pathlib import Path
 from typing import Optional
+from unittest import mock
 
-os.environ.setdefault("MTK_TEST_SANDBOX", "1")
 
 # tests/_assets.py -> parents[0] = tests/, parents[1] = MoziToolKit/, parents[2] = <mtk>/
 _WORKSPACE_PARENT = Path(__file__).resolve().parents[2]
@@ -199,3 +200,48 @@ def require_ctm_resource_pack() -> Path:
         )
     os.environ["MTK_TEST_CTM_PACK"] = str(pack)
     return pack
+
+
+@contextlib.contextmanager
+def activated_cache_package(path):
+    """Make a synthetic `.mtkcache` the active asset cache for the duration of the block.
+
+    Production resolution only accepts a package whose manifest fingerprint matches the
+    configured pack stack, so a fabricated package can never be picked up by accident. Tests that
+    build one declare it explicitly here instead of relying on a "newest file on disk" fallback.
+    """
+    from MoziToolKit.bridge.assets import cache as cache_mod
+
+    resolved = Path(path).resolve()
+    with mock.patch.object(
+        cache_mod, "get_active_cache_package_path", return_value=resolved
+    ):
+        cache_mod.invalidate_asset_cache_memory()
+        try:
+            yield resolved
+        finally:
+            cache_mod.invalidate_asset_cache_memory()
+
+
+_CACHE_READY = False
+
+
+def ensure_test_cache() -> None:
+    """Precompiles the test stack once when the cache directory has no package for it.
+
+    Cache resolution validates the stack fingerprint, so a package baked from different packs (or
+    from an older asset-cache format) is rejected. Tests therefore bake their own cache instead of
+    borrowing whatever happens to sit in the cache directory.
+    """
+    global _CACHE_READY
+    if _CACHE_READY:
+        return
+
+    from MoziToolKit.bridge.assets import invalidate_asset_cache_memory, precompile_stack
+    from MoziToolKit.utils.assets.guard import check_asset_cache_status
+
+    status = check_asset_cache_status(None)
+    if status != "READY":
+        precompile_stack(None)
+        invalidate_asset_cache_memory()
+    _CACHE_READY = True

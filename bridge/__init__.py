@@ -31,7 +31,7 @@ from .assets import (
     get_cached_texture_f32,
     get_cached_texture_rgba,
     get_configured_ctm_solver,
-    get_configured_pack_descriptors,
+    get_configured_pack_paths,
     get_configured_pack_stack,
     get_configured_stack_fingerprint,
     invalidate_asset_cache_memory,
@@ -133,7 +133,7 @@ __all__ = [
     "has_libmtk",
     "require_libmtk",
     # Assets (Precompile & Cache Read)
-    "get_configured_pack_descriptors",
+    "get_configured_pack_paths",
     "get_configured_stack_fingerprint",
     "get_configured_pack_stack",
     "get_configured_ctm_solver",

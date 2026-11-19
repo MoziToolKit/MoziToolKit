@@ -39,19 +39,21 @@ def invalidate_pack_stack_cache() -> None:
     _VANILLA_CHECK_CACHE.clear()
 
 
-def get_configured_pack_descriptors(prefs=None) -> List[str]:
+def get_configured_pack_paths(prefs=None) -> List[str]:
     """
-    Extracts the ordered list of pack descriptors (names/paths) matching how
-    ResourcePackStack tags packs. Does NOT open or decompress files.
+    Ordered absolute paths of the packs the configured stack loads.
+
+    This is the single source of ordering: the fingerprint and the loaded stack must agree
+    entry for entry, otherwise the cache resolves to a package built from different packs.
+    Does NOT open or decompress anything.
     """
     if prefs is None:
         prefs = get_prefs()
 
-    descriptors: List[str] = []
+    paths: List[str] = []
     single_path = getattr(prefs, "resource_pack_path", None) if prefs else None
     if single_path and Path(single_path).exists():
-        p = Path(single_path)
-        descriptors.append(p.stem if p.is_dir() else str(p.resolve()))
+        paths.append(str(Path(single_path).resolve()))
 
     if prefs and hasattr(prefs, "resource_packs"):
         for entry in prefs.resource_packs:
@@ -63,118 +65,64 @@ def get_configured_pack_descriptors(prefs=None) -> List[str]:
             p = Path(raw_path)
             if not p.exists():
                 continue
-            if p.is_dir():
-                name = getattr(entry, "name", None) or p.stem
-                descriptors.append(name)
-            elif p.is_file() and p.suffix.lower() in {".zip", ".jar"}:
-                descriptors.append(str(p.resolve()))
+            if p.is_dir() or (p.is_file() and p.suffix.lower() in {".zip", ".jar"}):
+                paths.append(str(p.resolve()))
 
-    if not descriptors:
+    if not paths:
         for env_var in ("MTK_TEST_JAR", "MC_JAR", "MC_DIR", "MC_ASSETS_DIR", "MTK_TEST_ASSETS"):
             val = os.environ.get(env_var)
             if val and Path(val).exists():
-                p = Path(val)
-                descriptors.append(p.stem if p.is_dir() else str(p.resolve()))
+                paths.append(str(Path(val).resolve()))
                 break
 
-    return descriptors
+    return paths
 
 
 def get_configured_stack_fingerprint(prefs=None) -> str:
     """
-    Calculates the exact stack fingerprint from preferences without opening or decompressing any archives.
-    Executes in < 0.01ms.
+    Content-addressed fingerprint of the configured pack stack.
+
+    Hashes each pack's path plus its file sizes and mtimes (directories are walked), so editing a
+    texture in place invalidates the cache. Still no archive is opened or decompressed.
     """
-    descriptors = get_configured_pack_descriptors(prefs)
+    paths = get_configured_pack_paths(prefs)
     mtk = get_libmtk()
-    if mtk is not None and hasattr(mtk, "compute_stack_fingerprint_from_names"):
-        return mtk.compute_stack_fingerprint_from_names(descriptors)
-    return "mtk_fp_bd60acb658c79e45"
+    if mtk is not None and hasattr(mtk, "compute_stack_fingerprint_from_paths"):
+        return mtk.compute_stack_fingerprint_from_paths(paths)
+    return ""
 
 
 def get_configured_pack_stack(prefs=None) -> Optional[Any]:
     """
-    Builds a libmtk ResourcePackStack from the Blender preferences configuration.
-    Traverses enabled entries in order and pushes them to Rust.
-    Reuses cached stack instance if configuration paths and mtimes are unchanged.
+    Builds a libmtk ResourcePackStack from the configured pack paths.
+
+    Reuses the cached stack while the configuration and its file mtimes are unchanged.
     """
     global _CACHED_PACK_STACK, _CACHED_STACK_SIGNATURE
     mtk = get_libmtk()
     if mtk is None:
         return None
 
-    if prefs is None:
-        prefs = get_prefs()
+    paths = get_configured_pack_paths(prefs)
+    stack = mtk.ResourcePackStack()
+    if not paths:
+        _CACHED_PACK_STACK = stack
+        _CACHED_STACK_SIGNATURE = ()
+        return stack
 
-    # Collect active entries to compute a lightweight mtime-based signature
-    paths_to_check = []
-    single_path = getattr(prefs, "resource_pack_path", None) if prefs else None
-    if single_path and Path(single_path).exists():
-        paths_to_check.append(str(Path(single_path).resolve()))
-
-    if prefs and hasattr(prefs, "resource_packs"):
-        for entry in prefs.resource_packs:
-            if getattr(entry, "enabled", True):
-                raw_path = getattr(entry, "path", "").strip()
-                if raw_path and Path(raw_path).exists():
-                    paths_to_check.append(str(Path(raw_path).resolve()))
-
-    env_fallback_path = None
-    if not paths_to_check:
-        for env_var in ("MTK_TEST_JAR", "MC_JAR", "MC_DIR", "MC_ASSETS_DIR", "MTK_TEST_ASSETS"):
-            val = os.environ.get(env_var)
-            if val and Path(val).exists():
-                env_fallback_path = str(Path(val).resolve())
-                paths_to_check.append(env_fallback_path)
-                break
-
-    sig = tuple((p, os.path.getmtime(p) if os.path.exists(p) else 0.0) for p in paths_to_check)
+    sig = tuple(
+        (path, os.path.getmtime(path) if os.path.exists(path) else 0.0)
+        for path in paths
+    )
     if _CACHED_PACK_STACK is not None and _CACHED_STACK_SIGNATURE == sig:
         return _CACHED_PACK_STACK
 
-    stack = mtk.ResourcePackStack()
-
-    if not paths_to_check:
-        _CACHED_PACK_STACK = stack
-        _CACHED_STACK_SIGNATURE = sig
-        return stack
-
-    # 1. Single direct pack path if present
-    if single_path and Path(single_path).exists():
-        p = Path(single_path)
+    for path in paths:
+        p = Path(path)
         if p.is_dir():
-            stack.add_directory_pack(str(p.resolve()), p.stem)
+            stack.add_directory_pack(path, p.stem)
         elif p.is_file() and p.suffix.lower() in {".zip", ".jar"}:
-            stack.add_zip_pack(str(p.resolve()))
-
-    # 2. Resource pack list entries
-    if hasattr(prefs, "resource_packs"):
-        for entry in prefs.resource_packs:
-            if not getattr(entry, "enabled", True):
-                continue
-
-            raw_path = getattr(entry, "path", "").strip()
-            if not raw_path:
-                continue
-
-            p = Path(raw_path)
-            if not p.exists():
-                continue
-
-            name = getattr(entry, "name", None) or p.stem
-
-            if p.is_dir():
-                stack.add_directory_pack(str(p.resolve()), name)
-            elif p.is_file() and p.suffix.lower() in {".zip", ".jar"}:
-                stack.add_zip_pack(str(p.resolve()))
-
-    # 3. Fallback from environment if no preference packs configured
-    if env_fallback_path and not stack.get_pack_count():
-        p = Path(env_fallback_path)
-        if p.is_dir():
-            stack.add_directory_pack(str(p.resolve()), p.stem)
-        elif p.is_file() and p.suffix.lower() in {".zip", ".jar"}:
-            stack.add_zip_pack(str(p.resolve()))
+            stack.add_zip_pack(path)
 
     _CACHED_PACK_STACK = stack
     _CACHED_STACK_SIGNATURE = sig
@@ -306,7 +254,7 @@ def has_valid_vanilla_pack(prefs=None) -> bool:
 
 
 __all__ = [
-    "get_configured_pack_descriptors",
+    "get_configured_pack_paths",
     "get_configured_stack_fingerprint",
     "get_configured_pack_stack",
     "get_configured_ctm_solver",

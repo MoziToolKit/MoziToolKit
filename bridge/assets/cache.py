@@ -336,13 +336,6 @@ def get_active_cache_package_path(prefs=None, compute_fingerprint: bool = True) 
 
     mtk = get_libmtk()
 
-    is_test_sandbox = os.environ.get("MTK_TEST_SANDBOX") == "1"
-
-    # Test sandbox isolation guard: if isolated via MTK_TEST_SANDBOX and caller did not specify custom prefs,
-    # avoid letting host-level global preferences override synthetic test packages.
-    if prefs is None and is_test_sandbox:
-        compute_fingerprint = False
-
     if compute_fingerprint:
         fp = get_configured_stack_fingerprint(prefs)
         if fp:
@@ -361,33 +354,13 @@ def get_active_cache_package_path(prefs=None, compute_fingerprint: bool = True) 
                 if resolved:
                     return Path(resolved)
 
-                # Test sandboxes may contain synthetic packages whose header does not
-                # match the host-level stack fingerprint.
-                if is_test_sandbox:
-                    candidates = sorted(
-                        cache_dir.glob("*.mtkcache"),
-                        key=lambda p: p.stat().st_mtime,
-                        reverse=True,
-                    )
-                    if candidates:
-                        return candidates[0]
-
                 if _ACTIVE_ASSET_CACHE is not None or _ACTIVE_CACHE_PKG_PATH is not None:
                     invalidate_asset_cache_memory()
                 return None
 
-    # Fallback when compute_fingerprint=False or no pack stack configured
-    if _ACTIVE_CACHE_PKG_PATH is not None:
-        p = Path(_ACTIVE_CACHE_PKG_PATH)
-        if p.parent != cache_dir:
-            invalidate_asset_cache_memory()
-        elif p.exists() and p.is_file():
-            return p
-
-    # Search for all .mtkcache files in cache dir sorted by mtime descending
-    candidates = sorted(cache_dir.glob("*.mtkcache"), key=lambda p: p.stat().st_mtime, reverse=True)
-    if candidates:
-        return candidates[0]
+    # No fingerprint means no way to prove the package matches the configured packs. Returning
+    # the newest file would serve a cache built from a different pack stack, which is exactly the
+    # "I changed my textures and nothing happened" failure. Callers must configure packs.
     return None
 
 
@@ -561,8 +534,28 @@ def load_ctm_solver_from_cache(prefs=None) -> Optional[Any]:
     return solver
 
 
+def _newest_cache_package(prefs=None) -> Optional[Path]:
+    """Newest `.mtkcache` in the cache directory, for introspection only.
+
+    Serving geometry goes through `get_active_cache_package_path`, which validates the stack
+    fingerprint. The panel still needs to read the manifest of whatever package is on disk so it
+    can show "this cache was built from different packs".
+    """
+    cache_dir = get_cache_dir(prefs).resolve()
+    if not cache_dir.is_dir():
+        return None
+    mtk = get_libmtk()
+    if mtk is not None and hasattr(mtk, "newest_cache_package"):
+        resolved = mtk.newest_cache_package(str(cache_dir))
+        return Path(resolved) if resolved else None
+    candidates = sorted(
+        cache_dir.glob("*.mtkcache"), key=lambda p: p.stat().st_mtime, reverse=True
+    )
+    return candidates[0] if candidates else None
+
+
 def get_cache_manifest(prefs=None) -> Optional[Dict[str, Any]]:
-    """Reads manifest from active .mtkcache package."""
+    """Reads the manifest of the newest `.mtkcache` on disk (introspection, never serving)."""
     global _ACTIVE_CACHE_MANIFEST
     cache = open_active_asset_cache(prefs)
     if cache is not None:
@@ -571,6 +564,18 @@ def get_cache_manifest(prefs=None) -> Optional[Dict[str, Any]]:
         try:
             _ACTIVE_CACHE_MANIFEST = cache.get_manifest()
             return _ACTIVE_CACHE_MANIFEST
+        except Exception:
+            pass
+
+    pkg = _newest_cache_package(prefs)
+    mtk = get_libmtk()
+    if pkg is not None and mtk is not None:
+        try:
+            reader = mtk.AssetCache.open(str(pkg))
+            manifest = reader.get_manifest()
+            if manifest is not None:
+                _ACTIVE_CACHE_MANIFEST = manifest
+                return manifest
         except Exception:
             pass
     return None
@@ -598,7 +603,7 @@ def get_cache_timestamp(prefs=None) -> float:
         except (ValueError, TypeError):
             pass
 
-    pkg = get_active_cache_package_path(prefs, compute_fingerprint=False)
+    pkg = _newest_cache_package(prefs)
     if pkg is not None and pkg.exists():
         try:
             return float(pkg.stat().st_mtime)

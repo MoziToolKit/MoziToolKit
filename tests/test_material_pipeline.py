@@ -23,6 +23,7 @@ for p in [str(libmtk_release_path), str(PROJECT_DIR), str(PARENT_DIR)]:
 
 import bpy
 
+from tests._assets import activated_cache_package
 from MoziToolKit.utils.materials.builder.atlas_builder import build_atlas_chunk_material
 from MoziToolKit.utils.materials.pipeline import (
     replace_materials,
@@ -221,7 +222,7 @@ class TestMaterialPipeline(unittest.TestCase):
             (atlas_dir / "atlas_mapping.json").write_text(json.dumps(atlas_mapping), encoding="utf-8")
 
             # Mock get_cache_dir and MOZI_CACHE_DIR to return our temporary test cache
-            with patch.dict(os.environ, {"MOZI_CACHE_DIR": str(cache_dir)}), patch("MoziToolKit.utils.materials.pipeline.get_cache_dir", return_value=cache_dir):
+            with patch.dict(os.environ, {"MOZI_CACHE_DIR": str(cache_dir)}), patch("MoziToolKit.utils.materials.pipeline.get_cache_dir", return_value=cache_dir), activated_cache_package(cache_dir / "abc123stackfp.mtkcache"):
                 # 1. Replace Materials (Atlas Mode)
                 res = replace_materials(obj, mode="ATLAS", origin="AUTO", biome="BADLANDS")
                 self.assertTrue(res["success"])
@@ -322,7 +323,8 @@ class TestMaterialPipeline(unittest.TestCase):
             (atlas_dir / "atlas_mapping.json").write_text(json.dumps(atlas_mapping), encoding="utf-8")
 
             with patch.dict(os.environ, {"MOZI_CACHE_DIR": str(cache_dir)}), \
-                 patch("MoziToolKit.utils.materials.pipeline.get_cache_dir", return_value=cache_dir):
+                 patch("MoziToolKit.utils.materials.pipeline.get_cache_dir", return_value=cache_dir), \
+                 activated_cache_package(cache_dir / "multiuvfp.mtkcache"):
                 res = replace_materials(obj, mode="ATLAS", origin="AUTO", biome="PLAINS")
                 self.assertTrue(res["success"])
                 self.assertFalse(res["reused_atlas_uvs"])
@@ -432,7 +434,7 @@ class TestMaterialPipeline(unittest.TestCase):
             }
             (atlas_dir / "atlas_mapping.json").write_text(json.dumps(atlas_mapping), encoding="utf-8")
 
-            with patch.dict(os.environ, {"MOZI_CACHE_DIR": str(cache_dir)}), patch("MoziToolKit.utils.materials.pipeline.get_cache_dir", return_value=cache_dir):
+            with patch.dict(os.environ, {"MOZI_CACHE_DIR": str(cache_dir)}), patch("MoziToolKit.utils.materials.pipeline.get_cache_dir", return_value=cache_dir), activated_cache_package(cache_dir / "abc123stackfp.mtkcache"):
                 # 1. Replace Materials in ATLAS mode from hashed MTK material name
                 res_atlas = replace_materials(obj, mode="ATLAS", origin="AUTO", biome="PLAINS")
                 self.assertTrue(res_atlas["success"])

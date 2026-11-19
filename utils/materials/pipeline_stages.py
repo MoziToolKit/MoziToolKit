@@ -84,15 +84,12 @@ def ensure_stack_precompiled(prefs: Optional[Any] = None) -> Path:
     status = check_asset_cache_status(prefs)
 
     if status in ("MISSING", "STALE"):
-        has_custom_packs = prefs is not None and hasattr(prefs, "resource_packs")
-        is_test_sandbox = os.environ.get("MTK_TEST_SANDBOX") == "1"
-        if not (not has_custom_packs and is_test_sandbox):
-            logger.info("Asset cache is %s; running automated precompilation...", status)
-            try:
-                precompile_stack(prefs)
-                invalidate_asset_cache_memory()
-            except Exception as e:
-                logger.warning("Automated precompilation in ensure_stack_precompiled failed: %s", e)
+        logger.info("Asset cache is %s; running automated precompilation...", status)
+        try:
+            precompile_stack(prefs)
+            invalidate_asset_cache_memory()
+        except Exception as e:
+            logger.warning("Automated precompilation in ensure_stack_precompiled failed: %s", e)
     return base_cache
 
 

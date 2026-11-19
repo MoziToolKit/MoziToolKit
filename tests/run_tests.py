@@ -21,7 +21,6 @@ import os
 import sys
 from pathlib import Path
 
-os.environ.setdefault("MTK_TEST_SANDBOX", "1")
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 for _path in (PROJECT_DIR, PROJECT_DIR.parent):
@@ -52,6 +51,15 @@ def main() -> int:
             "pytest is not importable. Install it into the active interpreter or set "
             "MTK_TEST_SITE_PACKAGES to the virtualenv site-packages directory."
         ) from exc
+
+    # The suite runs against the real cache path: resolution validates the stack fingerprint, so a
+    # stale cache directory is rebaked once here instead of being silently bypassed.
+    try:
+        from tests._assets import ensure_test_cache
+
+        ensure_test_cache()
+    except Exception as exc:  # pragma: no cover - cache baking needs real assets
+        print(f"[mtk-tests] cache prebake skipped: {exc}", file=sys.stderr)
 
     extra_args = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
     targets = [arg for arg in extra_args if not arg.startswith("-")]

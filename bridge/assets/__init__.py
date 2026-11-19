@@ -32,7 +32,7 @@ from .cache import (
 )
 from .pack import (
     get_configured_ctm_solver,
-    get_configured_pack_descriptors,
+    get_configured_pack_paths,
     get_configured_pack_stack,
     get_configured_stack_fingerprint,
 )
@@ -40,7 +40,7 @@ from .precompile import precompile_stack, precompile_stack_async
 
 
 __all__ = [
-    "get_configured_pack_descriptors",
+    "get_configured_pack_paths",
     "get_configured_stack_fingerprint",
     "get_configured_pack_stack",
     "get_configured_ctm_solver",

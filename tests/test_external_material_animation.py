@@ -25,6 +25,8 @@ for p in [str(libmtk_release_path), str(PROJECT_DIR), str(PARENT_DIR)]:
 
 import bpy
 
+from tests._assets import activated_cache_package
+
 
 def _write_dummy_png(path: Path):
     img = bpy.data.images.new(path.name, width=16, height=64)
@@ -139,7 +141,7 @@ class TestExternalMaterialAnimation(unittest.TestCase):
             cache_dir = self._make_cache(Path(tmpdir))
             with patch.dict(os.environ, {"MOZI_CACHE_DIR": str(cache_dir)}), patch(
                 "MoziToolKit.utils.materials.pipeline.get_cache_dir", return_value=cache_dir
-            ):
+            ), activated_cache_package(cache_dir / "animstackfp.mtkcache"):
                 res = replace_materials(obj, mode="ATLAS", origin="AUTO", biome="PLAINS")
                 self.assertTrue(res["success"])
                 self.assertTrue(res["enable_animated_textures"])
@@ -203,7 +205,7 @@ class TestExternalMaterialAnimation(unittest.TestCase):
             prefs_off = SimpleNamespace(enable_animated_textures=False)
             with patch.dict(os.environ, {"MOZI_CACHE_DIR": str(cache_dir)}), patch(
                 "MoziToolKit.utils.materials.pipeline.get_cache_dir", return_value=cache_dir
-            ):
+            ), activated_cache_package(cache_dir / "animstackfp.mtkcache"):
                 res = replace_materials(
                     obj,
                     mode="ATLAS",

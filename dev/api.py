@@ -163,9 +163,14 @@ def run_mesher_benchmark(
     prefs=None,
 ) -> Dict[str, Any]:
     """
-    Benchmarks raw meshing throughput for the 32k-block debug world.
-    When with_models is True (default), runs full block model baking + atlas UV remapping.
-    Returns timing statistics and polygon generation rate.
+    Benchmarks the sparse debug world twice over: the native mesh+assembly time reported by
+    `generate_debug_world_mesh`, and the wall-clock time the addon actually spends in it.
+
+    Two numbers are returned on purpose. The native figure is what the mesher core costs; the
+    wall figure adds the per-call bridge work (world construction, attribute views). Neither
+    includes Blender injection or material binding, and the debug world is a one-block-per-
+    section plane, so this is a *core* benchmark, not a scene benchmark. For the user-visible
+    path (real save + injection + materials) use `tools/blender/scenario_bench.py`.
     """
     if prefs is None:
         try:
@@ -185,23 +190,28 @@ def run_mesher_benchmark(
 
     storage = bridge.load_debug_world_storage(prefs=prefs)
 
-    durations = []
+    native_durations = []
+    wall_durations = []
     mesh_data = None
     for _ in range(iterations):
-        m, elapsed_ms = bridge.generate_debug_world_mesh(
+        started = time.perf_counter()
+        m, native_ms = bridge.generate_debug_world_mesh(
             storage=storage,
             with_models=with_models,
             prefs=prefs,
             num_threads=num_threads,
         )
-        durations.append(elapsed_ms)
+        wall_durations.append((time.perf_counter() - started) * 1000.0)
+        native_durations.append(native_ms)
         mesh_data = m
 
-    avg_ms = sum(durations) / len(durations)
+    native_avg_ms = sum(native_durations) / len(native_durations)
+    wall_avg_ms = sum(wall_durations) / len(wall_durations)
     quads = mesh_data.quad_count if mesh_data else 0
     verts = mesh_data.vertex_count if mesh_data else 0
 
-    quads_per_sec = (quads / (avg_ms / 1000.0)) if avg_ms > 0 else 0
+    def _rate(elapsed_ms: float) -> float:
+        return (quads / (elapsed_ms / 1000.0)) if elapsed_ms > 0 else 0.0
 
     if mesh_data is not None and getattr(mesh_data, "profile", None) is not None:
         try:
@@ -212,12 +222,17 @@ def run_mesher_benchmark(
     return {
         "iterations": iterations,
         "with_models": with_models,
-        "avg_ms": round(avg_ms, 2),
-        "min_ms": round(min(durations), 2),
-        "max_ms": round(max(durations), 2),
+        "scope": "debug_world_core_mesh",
+        "native_avg_ms": round(native_avg_ms, 2),
+        "native_min_ms": round(min(native_durations), 2),
+        "native_max_ms": round(max(native_durations), 2),
+        "native_quads_per_second": int(_rate(native_avg_ms)),
+        "wall_avg_ms": round(wall_avg_ms, 2),
+        "wall_min_ms": round(min(wall_durations), 2),
+        "wall_max_ms": round(max(wall_durations), 2),
+        "wall_quads_per_second": int(_rate(wall_avg_ms)),
         "quad_count": quads,
         "vertex_count": verts,
-        "quads_per_second": int(quads_per_sec),
     }
 
 

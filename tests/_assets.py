@@ -32,6 +32,23 @@ def _is_asset_root(path: Path) -> bool:
     return (path / "assets" / "minecraft").is_dir()
 
 
+def _require_real_assets() -> bool:
+    """True when a missing asset must fail the suite instead of skipping it."""
+    return os.environ.get("MTK_REQUIRE_REAL_ASSETS", "").strip().lower() in {"1", "true", "yes"}
+
+
+def _skip(reason: str) -> None:
+    """Skip `reason` loudly, or fail when `MTK_REQUIRE_REAL_ASSETS` is set."""
+    if _require_real_assets():
+        raise AssertionError(
+            f"[assets] required assets are unavailable: {reason}. "
+            "Set MTK_TEST_ASSETS (or MTK_REQUIRE_REAL_ASSETS=0 to allow skipping)."
+        )
+    import pytest
+
+    pytest.skip(reason)
+
+
 def assets_root() -> Optional[Path]:
     """Root directory that contains `assets/minecraft`, or `None` if unavailable."""
     for key in _ASSET_ENV_VARS:
@@ -41,8 +58,10 @@ def assets_root() -> Optional[Path]:
 
     candidates = [
         _WORKSPACE_PARENT / "mc",
+        _WORKSPACE_PARENT / "Minecraft_Source",
         _WORKSPACE_PARENT / "Minecraft_Unpacked",
         _WORKSPACE_PARENT / "libmozitoolkit" / ".." / "mc",
+        _WORKSPACE_PARENT / "libmozitoolkit" / ".." / "Minecraft_Source",
         _WORKSPACE_PARENT / "libmozitoolkit" / ".." / "Minecraft_Unpacked",
     ]
     for candidate in candidates:
@@ -165,11 +184,9 @@ def require_assets() -> Path:
     """
     root = assets_root()
     if root is None:
-        import pytest
-
-        pytest.skip(
+        _skip(
             "Minecraft assets unavailable: set MTK_TEST_ASSETS / MC_DIR or place an "
-            "unpacked jar at ../mc"
+            "unpacked jar at ../mc, ../Minecraft_Source or ../Minecraft_Unpacked"
         )
     os.environ["MC_DIR"] = str(root)
     os.environ["MC_ASSETS_DIR"] = str(root)
@@ -181,11 +198,7 @@ def require_jar() -> Path:
     """Returns the Minecraft jar path or skips the enclosing test."""
     jar = fabric_jar()
     if jar is None:
-        import pytest
-
-        pytest.skip(
-            "Minecraft jar unavailable: set MTK_TEST_JAR or place ../26.2-Fabric.jar"
-        )
+        _skip("Minecraft jar unavailable: set MTK_TEST_JAR or place ../26.2-Fabric.jar")
     os.environ["MTK_TEST_JAR"] = str(jar)
     return jar
 
@@ -194,9 +207,9 @@ def require_ctm_resource_pack() -> Path:
     """Returns the CTM resource pack path or skips the enclosing test if unavailable."""
     pack = ctm_resource_pack_zip()
     if pack is None or not pack.exists():
-        import pytest
-        pytest.skip(
-            "CTM resource pack unavailable: set MTK_TEST_CTM_PACK environment variable or place pack zip in parent directory."
+        _skip(
+            "CTM resource pack unavailable: set MTK_TEST_CTM_PACK or place a pack zip "
+            "next to the workspace"
         )
     os.environ["MTK_TEST_CTM_PACK"] = str(pack)
     return pack

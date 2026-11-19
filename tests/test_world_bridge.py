@@ -100,8 +100,9 @@ class TestWorldBridgePipeline:
         bench = run_mesher_benchmark(iterations=1, with_models=False)
         assert bench["iterations"] == 1
         assert bench["quad_count"] > 0
-        assert bench["avg_ms"] > 0
-        assert bench["quads_per_second"] > 0
+        assert bench["native_avg_ms"] > 0
+        assert bench["native_quads_per_second"] > 0
+        assert bench["wall_avg_ms"] >= bench["native_avg_ms"]
 
     def test_dev_panel_ui_draw(self):
         """Verifies that the MTK Dev Panel draws without exceptions."""
@@ -356,7 +357,8 @@ class TestWorldBridgePipeline:
         # Unmodeled raw meshing benchmark must succeed
         bench_stats = run_mesher_benchmark(iterations=1, with_models=False, prefs=prefs)
         assert bench_stats["quad_count"] > 0
-        assert bench_stats["avg_ms"] > 0
+        assert bench_stats["native_avg_ms"] > 0
+        assert bench_stats["wall_avg_ms"] > 0
 
     def test_scan_unknown_blocks_fail_closed(self):
         from MoziToolKit.bridge.world import scan_unknown_blocks

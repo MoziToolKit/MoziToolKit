@@ -46,8 +46,13 @@ class MOZI_OT_dev_mesh_benchmark(bpy.types.Operator):
         try:
             stats = run_mesher_benchmark(iterations=self.iterations, prefs=prefs)
             msg = (
-                f"Benchmark: {stats['avg_ms']}ms avg ({stats['quads_per_second']:,} quads/sec) "
-                f"[{stats['quad_count']:,} quads]"
+                f"Debug-world core mesh: {stats['native_avg_ms']}ms "
+                f"({stats['native_quads_per_second']:,} quads/s) | "
+                f"end-to-end: {stats['wall_avg_ms']}ms "
+                f"({stats['wall_quads_per_second']:,} quads/s) "
+                f"[{stats['quad_count']:,} quads] "
+                f"— excludes Blender injection/materials; use tools/blender/scenario_bench.py "
+                f"for the real save pipeline"
             )
             self.report({"INFO"}, msg)
             return {"FINISHED"}

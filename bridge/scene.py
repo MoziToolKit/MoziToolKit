@@ -150,20 +150,6 @@ def load_and_mesh_scene_package(
         except Exception:
             pass
 
-    visual_entities = point_cloud.get_visual_entities_palette()
-    render_plan = None
-    if visual_entities:
-        render_plan = build_entity_render_plan(
-            visual_entities,
-            atlas=atlas,
-            bounds=point_cloud.bounds,
-            origin_centered=origin_centered,
-            coordinate_system="z_up",
-            revision=0,
-            authoritative=True,
-            models=models,
-        )
-
     return {
         "mesh_data": mesh_data,
         "point_cloud": point_cloud,
@@ -175,8 +161,6 @@ def load_and_mesh_scene_package(
         "colormaps": colormaps,
         "dynamic_entity_slots": dynamic_entity_slots,
         "ctm_solver": ctm_solver,
-        "visual_entities": visual_entities,
-        "render_plan": render_plan,
         "reader": reader,
         "scene_path": str(Path(path).resolve()),
         "degraded": degraded,
@@ -262,94 +246,10 @@ def export_scene_package(
     return meta.to_dict()
 
 
-def build_entity_render_plan(
-    entities: Any = None,
-    atlas: Any = None,
-    config: Any = None,
-    atlas_mapping_json: Optional[str] = None,
-    bounds: Optional[List[int]] = None,
-    origin_centered: bool = True,
-    coordinate_system: str = "z_up",
-    revision: int = 0,
-    authoritative: bool = True,
-    deleted_keys: Optional[List[str]] = None,
-    models: Any = None,
-) -> Any:
-    """
-    Bakes and compiles a batch of visual entities into a unified EntityRenderPlan.
-    Calculates host-space transforms, assigns unique deterministic keys, and binds atlas slots.
-    Supports incremental/delta plans via `deleted_keys` with `authoritative=False`.
-    """
-    mtk = require_libmtk("build_entity_render_plan")
-    return mtk.build_entity_render_plan(
-        entities,
-        atlas=atlas,
-        config=config,
-        atlas_mapping_json=atlas_mapping_json,
-        bounds=bounds,
-        origin_centered=origin_centered,
-        coordinate_system=coordinate_system,
-        revision=revision,
-        authoritative=authoritative,
-        deleted_keys=deleted_keys,
-        models=models,
-    )
-
-
-def host_transform_to_mc(
-    loc: Tuple[float, float, float],
-    rot_euler: Tuple[float, float, float],
-    scale: Tuple[float, float, float],
-    bounds: Optional[List[int]] = None,
-    origin_centered: bool = True,
-    coordinate_system: str = "z_up",
-) -> Tuple[Tuple[float, float, float], Tuple[float, float, float], Tuple[float, float, float]]:
-    """
-    Transforms host location, Euler rotation (XYZ radians), and scale back into
-    canonical Minecraft world coordinates (Single Source of Truth in native core).
-    """
-    mtk = require_libmtk("host_transform_to_mc")
-    return mtk.host_transform_to_mc(
-        loc,
-        rot_euler,
-        scale,
-        bounds=bounds,
-        origin_centered=origin_centered,
-        coordinate_system=coordinate_system,
-    )
-
-
-def supported_visual_entity_ids() -> List[str]:
-    """
-    Returns the canonical list of visual entity IDs supported by native libmtk
-    (Single Source of Truth, SSOT).
-    """
-    mtk = require_libmtk("supported_visual_entity_ids")
-    return list(mtk.supported_visual_entity_ids())
-
-
-def __getattr__(name: str) -> Any:
-    if name in ("EntityRenderPlan", "EntityRenderNode", "EntityRenderTransform"):
-        mtk = get_libmtk()
-        if mtk is None:
-            require_libmtk(f"scene bridge type {name}")
-        val = getattr(mtk, name, None)
-        if val is None:
-            raise AttributeError(f"libmtk_py does not expose '{name}'")
-        return val
-    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
-
-
 __all__ = [
     "inspect_scene_package",
     "read_scene_package",
     "load_and_mesh_scene_package",
     "export_scene_package",
-    "build_entity_render_plan",
-    "host_transform_to_mc",
-    "supported_visual_entity_ids",
-    "EntityRenderPlan",
-    "EntityRenderNode",
-    "EntityRenderTransform",
 ]
 

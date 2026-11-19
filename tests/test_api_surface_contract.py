@@ -16,11 +16,6 @@ def test_required_native_symbols_exist():
         "MeshData",
         "compute_biome_tint_attributes_paletted",
         "build_material_palette",
-        "build_entity_render_plan",
-        "host_transform_to_mc",
-        "EntityRenderNode",
-        "EntityRenderPlan",
-        "EntityRenderTransform",
     ]
     for name in required:
         assert hasattr(mtk, name), f"libmtk_py is missing required symbol {name}"
@@ -44,7 +39,6 @@ def test_removed_native_symbols_do_not_return():
         "retired_mesh_attributes",
         "is_valid_cache_package",
         "get_cache_manifest",
-        "bake_visual_entity_mesh",
     ]
     for name in removed:
         assert not hasattr(mtk, name), f"removed symbol {name} leaked back into libmtk_py"

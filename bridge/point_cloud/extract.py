@@ -21,7 +21,6 @@ from .constants import (
     PROP_BIOME_PALETTE,
     PROP_BLOCK_ENTITY_PALETTE,
     PROP_BLOCK_PALETTE,
-    PROP_VISUAL_ENTITIES,
 )
 
 logger = logging.getLogger("MoziToolKit.Bridge.PointCloud.Extract")
@@ -149,19 +148,6 @@ def extract_voxel_point_cloud_dna(cloud_obj_or_mesh: Any) -> Optional[Any]:
         return None
 
 
-def _extract_visual_entities_palette(obj_or_mesh: Any) -> Optional[list]:
-    for candidate in [
-        obj_or_mesh.data if hasattr(obj_or_mesh, "data") else obj_or_mesh,
-        obj_or_mesh if hasattr(obj_or_mesh, "data") else None,
-        getattr(obj_or_mesh, "parent", None),
-    ]:
-        if candidate is not None and hasattr(candidate, "get"):
-            val = candidate.get(PROP_VISUAL_ENTITIES)
-            if isinstance(val, (list, tuple)):
-                return list(val)
-    return None
-
-
 def extract_voxel_point_cloud(
     cloud_obj_or_mesh: Any,
     use_dna: bool = True,
@@ -179,14 +165,6 @@ def extract_voxel_point_cloud(
 
     if cloud is None:
         cloud = extract_voxel_point_cloud_standard(cloud_obj_or_mesh)
-
-    if cloud is not None:
-        palette = _extract_visual_entities_palette(cloud_obj_or_mesh)
-        if palette is not None:
-            try:
-                cloud.set_visual_entities_palette(palette)
-            except Exception as e:
-                logger.debug("Failed setting visual entities palette on extracted point cloud: %s", e)
 
     return cloud
 

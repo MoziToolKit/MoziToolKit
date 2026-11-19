@@ -19,12 +19,6 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 import bpy
 
 from ...bridge.mesh import inject_mesh_data
-from ...bridge.scene import (
-    EntityRenderNode,
-    EntityRenderPlan,
-    EntityRenderTransform,
-    build_entity_render_plan,
-)
 from ...bridge.world import resolve_dynamic_entity_atlases
 from ..materials.builder.world_binding import ensure_world_materials
 from ..mesh.ownership import stamp_geometry_origin
@@ -109,8 +103,6 @@ class VoxelWorldAssemblyRequest:
     clean_unused_material_slots: bool = True
     sync_point_cloud: bool = True
     bounds: Optional[Any] = None
-    visual_entities: Optional[List[str]] = None
-    render_plan: Optional[Any] = None
     package_reader: Optional[Any] = None
     models: Optional[Any] = None
     metadata_props: Dict[str, Any] = field(default_factory=dict)
@@ -188,13 +180,6 @@ def assemble_voxel_world(req: VoxelWorldAssemblyRequest) -> Dict[str, Any]:
 
     # 2. Acquire or create Child Mesh Object
     mesh_obj = req.target_mesh
-    if mesh_obj is not None:
-        if safe_get_custom_prop(mesh_obj, "mtk:is_visual_entity") or safe_get_custom_prop(mesh_obj, "mtk:is_entities_container"):
-            logger.warning(
-                "assemble_voxel_world received visual entity or entities container '%s' as target_mesh! Ignoring and resolving true mesh child.",
-                getattr(mesh_obj, "name", "unknown"),
-            )
-            mesh_obj = None
     mesh_child_name = f"{actual_root_name}_Mesh" if req.container_type != "SYNC" else actual_root_name
 
     if mesh_obj is None:
@@ -336,43 +321,6 @@ def assemble_voxel_world(req: VoxelWorldAssemblyRequest) -> Dict[str, Any]:
             except Exception:
                 pass
 
-    # 9. Continuous visual entities assembly via canonical EntityRenderPlan
-    entity_objs = []
-    render_plan = req.render_plan
-    ents_palette = req.visual_entities
-
-    if render_plan is None and ents_palette is None:
-        if req.storage is not None and hasattr(req.storage, "has_visual_entities"):
-            ents_palette = req.storage.get_visual_entities_palette() if req.storage.has_visual_entities() else []
-        elif req.point_cloud is not None and hasattr(req.point_cloud, "has_visual_entities"):
-            ents_palette = req.point_cloud.get_visual_entities_palette() if req.point_cloud.has_visual_entities() else []
-        elif cloud_obj is not None:
-            from ...bridge.point_cloud.constants import PROP_VISUAL_ENTITIES
-            val = cloud_obj.get(PROP_VISUAL_ENTITIES)
-            if isinstance(val, (list, tuple)):
-                ents_palette = list(val)
-
-    if render_plan is not None or (ents_palette is not None and len(ents_palette) > 0) or req.reuse_existing:
-        try:
-            entity_objs = _assemble_visual_entities(
-                root_obj=root_obj,
-                render_plan=render_plan,
-                entities_palette=ents_palette,
-                atlas=req.atlas,
-                target_coll=target_coll,
-                template_mesh_obj=mesh_obj,
-                container_name=req.root_name,
-                origin_centered=req.origin_centered,
-                bounds=bounds,
-                prefs=req.prefs,
-                dynamic_entity_atlases=req.dynamic_entity_atlases,
-                package_reader=req.package_reader,
-                models=req.models,
-            )
-        except Exception as e:
-            logger.warning("Failed assembling visual entities for container '%s': %s", req.root_name, e, exc_info=True)
-            entity_objs = []
-
     # 10. Viewport activation
     active_target = root_obj or mesh_obj
     if active_target is not None and context and hasattr(context, "view_layer"):
@@ -390,7 +338,6 @@ def assemble_voxel_world(req: VoxelWorldAssemblyRequest) -> Dict[str, Any]:
         "root_obj": root_obj,
         "mesh_obj": mesh_obj,
         "cloud_obj": cloud_obj,
-        "entity_objs": entity_objs,
         "container_id": container_id,
         "materials": materials,
         "inject_ms": inject_ms,
@@ -398,51 +345,3 @@ def assemble_voxel_world(req: VoxelWorldAssemblyRequest) -> Dict[str, Any]:
         "cloud_ms": cloud_ms,
         "host_ms": host_ms,
     }
-
-
-def _assemble_visual_entities(
-    root_obj: Any,
-    entities_palette: Optional[List[Union[str, dict]]] = None,
-    atlas: Any = None,
-    target_coll: Any = None,
-    template_mesh_obj: Any = None,
-    container_name: str = "World",
-    origin_centered: bool = True,
-    bounds: Optional[Any] = None,
-    prefs: Optional[Any] = None,
-    dynamic_entity_atlases: Optional[Any] = None,
-    package_reader: Optional[Any] = None,
-    render_plan: Optional[Any] = None,
-    models: Optional[Any] = None,
-) -> List[Any]:
-    """
-    Assembles continuous visual entities (such as Paintings) as standalone Blender mesh objects
-    using the canonical EntityRenderPlan contract. Performs pure declarative reconciliation.
-    """
-    from ..entities import reconcile_entity_render_plan
-
-    result = reconcile_entity_render_plan(
-        root_or_container=root_obj,
-        plan=render_plan,
-        entities_palette=entities_palette,
-        atlas=atlas,
-        target_coll=target_coll,
-        template_mesh_obj=template_mesh_obj,
-        container_name=container_name,
-        origin_centered=origin_centered,
-        bounds=bounds,
-        prefs=prefs,
-        dynamic_entity_atlases=dynamic_entity_atlases,
-        package_reader=package_reader,
-        models=models,
-    )
-    return result.all_entities
-
-
-__all__ = [
-    "safe_set_custom_prop",
-    "safe_get_custom_prop",
-    "persist_dynamic_entity_slots",
-    "VoxelWorldAssemblyRequest",
-    "assemble_voxel_world",
-]

@@ -60,12 +60,6 @@ def _resolve_mesh_rebuild_targets_from_root(
     children = getattr(root_container, "children", [])
     for ch in children:
         if getattr(ch, "type", "") == "MESH":
-            if (
-                _safe_get(ch, "mtk:is_visual_entity")
-                or _safe_get(ch, "mtk:is_entities_container")
-                or ch.name.endswith("_Entities")
-            ):
-                continue
             is_cloud = False
             if hasattr(ch, "get"):
                 is_cloud = bool(ch.get("mtk_is_voxel_cloud"))
@@ -119,39 +113,22 @@ def resolve_mesh_rebuild_targets(
 
     # 1. Target is an Empty container root (SYNC or SAVE)
     if getattr(active, "type", "") == 'EMPTY':
-        if bool(active.get("mtk:is_entities_container")) or active.name.endswith("_Entities"):
-            parent = getattr(active, "parent", None)
-            if parent and getattr(parent, "type", "") == 'EMPTY':
-                return _resolve_mesh_rebuild_targets_from_root(parent)
         return _resolve_mesh_rebuild_targets_from_root(active)
 
     # 2. Target is a Mesh object
     if getattr(active, "type", "") == "MESH":
-        is_visual = bool(active.get("mtk:is_visual_entity")) if hasattr(active, "get") else False
         parent = getattr(active, "parent", None)
-        if is_visual:
-            curr = parent
-            while curr is not None:
-                if getattr(curr, "type", "") == 'EMPTY' and not (
-                    curr.get("mtk:is_entities_container") if hasattr(curr, "get") else False
-                ) and not curr.name.endswith("_Entities"):
-                    return _resolve_mesh_rebuild_targets_from_root(curr)
-                curr = getattr(curr, "parent", None)
-            return None, None, None, "NONE"
-
         if parent and getattr(parent, "type", "") == 'EMPTY':
-            is_entities = (parent.get("mtk:is_entities_container") if hasattr(parent, "get") else False) or parent.name.endswith("_Entities")
-            if not is_entities:
-                is_cont = False
-                if hasattr(parent, "get"):
-                    is_cont = bool(parent.get("mtk:is_container") or parent.get("mtk:is_yefira_world"))
-                if is_cont or parent.name.startswith("Save_") or parent.name.startswith("Yefira_World") or parent.name.startswith("[Scene]"):
-                    c_root, c_mesh, c_cloud, c_type = _resolve_mesh_rebuild_targets_from_root(parent)
-                    if getattr(active, "name", "").endswith("_VoxelCloud") or (hasattr(active, "get") and active.get("mtk_is_voxel_cloud")):
-                        c_cloud = active
-                    elif not (active.get("mtk:is_visual_entity") if hasattr(active, "get") else False):
-                        c_mesh = active
-                    return c_root, c_mesh, c_cloud, c_type
+            is_cont = False
+            if hasattr(parent, "get"):
+                is_cont = bool(parent.get("mtk:is_container") or parent.get("mtk:is_yefira_world"))
+            if is_cont or parent.name.startswith("Save_") or parent.name.startswith("Yefira_World") or parent.name.startswith("[Scene]"):
+                c_root, c_mesh, c_cloud, c_type = _resolve_mesh_rebuild_targets_from_root(parent)
+                if getattr(active, "name", "").endswith("_VoxelCloud") or (hasattr(active, "get") and active.get("mtk_is_voxel_cloud")):
+                    c_cloud = active
+                else:
+                    c_mesh = active
+                return c_root, c_mesh, c_cloud, c_type
 
         is_cloud = False
         if hasattr(active, "get"):

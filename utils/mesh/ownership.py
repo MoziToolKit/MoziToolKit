@@ -198,9 +198,6 @@ def classify_origin(obj: Any) -> str:
     if isinstance(save_uuid, str) and save_uuid:
         return ORIGIN_SAVE
 
-    if _as_bool(_safe_get(obj, "mtk:is_visual_entity")):
-        return ORIGIN_EXTERNAL
-
     if _as_bool(_safe_get(obj, "mtk:is_section_mesh")):
         return ORIGIN_SYNC_SECTION
 
@@ -208,8 +205,6 @@ def classify_origin(obj: Any) -> str:
         return ORIGIN_SYNC_WORLD
 
     if obj_type == "EMPTY":
-        if _as_bool(_safe_get(obj, "mtk:is_entities_container")) or name.endswith("_Entities"):
-            return ORIGIN_EXTERNAL
         container_type = _safe_get(obj, "mtk:container_type")
         if isinstance(container_type, str):
             c_type = container_type.strip().upper()
@@ -225,7 +220,7 @@ def classify_origin(obj: Any) -> str:
             return ORIGIN_SCENE
         if _as_bool(_safe_get(obj, "mtk:is_save_world")) or name.startswith("Save_"):
             return ORIGIN_SAVE
-        if name.startswith("Yefira_World") and not name.endswith(("_Entities", "_VoxelCloud", "_Mesh")):
+        if name.startswith("Yefira_World") and not name.endswith(("_VoxelCloud", "_Mesh")):
             return ORIGIN_SYNC_WORLD
 
     return ORIGIN_EXTERNAL

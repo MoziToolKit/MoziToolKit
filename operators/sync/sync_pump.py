@@ -328,28 +328,6 @@ def _sync_timer_tick() -> Optional[float]:
             _sync_prop("stream_progress_total", 100)
             _sync_prop("is_streaming", False)
 
-        elif ev_type == "VISUAL_ENTITIES_UPDATED":
-            upserted = ev.get("upserted", [])
-            deleted_uuids = ev.get("deleted_uuids", [])
-            if upserted or deleted_uuids:
-                try:
-                    from ...utils.entities.local_ops import apply_entity_delta
-                    eff_storage = getattr(session, "get_storage", lambda: None)()
-                    eff_bounds = _resolve_sync_bounds(eff_storage, props, active_container)
-                    apply_entity_delta(
-                        root_or_container=active_container,
-                        upsert_entities=upserted,
-                        delete_keys=deleted_uuids,
-                        atlas=getattr(session, "atlas", None),
-                        container_name=getattr(active_container, "name", "World"),
-                        bounds=eff_bounds,
-                        origin_centered=True,
-                        models=getattr(session, "model_db", None),
-                    )
-                    _sync_prop("last_update_info", f"Visual Entities: +{len(upserted)} / -{len(deleted_uuids)}")
-                except Exception as e:
-                    logger.debug("Failed applying visual entity delta: %s", e)
-
         elif ev_type == "VERIFIED":
             is_ver = ev.get("is_verified", False)
             _sync_prop("sync_verified", is_ver)
@@ -439,32 +417,6 @@ def _sync_timer_tick() -> Optional[float]:
                 _sync_prop("last_update_info", f"World Mesh updated: {v_count:,} vertices, {f_count:,} faces")
                 _sync_prop("is_streaming", False)
 
-                if needs_voxel_sync and storage is not None and getattr(storage, "get_visual_entities_palette", None) is not None:
-                    try:
-                        from ...utils.entities import reconcile_entity_render_plan
-                        palette = storage.get_visual_entities_palette()
-                        has_visual = getattr(storage, "has_visual_entities", None) and storage.has_visual_entities()
-                        has_existing_entities = False
-                        if active_container is not None and hasattr(active_container, "children"):
-                            for child in active_container.children:
-                                if child.get("mtk:is_entities_container") or child.get("mtk:is_visual_entity") or child.name.endswith("_Entities"):
-                                    has_existing_entities = True
-                                    break
-                        if has_visual or has_existing_entities:
-                            eff_bounds = _resolve_sync_bounds(storage, props, active_container)
-                            reconcile_entity_render_plan(
-                                root_or_container=active_container,
-                                entities_palette=palette,
-                                atlas=getattr(session, "atlas", None),
-                                container_name=getattr(active_container, "name", "World"),
-                                bounds=eff_bounds,
-                                origin_centered=True,
-                                authoritative=True,
-                                models=getattr(session, "model_db", None),
-                            )
-                    except Exception as e:
-                        logger.debug("Failed reconciling baseline visual entities on mesh update: %s", e)
-
                 if _progress_reporter is not None:
                     _progress_reporter.update(_progress_reporter.total, _progress_reporter.total, message=f"Mesh ready ({v_count:,} v, {f_count:,} f)")
             else:
@@ -503,31 +455,6 @@ def _sync_timer_tick() -> Optional[float]:
                 except Exception as e:
                     logger.debug("Failed registering/marking biome storage on stream finished: %s", e)
 
-                if getattr(storage, "get_visual_entities_palette", None) is not None:
-                    try:
-                        from ...utils.entities import reconcile_entity_render_plan
-                        palette = storage.get_visual_entities_palette()
-                        has_visual = getattr(storage, "has_visual_entities", None) and storage.has_visual_entities()
-                        has_existing_entities = False
-                        if active_container is not None and hasattr(active_container, "children"):
-                            for child in active_container.children:
-                                if child.get("mtk:is_entities_container") or child.get("mtk:is_visual_entity") or child.name.endswith("_Entities"):
-                                    has_existing_entities = True
-                                    break
-                        if has_visual or has_existing_entities:
-                            eff_bounds = _resolve_sync_bounds(storage, props, active_container)
-                            reconcile_entity_render_plan(
-                                root_or_container=active_container,
-                                entities_palette=palette,
-                                atlas=getattr(session, "atlas", None),
-                                container_name=getattr(active_container, "name", "World"),
-                                bounds=eff_bounds,
-                                origin_centered=True,
-                                authoritative=True,
-                                models=getattr(session, "model_db", None),
-                            )
-                    except Exception as e:
-                        logger.debug("Failed reconciling baseline visual entities on stream finished: %s", e)
         except Exception as e:
             logger.debug("Failed syncing voxel cloud on event: %s", e)
 

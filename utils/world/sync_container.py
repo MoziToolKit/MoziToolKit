@@ -42,17 +42,13 @@ def is_yefira_root_object(obj: Optional[Any]) -> bool:
     """Identify whether a Blender object is a root Yefira live sync Empty container."""
     if not obj:
         return False
-    if safe_get_custom_prop(obj, "mtk:is_entities_container"):
-        return False
-    if safe_get_custom_prop(obj, "mtk:is_visual_entity"):
-        return False
     if safe_get_custom_prop(obj, "mtk:is_voxel_cloud") or safe_get_custom_prop(obj, "mtk_is_voxel_cloud"):
         return False
     if safe_get_custom_prop(obj, "mtk:is_yefira_mesh") or safe_get_custom_prop(obj, "mtk:is_section_mesh"):
         return False
 
     obj_name = getattr(obj, "name", "")
-    if obj_name.endswith(("_Entities", "_VoxelCloud", "_Mesh")):
+    if obj_name.endswith(("_VoxelCloud", "_Mesh")):
         return False
 
     obj_type = getattr(obj, "type", "")
@@ -64,10 +60,10 @@ def is_yefira_root_object(obj: Optional[Any]) -> bool:
             return True
         if safe_get_custom_prop(obj, "mtk:is_container") and c_type == "SYNC":
             return True
-        if obj_name == DEFAULT_WORLD_OBJECT_NAME or (obj_name.startswith("Yefira_World") and not obj_name.endswith(("_Entities", "_VoxelCloud", "_Mesh"))):
+        if obj_name == DEFAULT_WORLD_OBJECT_NAME or (obj_name.startswith("Yefira_World") and not obj_name.endswith(("_VoxelCloud", "_Mesh"))):
             return True
         for c in getattr(obj, "children", []):
-            if safe_get_custom_prop(c, "mtk:is_yefira_mesh") and not safe_get_custom_prop(c, "mtk:is_visual_entity"):
+            if safe_get_custom_prop(c, "mtk:is_yefira_mesh") and True:
                 return True
     return False
 
@@ -75,8 +71,6 @@ def is_yefira_root_object(obj: Optional[Any]) -> bool:
 def is_yefira_child_object(obj: Optional[Any]) -> bool:
     """Identify whether a Blender object is a child section or point cloud of a Yefira container."""
     if not obj:
-        return False
-    if safe_get_custom_prop(obj, "mtk:is_visual_entity") or safe_get_custom_prop(obj, "mtk:is_entities_container"):
         return False
     if (
         safe_get_custom_prop(obj, "mtk:is_yefira_mesh")
@@ -96,12 +90,10 @@ def is_yefira_world_object(obj: Optional[Any]) -> bool:
     """Checks if an object is tagged as or belongs to the Yefira Live Sync world container."""
     if not obj:
         return False
-    if safe_get_custom_prop(obj, "mtk:is_visual_entity") or safe_get_custom_prop(obj, "mtk:is_entities_container"):
-        return False
     return (
         is_yefira_root_object(obj)
         or is_yefira_child_object(obj)
-        or (bool(safe_get_custom_prop(obj, "mtk:is_yefira_world")) and not safe_get_custom_prop(obj, "mtk:is_entities_container"))
+        or bool(safe_get_custom_prop(obj, "mtk:is_yefira_world"))
         or getattr(obj, "name", "") == DEFAULT_WORLD_OBJECT_NAME
     )
 
@@ -139,7 +131,7 @@ def resolve_world_root_object(obj: Optional[Any]) -> Optional[Any]:
     # 3. Fallback: if object itself is tagged as world container
     if is_yefira_root_object(obj):
         return obj
-    if bool(safe_get_custom_prop(obj, "mtk:is_yefira_world")) and not safe_get_custom_prop(obj, "mtk:is_entities_container"):
+    if bool(safe_get_custom_prop(obj, "mtk:is_yefira_world")):
         return obj
 
     return None
@@ -157,11 +149,9 @@ def find_world_mesh_child(root_container: Optional[Any]) -> Optional[Any]:
         if getattr(child, "type", "") != "MESH":
             continue
         if (
-            safe_get_custom_prop(child, "mtk:is_visual_entity")
-            or safe_get_custom_prop(child, "mtk_is_voxel_cloud")
+            safe_get_custom_prop(child, "mtk_is_voxel_cloud")
             or safe_get_custom_prop(child, "mtk:is_voxel_cloud")
-            or safe_get_custom_prop(child, "mtk:is_entities_container")
-            or getattr(child, "name", "").endswith(("_Entities", "_VoxelCloud"))
+            or getattr(child, "name", "").endswith("_VoxelCloud")
         ):
             continue
         if safe_get_custom_prop(child, "mtk:is_yefira_mesh"):
@@ -265,7 +255,6 @@ def get_or_create_world_mesh_object(
         active
         and active.type == "MESH"
         and getattr(active, "parent", None) == root_container
-        and not safe_get_custom_prop(active, "mtk:is_visual_entity")
         and not safe_get_custom_prop(active, "mtk_is_voxel_cloud")
         and not safe_get_custom_prop(active, "mtk:is_voxel_cloud")
         and (safe_get_custom_prop(active, "mtk:is_yefira_mesh") or active.name == mesh_child_name)
@@ -281,13 +270,12 @@ def get_or_create_world_mesh_object(
     if hasattr(bpy, "data") and hasattr(bpy.data, "objects"):
         if mesh_child_name in bpy.data.objects and getattr(bpy.data.objects[mesh_child_name], "type", "") == "MESH":
             mesh_obj = bpy.data.objects[mesh_child_name]
-            if not safe_get_custom_prop(mesh_obj, "mtk:is_visual_entity"):
-                safe_set_custom_prop(mesh_obj, "mtk:is_yefira_world", True)
-                safe_set_custom_prop(mesh_obj, "mtk:is_yefira_mesh", True)
-                if getattr(mesh_obj, "parent", None) != root_container and hasattr(mesh_obj, "parent"):
-                    mesh_obj.parent = root_container
-                _stamp_world_mesh_origin(mesh_obj)
-                return mesh_obj
+            safe_set_custom_prop(mesh_obj, "mtk:is_yefira_world", True)
+            safe_set_custom_prop(mesh_obj, "mtk:is_yefira_mesh", True)
+            if getattr(mesh_obj, "parent", None) != root_container and hasattr(mesh_obj, "parent"):
+                mesh_obj.parent = root_container
+            _stamp_world_mesh_origin(mesh_obj)
+            return mesh_obj
 
     mesh = bpy.data.meshes.new(mesh_child_name)
     world_obj = bpy.data.objects.new(mesh_child_name, mesh)
@@ -322,13 +310,6 @@ def sync_container_child_names(root_obj: Any) -> None:
     prefix = getattr(root_obj, "name", "")
     safe_set_custom_prop(root_obj, "mtk:last_name", prefix)
     for child in getattr(root_obj, "children", []):
-        if safe_get_custom_prop(child, "mtk:is_visual_entity"):
-            continue
-        if safe_get_custom_prop(child, "mtk:is_entities_container"):
-            target_name = f"{prefix}_Entities"
-            if child.name != target_name:
-                child.name = target_name
-            continue
         if safe_get_custom_prop(child, "mtk:is_yefira_mesh") or (
             getattr(child, "type", "") == "MESH"
             and not (
@@ -365,12 +346,6 @@ def update_world_mesh(
     if not world_obj or getattr(world_obj, "type", "") != "MESH":
         return 0, 0
 
-    if safe_get_custom_prop(world_obj, "mtk:is_visual_entity") or safe_get_custom_prop(world_obj, "mtk:is_entities_container"):
-        logger.error(
-            "update_world_mesh called on visual entity or entities container '%s'! Aborting injection.",
-            getattr(world_obj, "name", "unknown"),
-        )
-        return 0, 0
 
     root_container = resolve_world_root_object(world_obj)
     container_id = safe_get_custom_prop(root_container, "mtk:container_id") if root_container else None

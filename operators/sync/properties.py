@@ -147,8 +147,7 @@ def get_active_sync_container(scene: Optional[bpy.types.Scene] = None) -> Option
             if is_yefira_root_object(obj):
                 return obj
         except Exception:
-            if not getattr(obj, "name", "").endswith("_Entities"):
-                return obj
+            return obj
 
     # Fallback: find any connected container or container tagged with sync
     objs = bpy.data.objects.values() if hasattr(bpy.data.objects, "values") else bpy.data.objects
@@ -158,7 +157,7 @@ def get_active_sync_container(scene: Optional[bpy.types.Scene] = None) -> Option
         if obj is None:
             continue
         obj_name = getattr(obj, "name", "")
-        if obj_name.endswith(("_Entities", "_VoxelCloud", "_Mesh")):
+        if obj_name.endswith(("_VoxelCloud", "_Mesh")):
             continue
         if getattr(obj, "type", "") == 'EMPTY' and (
             (hasattr(obj, "get") and obj.get("mtk:is_yefira_world")) or obj_name.startswith("Yefira_World")

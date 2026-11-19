@@ -198,6 +198,7 @@ def apply_imported_save_to_blender(
             used_chunk_ids=used_chunk_ids,
             dynamic_entity_atlases=dynamic_entity_atlases,
             clean_unused_slots=True,
+            material_indices_are_slots=getattr(mesh_data, "materials_are_slots", False),
         )
 
     save_bounds = (

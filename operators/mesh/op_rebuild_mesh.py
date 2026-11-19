@@ -174,6 +174,7 @@ def _handle_cloud_success(
             used_chunk_ids=used_chunk_ids,
             dynamic_entity_atlases=dyn_entities,
             clean_unused_slots=True,
+            material_indices_are_slots=getattr(mesh_data, "materials_are_slots", False),
         )
     mat_ms = (time.perf_counter() - t0_mat) * 1000.0
 

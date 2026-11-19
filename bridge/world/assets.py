@@ -23,8 +23,10 @@ from ..engine import get_libmtk
 logger = logging.getLogger("MoziToolKit.Bridge.World.Assets")
 
 _WORLD_PIPELINE_ASSETS_CACHE: Optional[Tuple[Any, Any, Any]] = None
-_WORLD_PIPELINE_FP_CACHE: Optional[str] = None
-_WORLD_PIPELINE_TS_CACHE: float = 0.0
+# Cheap resolution signature the memo above was built for. Deliberately *not* the stack
+# fingerprint: computing that walks every pack file, and doing it on every mesh call cost
+# 300-400 ms when no cache matched (the exact case where the memo never engaged).
+_WORLD_PIPELINE_SIGNATURE: Optional[Tuple[Any, ...]] = None
 
 # Reused across rebuilds: the Rust `FaceCuller` owns a state-string keyed metadata
 # cache, so constructing a fresh instance per call forces it to re-derive cull
@@ -60,35 +62,83 @@ def reset_shared_face_culler() -> None:
 
 def invalidate_world_pipeline_assets() -> None:
     """Invalidates in-memory cached pipeline assets tuple."""
-    global _WORLD_PIPELINE_ASSETS_CACHE, _WORLD_PIPELINE_FP_CACHE, _WORLD_PIPELINE_TS_CACHE
+    global _WORLD_PIPELINE_ASSETS_CACHE, _WORLD_PIPELINE_SIGNATURE
     _WORLD_PIPELINE_ASSETS_CACHE = None
-    _WORLD_PIPELINE_FP_CACHE = None
-    _WORLD_PIPELINE_TS_CACHE = 0.0
+    _WORLD_PIPELINE_SIGNATURE = None
+
+
+def _newest_package_mtime(cache_dir: str) -> int:
+    """Newest `.mtkcache` mtime in `cache_dir`, or 0. One directory scan, no pack walk."""
+    try:
+        from pathlib import Path
+
+        newest = 0
+        for entry in Path(cache_dir).glob("*.mtkcache"):
+            try:
+                newest = max(newest, entry.stat().st_mtime_ns)
+            except OSError:
+                continue
+        return newest
+    except Exception:
+        return 0
+
+
+def _assets_signature(prefs=None) -> Tuple[Any, ...]:
+    """Cheap key for the asset memo: packs, cache dir, package identity.
+
+    Includes the newest package mtime so baking or replacing a cache invalidates the memo
+    without recomputing the stack fingerprint.
+    """
+    from ..assets import get_cache_dir
+    from ..assets.pack import get_configured_pack_paths
+
+    try:
+        paths = tuple(get_configured_pack_paths(prefs))
+    except Exception:
+        paths = ()
+    try:
+        cache_dir = str(get_cache_dir(prefs))
+    except Exception:
+        cache_dir = ""
+    return (paths, cache_dir, _newest_package_mtime(cache_dir))
 
 
 def get_world_pipeline_assets(prefs=None) -> Tuple[Optional[Any], Optional[Any], Optional[Any]]:
     """
     Acquires precompiled assets required for high-fidelity world meshing:
     Returns (model_db, atlas, biome_resolver).
-    Memoized in memory against the active package fingerprint and timestamp.
+
+    Memoized against a cheap resolution signature (packs, cache dir, newest package mtime).
+    A miss is memoized too: when the configured packs do not match any package, every caller
+    used to re-walk the pack directory and re-open the cache, which is exactly the misconfigured
+    case where meshing silently fell back to cubes and took seconds per rebuild.
+    The failure is logged once per signature so it is observable, and callers still receive
+    `(None, None, None)` to keep their explicit fallback policy.
     """
-    global _WORLD_PIPELINE_ASSETS_CACHE, _WORLD_PIPELINE_FP_CACHE, _WORLD_PIPELINE_TS_CACHE
-    fp = get_cache_fingerprint(prefs)
-    ts = get_cache_timestamp(prefs)
-    if (
-        _WORLD_PIPELINE_ASSETS_CACHE is not None
-        and _WORLD_PIPELINE_FP_CACHE == fp
-        and _WORLD_PIPELINE_TS_CACHE == ts
-        and fp is not None
-    ):
+    global _WORLD_PIPELINE_ASSETS_CACHE, _WORLD_PIPELINE_SIGNATURE
+
+    signature = _assets_signature(prefs)
+    if _WORLD_PIPELINE_ASSETS_CACHE is not None and _WORLD_PIPELINE_SIGNATURE == signature:
         return _WORLD_PIPELINE_ASSETS_CACHE
 
     model_db = load_baked_model_database(prefs, verify_fingerprint=False)
     atlas = load_baked_atlas_from_cache(prefs)
     biome_resolver = load_biome_resolver_from_cache(prefs)
+
+    if model_db is None or atlas is None or biome_resolver is None:
+        logger.warning(
+            "World pipeline assets incomplete (model_db=%s atlas=%s biome_resolver=%s) for packs %s; "
+            "meshing will fall back to untextured cubes until a matching %s cache exists. "
+            "Run the asset precompile operator.",
+            model_db is not None,
+            atlas is not None,
+            biome_resolver is not None,
+            list(signature[0]),
+            "*.mtkcache",
+        )
+
     _WORLD_PIPELINE_ASSETS_CACHE = (model_db, atlas, biome_resolver)
-    _WORLD_PIPELINE_FP_CACHE = fp
-    _WORLD_PIPELINE_TS_CACHE = ts
+    _WORLD_PIPELINE_SIGNATURE = signature
     return _WORLD_PIPELINE_ASSETS_CACHE
 
 

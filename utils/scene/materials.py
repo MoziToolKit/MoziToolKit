@@ -24,6 +24,7 @@ def bind_scene_materials(
     prefs: Optional[Any] = None,
     used_chunk_ids: Optional[Any] = None,
     dynamic_entity_atlases: Optional[Any] = None,
+    material_indices_are_slots: bool = False,
 ) -> List[Any]:
     """
     Reads mini-atlas texture chunks from the ScenePackageReader, creates in-memory
@@ -43,6 +44,7 @@ def bind_scene_materials(
         dynamic_entity_atlases=dynamic_entity_atlases,
         clean_unused_slots=True,
         package_reader=reader,
+        material_indices_are_slots=material_indices_are_slots,
     )
 
     mesh = getattr(mesh_obj, "data", None)

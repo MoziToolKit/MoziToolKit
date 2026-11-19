@@ -90,6 +90,7 @@ def ensure_world_materials(
     dynamic_entity_atlases: Optional[Any] = None,
     clean_unused_slots: bool = False,
     package_reader: Optional[Any] = None,
+    material_indices_are_slots: bool = False,
 ) -> None:
     """
     Ensures that the unified world mesh object has corresponding Atlas Chunk materials
@@ -175,6 +176,27 @@ def ensure_world_materials(
                                     tex_node.image = img
             has_chunk_attr = hasattr(mesh, "attributes") and "mtk_atlas_chunk_id" in mesh.attributes
             is_identity_mapping = all(existing_chunk_to_slot[cid] == cid for cid in target_chunk_ids)
+
+            # Fast Path 0: assembled world meshes carry compacted slot indices (`face_materials`
+            # = 0..n-1 in sorted chunk-id order), and `inject_mesh_data` already wrote them into
+            # `material_index`. Hosts must opt in with `material_indices_are_slots=True` because
+            # per-section meshes keep raw chunk ids.
+            # `inject_mesh_data` writes `face_materials` (0..n-1 in sorted chunk-id order) into
+            # `material_index`; when the existing slots are in that same order there is nothing
+            # to remap, and reading the per-face chunk attribute back over the whole mesh was the
+            # most expensive part of this function (~45 ms for 336k faces, every rebuild).
+            if (
+                material_indices_are_slots
+                and used_chunk_ids is not None
+                and len(mesh.materials) == len(target_chunk_ids)
+            ):
+                ordered_ids = sorted(target_chunk_ids)
+                if all(
+                    mat is not None
+                    and int(mat.get("mtk_atlas_chunk_id", -1)) == int(ordered_ids[idx])
+                    for idx, mat in enumerate(mesh.materials)
+                ):
+                    return
 
             # Fast Path A: Single used chunk (common case for incremental/localized sync)
             if len(target_chunk_ids) == 1:

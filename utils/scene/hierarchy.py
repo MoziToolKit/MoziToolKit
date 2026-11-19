@@ -71,6 +71,7 @@ def apply_imported_scene_to_blender(
             prefs=prefs,
             used_chunk_ids=used_chunk_ids,
             dynamic_entity_atlases=dyn_atlases,
+            material_indices_are_slots=getattr(mesh_data, "materials_are_slots", False),
         )
 
     metadata_props = {

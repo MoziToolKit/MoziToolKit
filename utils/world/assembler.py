@@ -245,6 +245,7 @@ def assemble_voxel_world(req: VoxelWorldAssemblyRequest) -> Dict[str, Any]:
             used_chunk_ids=used_chunk_ids,
             dynamic_entity_atlases=dyn_atlases,
             clean_unused_slots=req.clean_unused_material_slots,
+            material_indices_are_slots=getattr(req.mesh_data, "materials_are_slots", False),
         )
     materials_ms = (time.perf_counter() - t_mat) * 1000.0
 

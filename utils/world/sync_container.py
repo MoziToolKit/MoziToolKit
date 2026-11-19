@@ -360,6 +360,7 @@ def update_world_mesh(
             atlas=atlas,
             used_chunk_ids=used_chunk_ids,
             dynamic_entity_atlases=dynamic_entity_atlases,
+            material_indices_are_slots=getattr(mesh_data, "materials_are_slots", False),
         )
 
     req = VoxelWorldAssemblyRequest(

@@ -272,3 +272,40 @@ def get_engine_info() -> Dict[str, Any]:
             info["dna_version"] = str(getattr(dna, "__version__"))
 
     return info
+
+
+def apply_thread_count(prefs=None) -> int:
+    """Pushes the add-on thread budget into the native process-wide policy.
+
+    Returns the worker count the native side will actually use. The policy lives in
+    `mtk_core::threading`, so one call covers every parallel entry (meshing, save decoding,
+    atlas baking, material remapping, prebake) instead of threading `num_threads` through each
+    of them.
+
+    `prefs.thread_count == 0` means "policy default", which keeps two cores free for the host
+    (`max(1, cores - 2)`).
+    """
+    mtk = get_libmtk()
+    if mtk is None:
+        return 0
+    setter = getattr(mtk, "set_thread_count", None)
+    if not callable(setter):
+        logger.debug("Native module exposes no set_thread_count; keeping its default policy")
+        return 0
+
+    raw = getattr(prefs, "thread_count", 0) if prefs is not None else 0
+    threads = raw if isinstance(raw, int) and not isinstance(raw, bool) and raw > 0 else 0
+    try:
+        setter(threads)
+        info = mtk.threading_info()
+        workers = int(info.get("workers", 0))
+        logger.debug(
+            "Native thread policy: workers=%s override=%s available=%s",
+            workers,
+            info.get("override"),
+            info.get("available"),
+        )
+        return workers
+    except Exception as exc:
+        logger.warning("Failed applying native thread budget: %s", exc)
+        return 0

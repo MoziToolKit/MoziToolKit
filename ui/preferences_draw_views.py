@@ -200,10 +200,12 @@ def draw_misc_tab(prefs: Any, layout: Any, context: Any) -> None:
     perf_col.prop(prefs, "thread_count", text=tr("Worker Threads"))
     perf_col.scale_y = 0.85
     if prefs.thread_count == 0:
-        perf_col.label(text=f"{tr('Active mode')}: {tr('Auto')} ({cpu_cnt} {tr('threads')})")
+        auto_workers = max(1, cpu_cnt - 2)
+        perf_col.label(text=f"{tr('Active mode')}: {tr('Auto')} ({auto_workers} {tr('threads')})")
+        perf_col.label(text=tr("Auto keeps two cores free for Blender and background applications."))
     else:
         perf_col.label(text=f"{tr('Active mode')}: {tr('Fixed')} ({prefs.thread_count} {tr('threads')})")
-    perf_col.label(text=tr("Controls Rayon thread pool concurrency for asset precompilation, atlas encoding, and mesh construction."))
+    perf_col.label(text=tr("One policy for every parallel native operation: precompile, atlas baking, save import and meshing."))
 
     perf_box.separator()
 

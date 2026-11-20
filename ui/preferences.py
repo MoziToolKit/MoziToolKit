@@ -87,6 +87,15 @@ __all__ = [
 _is_updating_material_settings = False
 
 
+def on_thread_count_changed(self, context):
+    """Pushes the thread budget into the native policy as soon as the user edits it."""
+    from ..bridge.engine import apply_thread_count
+
+    prefs = _safe_get_prefs(self)
+    if prefs is not None:
+        apply_thread_count(prefs)
+
+
 def on_material_setting_changed(self, context):
     """Callback when global material replacement preferences are edited."""
     global _is_updating_material_settings
@@ -286,11 +295,11 @@ class MOZI_AddonPreferences(bpy.types.AddonPreferences):
 
     thread_count: IntProperty(
         name="Worker Threads",
-        description="Number of worker threads for parallel asset precompilation and mesh operations (0 for auto / all logical CPU cores)",
+        description="Worker threads for every parallel native operation (precompile, atlas baking, save import, meshing). 0 = automatic: all cores minus two, keeping the UI and background apps responsive",
         default=0,
         min=0,
         max=128,
-        update=on_material_setting_changed,
+        update=on_thread_count_changed,
     )
 
     enable_dna_acceleration: BoolProperty(

@@ -57,6 +57,15 @@ def register():
     operators.register()
     ui.register()
 
+    # Push the persisted thread budget into the native process policy once at load.
+    try:
+        from .bridge.engine import apply_thread_count
+        from .bridge.prefs import get_prefs
+
+        apply_thread_count(get_prefs())
+    except Exception:
+        pass
+
     # 4. Out-of-the-box non-blocking background auto-discovery
     try:
         from .utils.launcher_scan import schedule_background_auto_setup

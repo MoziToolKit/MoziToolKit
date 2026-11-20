@@ -118,3 +118,42 @@ class TestEngineBridge:
         from MoziToolKit.utils.system.dependencies import has_libmtk
 
         assert has_libmtk() is True
+
+
+class TestThreadPolicy:
+    """The native thread budget is pushed once and applies to every parallel entry point."""
+
+    def test_auto_policy_keeps_two_cores_for_the_host(self):
+        from MoziToolKit.bridge.engine import apply_thread_count
+        from MoziToolKit.bridge.engine import get_libmtk
+
+        mtk = get_libmtk()
+        assert mtk is not None and hasattr(mtk, "threading_info"), "native threading_info missing"
+
+        class AutoPrefs:
+            thread_count = 0
+
+        workers = apply_thread_count(AutoPrefs())
+        info = mtk.threading_info()
+        assert info["override"] == 0
+        assert workers == info["workers"] == max(1, info["available"] - 2)
+
+    def test_explicit_preference_wins_and_resets(self):
+        from MoziToolKit.bridge.engine import apply_thread_count
+        from MoziToolKit.bridge.engine import get_libmtk
+
+        mtk = get_libmtk()
+        assert mtk is not None and hasattr(mtk, "threading_info")
+
+        class FixedPrefs:
+            thread_count = 3
+
+        assert apply_thread_count(FixedPrefs()) == 3
+        assert mtk.threading_info()["workers"] == 3
+
+        class AutoPrefs:
+            thread_count = 0
+
+        workers = apply_thread_count(AutoPrefs())
+        assert mtk.threading_info()["override"] == 0
+        assert workers == max(1, mtk.threading_info()["available"] - 2)

@@ -8,12 +8,13 @@ from typing import Any, Dict, Optional
 import time
 
 from .. import bridge
-from .loader import get_engine_status
-from .profile_tracker import (
+from ..bridge.diagnostics import (
     clear_last_profile,
     get_last_profile,
     record_operation_profile,
 )
+from ..utils.assets import clear_cache as _clear_cache_dir, get_cache_stats as _get_cache_stats
+from .loader import get_engine_status
 
 
 def get_cache_stats(prefs=None, force_refresh: bool = True) -> Dict[str, Any]:
@@ -28,7 +29,7 @@ def get_cache_stats(prefs=None, force_refresh: bool = True) -> Dict[str, Any]:
         except Exception:
             prefs = None
 
-    stats = dict(bridge.get_cache_stats(prefs=prefs, force_refresh=force_refresh))
+    stats = dict(_get_cache_stats(prefs=prefs, force_refresh=force_refresh))
     try:
         from ..utils.assets.guard import check_asset_cache_status
         stats["status"] = check_asset_cache_status(prefs)
@@ -258,9 +259,9 @@ def clear_material_cache(prefs=None) -> int:
     except Exception:
         pass
 
-    freed = bridge.clear_cache(prefs)
+    freed = _clear_cache_dir(prefs)
     try:
-        bridge.get_cache_stats(prefs, force_refresh=True)
+        _get_cache_stats(prefs, force_refresh=True)
     except Exception:
         pass
     return freed
@@ -301,7 +302,7 @@ def precompile_material_cache(
     )
 
     try:
-        bridge.get_cache_stats(prefs, force_refresh=True)
+        _get_cache_stats(prefs, force_refresh=True)
     except Exception:
         pass
 

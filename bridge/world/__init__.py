@@ -24,7 +24,7 @@ from .assets import (
     prepare_world_mesh_context,
     reset_shared_face_culler,
 )
-from .mesher import mesh_voxel_storage, scan_unknown_blocks
+from .mesher import build_mesher_config, mesh_voxel_storage, scan_unknown_blocks
 from .session import (
     DIRTY_SECTION_REBUILD_THRESHOLD,
     MAX_CACHED_WORLD_SESSIONS,
@@ -49,6 +49,7 @@ __all__ = [
     "get_world_session_dynamic_entity_atlases",
     "resolve_dynamic_entity_slots",
     "get_world_session_dynamic_entity_slots",
+    "build_mesher_config",
     "mesh_voxel_storage",
     "scan_unknown_blocks",
     "_WORLD_SESSIONS",

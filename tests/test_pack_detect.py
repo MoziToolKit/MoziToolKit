@@ -280,7 +280,7 @@ class TestFailureModes(PackDetectTestBase):
         self.assertKind(probe, KIND_RESOURCE_PACK)
 
     def test_never_raises_on_unexpected_error(self) -> None:
-        with patch("MoziToolKit.utils.pack_detect._classify_file", side_effect=RuntimeError("boom")):
+        with patch("MoziToolKit.utils.pack_detect.probe_pack_native", side_effect=RuntimeError("boom")):
             probe = detect_pack_kind(self.make("any.zip", _resource_pack_files()))
         self.assertEqual(probe.kind, KIND_UNKNOWN)
         self.assertIn("boom", probe.error)

@@ -39,17 +39,6 @@ class TestRestoredOperators(unittest.TestCase):
         except Exception:
             pass
 
-    @classmethod
-    def tearDownClass(cls):
-        try:
-            ui.unregister()
-        except Exception:
-            pass
-        try:
-            operators.unregister()
-        except Exception:
-            pass
-
     def test_operators_registered_in_menu_registry(self):
         all_ops = get_all_operators()
         self.assertIn("mozi.clear_custom_normals", all_ops)

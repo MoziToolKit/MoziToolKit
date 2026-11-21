@@ -30,11 +30,10 @@ def get_blender_version() -> Tuple[int, int, int]:
 
 def is_version_supported() -> bool:
     """
-    Returns True if the current host Blender version is supported.
-    Supports all Blender 4.x LTS releases and 5.x releases (forward compatible).
+    Returns True if the current host Blender version is supported (Blender 4.x+).
     """
     major, _, _ = get_blender_version()
-    return major in (4, 5)
+    return major >= 4
 
 
 def is_dna_available() -> bool:

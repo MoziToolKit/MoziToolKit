@@ -13,7 +13,7 @@ import bpy
 from ...utils.system import get_prefs, register_menu_item
 from ...utils.async_task import AsyncTask, ModalTaskRunner
 from ...utils.progress import BlenderProgressReporter
-from ...utils.diagnostics import format_timing
+from ...bridge.diagnostics import format_timing
 from ...bridge.point_cloud import extract_voxel_point_cloud
 from ...bridge.world import (
     clear_world_sessions,

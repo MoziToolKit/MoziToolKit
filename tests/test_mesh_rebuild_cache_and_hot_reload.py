@@ -50,13 +50,6 @@ class TestMeshRebuildCacheAndHotReload(unittest.TestCase):
         except Exception:
             pass
 
-    @classmethod
-    def tearDownClass(cls):
-        try:
-            operators.unregister()
-        except Exception:
-            pass
-
     def setUp(self):
         self.tmp_dir = tempfile.TemporaryDirectory()
         self.cache_dir = Path(self.tmp_dir.name)
@@ -151,6 +144,66 @@ class TestMeshRebuildCacheAndHotReload(unittest.TestCase):
 
         # Subsequent check without modifications: returns False
         self.assertFalse(session.check_and_reload_dirty_cache())
+
+    def test_sync_bridge_session_hot_reload_preserves_colormaps_and_smooth_biome_blend(self):
+        """Hot-reload must reload colormaps and forward colormaps + smooth_biome_blend to MesherConfig."""
+        from unittest.mock import patch
+        from MoziToolKit.bridge.engine import get_libmtk
+
+        mtk = get_libmtk()
+        if mtk is None:
+            self.skipTest("libmtk_py not loaded")
+
+        import libmtk_py
+        session = SyncBridgeSession()
+        session._cached_manifest_fingerprint = "fp_old"
+        session._cached_manifest_timestamp = 1.0
+        session._config_params = {
+            "enable_ao": True,
+            "mesh_fluids": True,
+            "num_threads": 2,
+            "enable_animated_textures": False,
+            "smooth_biome_blend": False,
+            "unknown_block_strategy": "IGNORE_AS_AIR",
+        }
+
+        hot_reload_calls = []
+        session._session = SimpleNamespace(
+            hot_reload=lambda cfg, db: hot_reload_calls.append((cfg, db))
+        )
+
+        sentinel_colormaps = object()
+        sentinel_mdb = object()
+        sentinel_atlas = object()
+        sentinel_biome = object()
+        captured_cfg_kwargs = []
+
+        class FakeConfig:
+            def __init__(self, **kwargs):
+                captured_cfg_kwargs.append(kwargs)
+
+        fake_mtk = SimpleNamespace(MesherConfig=FakeConfig)
+
+        with patch("MoziToolKit.bridge.sync.check_cache_dirty", return_value=(True, "fp_new", 2.0)), \
+             patch("MoziToolKit.bridge.sync.load_baked_model_database", return_value=sentinel_mdb), \
+             patch("MoziToolKit.bridge.sync.load_baked_atlas_from_cache", return_value=sentinel_atlas), \
+             patch("MoziToolKit.bridge.sync.load_biome_resolver_from_cache", return_value=sentinel_biome), \
+             patch("MoziToolKit.bridge.sync.load_colormaps_from_cache", return_value=sentinel_colormaps), \
+             patch("MoziToolKit.bridge.sync.get_configured_ctm_solver", return_value=None), \
+             patch("MoziToolKit.bridge.sync.get_libmtk", return_value=fake_mtk):
+            reloaded = session.check_and_reload_dirty_cache()
+
+        self.assertTrue(reloaded)
+        self.assertIs(session._colormaps, sentinel_colormaps)
+        self.assertEqual(len(hot_reload_calls), 1)
+        self.assertEqual(len(captured_cfg_kwargs), 1)
+        cfg_kwargs = captured_cfg_kwargs[0]
+        self.assertIs(cfg_kwargs.get("colormaps"), sentinel_colormaps)
+        self.assertIs(cfg_kwargs.get("smooth_biome_blend"), False)
+        self.assertIs(cfg_kwargs.get("enable_animated_textures"), False)
+        self.assertEqual(cfg_kwargs.get("unknown_block_strategy"), "IGNORE_AS_AIR")
+        self.assertIsNotNone(mtk)
+        self.assertTrue(hasattr(libmtk_py, "MesherConfig"))
 
     def test_native_voxel_world_clear_cache(self):
         if not is_sync_available():

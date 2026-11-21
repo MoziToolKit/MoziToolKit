@@ -11,12 +11,19 @@ import logging
 import sys
 from typing import Any, Dict, Optional, Tuple
 
+from ..world.mesher import build_mesher_config
+
 logger = logging.getLogger("MoziToolKit.Bridge.Sync.Lifecycle")
 
 
 def _get_sync_mod():
-    """Dynamically retrieves the MoziToolKit.bridge.sync module to support mock patches in tests."""
-    return sys.modules.get("MoziToolKit.bridge.sync")
+    """Dynamically retrieves the active bridge.sync module to support extension namespaces and test patches."""
+    root = (__package__ or "MoziToolKit").rsplit(".bridge.", 1)[0]
+    for mod_name in dict.fromkeys((f"{root}.bridge.sync", "MoziToolKit.bridge.sync")):
+        mod = sys.modules.get(mod_name)
+        if mod is not None:
+            return mod
+    return None
 
 
 class SyncLifecycleMixin:
@@ -79,6 +86,20 @@ class SyncLifecycleMixin:
         else:
             smooth_blend = bool(smooth_biome_blend)
 
+        if num_threads is None and prefs is not None:
+            raw_threads = getattr(prefs, "thread_count", 0)
+            num_threads = (
+                raw_threads
+                if isinstance(raw_threads, int) and not isinstance(raw_threads, bool) and raw_threads > 0
+                else None
+            )
+
+        unknown_block_strategy = (
+            getattr(prefs, "unknown_block_strategy", "FALLBACK_CUBE")
+            if prefs is not None
+            else None
+        )
+
         self._model_db = model_db
         self._atlas = atlas
         self._biome_resolver = biome_resolver
@@ -89,36 +110,32 @@ class SyncLifecycleMixin:
             "num_threads": num_threads,
             "enable_animated_textures": anim_enabled,
             "smooth_biome_blend": smooth_blend,
+            "unknown_block_strategy": unknown_block_strategy,
         }
-        self._cached_manifest_fingerprint = get_cache_fingerprint()
-        self._cached_manifest_timestamp = get_cache_timestamp()
+        self._cached_manifest_fingerprint = get_cache_fingerprint(prefs)
+        self._cached_manifest_timestamp = get_cache_timestamp(prefs)
         self._current_url = url
-
-        if num_threads is None and prefs is not None:
-            num_threads = getattr(prefs, "thread_count", 0) or None
 
         ctm_solver = get_configured_ctm_solver(prefs) if get_configured_ctm_solver is not None else None
         self._colormaps = colormaps
 
-        config_kwargs = {
-            "enable_ao": enable_ao,
-            "mesh_fluids": mesh_fluids,
-            "z_up_coordinates": True,
-            "origin_centered": True,
-            "weld_vertices": True,
-            "num_threads": num_threads,
-            "atlas": atlas,
-            "biome_resolver": biome_resolver,
-            "custom_aliases": custom_aliases,
-            "enable_animated_textures": anim_enabled,
-            "smooth_biome_blend": smooth_blend,
-        }
-        if ctm_solver is not None:
-            config_kwargs["ctm_solver"] = ctm_solver
-        if colormaps is not None:
-            config_kwargs["colormaps"] = colormaps
-
-        config = mtk.MesherConfig(**config_kwargs)
+        config = build_mesher_config(
+            mtk,
+            enable_ao=enable_ao,
+            mesh_fluids=mesh_fluids,
+            z_up=True,
+            origin_centered=True,
+            weld_vertices=True,
+            num_threads=num_threads,
+            atlas=atlas,
+            biome_resolver=biome_resolver,
+            ctm_solver=ctm_solver,
+            colormaps=colormaps,
+            custom_aliases=custom_aliases,
+            enable_animated_textures=anim_enabled,
+            smooth_biome_blend=smooth_blend,
+            unknown_block_strategy=unknown_block_strategy,
+        )
         return config, clean_token, mtk
 
     def start(
@@ -335,6 +352,7 @@ class SyncLifecycleMixin:
             load_model_db = sync_mod.load_baked_model_database
             load_atlas = sync_mod.load_baked_atlas_from_cache
             load_biome_resolver = sync_mod.load_biome_resolver_from_cache
+            load_colormaps = getattr(sync_mod, "load_colormaps_from_cache", None)
             get_configured_ctm_solver = getattr(sync_mod, "get_configured_ctm_solver", None)
             mtk = sync_mod.get_libmtk()
         else:
@@ -343,10 +361,14 @@ class SyncLifecycleMixin:
                 load_baked_model_database as load_model_db,
                 load_baked_atlas_from_cache as load_atlas,
                 load_biome_resolver_from_cache as load_biome_resolver,
+                load_colormaps_from_cache as load_colormaps,
                 get_configured_ctm_solver,
             )
             from ..engine import get_libmtk
             mtk = get_libmtk()
+
+        if load_colormaps is None:
+            from ..assets import load_colormaps_from_cache as load_colormaps
 
         is_dirty, current_fp, current_ts = check_cache_dirty(
             self._cached_manifest_fingerprint,
@@ -368,11 +390,12 @@ class SyncLifecycleMixin:
         new_model_db = load_model_db(prefs)
         new_atlas = load_atlas(prefs)
         new_biome_resolver = load_biome_resolver(prefs)
+        new_colormaps = load_colormaps(prefs)
 
         self._model_db = new_model_db
         self._atlas = new_atlas
         self._biome_resolver = new_biome_resolver
-        self._colormaps = None
+        self._colormaps = new_colormaps
         self._cached_manifest_fingerprint = current_fp
         self._cached_manifest_timestamp = current_ts
 
@@ -384,23 +407,32 @@ class SyncLifecycleMixin:
             if anim_enabled is None:
                 raw_anim = getattr(prefs, "enable_animated_textures", True) if prefs is not None else True
                 anim_enabled = raw_anim if isinstance(raw_anim, bool) else True
+            smooth_blend = self._config_params.get("smooth_biome_blend")
+            if smooth_blend is None:
+                raw_smooth = getattr(prefs, "smooth_biome_blend", True) if prefs is not None else True
+                smooth_blend = raw_smooth if isinstance(raw_smooth, bool) else True
+            unknown_strategy = self._config_params.get("unknown_block_strategy")
+            if unknown_strategy is None and prefs is not None:
+                unknown_strategy = getattr(prefs, "unknown_block_strategy", "FALLBACK_CUBE")
             ctm_solver = get_configured_ctm_solver(prefs) if get_configured_ctm_solver is not None else None
             try:
-                cfg_kwargs = {
-                    "enable_ao": enable_ao,
-                    "mesh_fluids": mesh_fluids,
-                    "z_up_coordinates": True,
-                    "origin_centered": True,
-                    "weld_vertices": True,
-                    "num_threads": num_threads,
-                    "atlas": new_atlas,
-                    "biome_resolver": new_biome_resolver,
-                    "custom_aliases": self._custom_aliases,
-                    "enable_animated_textures": anim_enabled,
-                }
-                if ctm_solver is not None:
-                    cfg_kwargs["ctm_solver"] = ctm_solver
-                new_config = mtk.MesherConfig(**cfg_kwargs)
+                new_config = build_mesher_config(
+                    mtk,
+                    enable_ao=enable_ao,
+                    mesh_fluids=mesh_fluids,
+                    z_up=True,
+                    origin_centered=True,
+                    weld_vertices=True,
+                    num_threads=num_threads,
+                    atlas=new_atlas,
+                    biome_resolver=new_biome_resolver,
+                    ctm_solver=ctm_solver,
+                    colormaps=new_colormaps,
+                    custom_aliases=self._custom_aliases,
+                    enable_animated_textures=anim_enabled,
+                    smooth_biome_blend=smooth_blend,
+                    unknown_block_strategy=unknown_strategy,
+                )
             except Exception:
                 new_config = None
 

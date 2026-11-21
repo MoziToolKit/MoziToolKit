@@ -188,8 +188,7 @@ def test_cold_cache_save_import_binds_textures(tmp_path, monkeypatch):
 
     from types import SimpleNamespace
     mock_prefs = SimpleNamespace(
-        resource_pack_path=str(jar),
-        resource_packs=[],
+        resource_packs=[SimpleNamespace(path=str(jar), enabled=True, name="fabric")],
         cache_dir=str(sandbox_cache),
     )
 

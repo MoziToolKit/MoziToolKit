@@ -46,7 +46,7 @@ class TestDnaBridge(unittest.TestCase):
     def test_is_version_supported(self):
         ver = get_blender_version()
         supported = is_version_supported()
-        if ver[0] in (4, 5):
+        if ver[0] >= 4:
             self.assertTrue(supported)
         else:
             self.assertFalse(supported)

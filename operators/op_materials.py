@@ -13,7 +13,7 @@ logger = logging.getLogger("MoziToolKit.Operators.Materials")
 
 from ..utils.assets import can_execute_asset_pipeline, check_asset_cache_status, ensure_pipeline_assets_ready_sync
 from ..utils.materials.biome import BIOME_ENUM_ITEMS
-from ..utils.diagnostics import format_timing, record_operation_profile
+from ..bridge.diagnostics import format_timing, record_operation_profile
 from ..utils.materials.pipeline import replace_materials
 from ..utils.mesh.ownership import is_external_mesh
 from ..utils.system import get_prefs, register_menu_item

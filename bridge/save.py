@@ -14,7 +14,12 @@ from typing import Any, Dict, Optional, Tuple
 
 from .assets import get_configured_ctm_solver
 from .engine import get_libmtk, has_libmtk, require_libmtk
-from .world import get_world_pipeline_assets, get_world_pipeline_colormaps
+from .world import (
+    build_mesher_config,
+    get_shared_face_culler,
+    get_world_pipeline_assets,
+    get_world_pipeline_colormaps,
+)
 
 logger = logging.getLogger("MoziToolKit.Bridge.Save")
 
@@ -116,28 +121,24 @@ def load_and_mesh_minecraft_save(
     if unknown_block_strategy is None and resolve_prefs and prefs is not None:
         unknown_block_strategy = getattr(prefs, "unknown_block_strategy", "FALLBACK_CUBE")
 
-    config_kwargs = {
-        "enable_ao": enable_ao,
-        "mesh_fluids": mesh_fluids,
-        "z_up_coordinates": True,
-        "origin_centered": origin_centered,
-        "weld_vertices": weld_vertices,
-        "num_threads": num_threads,
-        "atlas": atlas,
-        "biome_resolver": biome_resolver,
-        "enable_animated_textures": anim_tex_enabled,
-        "smooth_biome_blend": smooth_blend,
-    }
-    if ctm_solver is not None:
-        config_kwargs["ctm_solver"] = ctm_solver
-    if colormaps is not None:
-        config_kwargs["colormaps"] = colormaps
-    if unknown_block_strategy is not None:
-        config_kwargs["unknown_block_strategy"] = unknown_block_strategy
+    config = build_mesher_config(
+        mtk,
+        enable_ao=enable_ao,
+        mesh_fluids=mesh_fluids,
+        z_up=True,
+        origin_centered=origin_centered,
+        weld_vertices=weld_vertices,
+        num_threads=num_threads,
+        atlas=atlas,
+        biome_resolver=biome_resolver,
+        ctm_solver=ctm_solver,
+        colormaps=colormaps,
+        enable_animated_textures=anim_tex_enabled,
+        smooth_biome_blend=smooth_blend,
+        unknown_block_strategy=unknown_block_strategy,
+    )
 
-    config = mtk.MesherConfig(**config_kwargs)
-
-    culler = mtk.FaceCuller()
+    culler = get_shared_face_culler(mtk)
 
     wrapped_cb = None
     if progress_callback is not None:

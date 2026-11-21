@@ -67,7 +67,12 @@ logger = logging.getLogger("MoziToolKit.Material.Pipeline.Stages")
 
 
 def _get_pipeline_mod():
-    return sys.modules.get("MoziToolKit.utils.materials.pipeline")
+    root = (__package__ or "MoziToolKit").rsplit(".utils.", 1)[0]
+    for mod_name in dict.fromkeys((f"{root}.utils.materials.pipeline", "MoziToolKit.utils.materials.pipeline")):
+        mod = sys.modules.get(mod_name)
+        if mod is not None:
+            return mod
+    return None
 
 
 def animated_textures_enabled(prefs: Optional[Any] = None) -> bool:
@@ -246,6 +251,7 @@ def assign_atlas_chunk_materials(
     manifest_fingerprint: Optional[str],
     force_rebuild_materials: bool = False,
     material_namespace: Optional[str] = None,
+    prefs: Optional[Any] = None,
 ) -> array.array:
     """Construct Atlas Chunk materials, assign to mesh material slots, and optionally set Atlas UVs."""
     num_polys = len(mesh.polygons)
@@ -301,6 +307,7 @@ def assign_atlas_chunk_materials(
             force_rebuild=force_rebuild_materials,
             chunk_stem=stem,
             texture_sources=texture_sources,
+            prefs=prefs,
         )
         mesh.materials.append(mat)
         chunk_to_slot[chunk_id] = slot_idx

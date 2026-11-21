@@ -10,10 +10,10 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-from ...bridge.engine import get_libmtk
+from ...bridge.engine import has_libmtk
 from ...i18n import tr
 from ...utils.system import get_prefs
-from .cache_utils import get_cache_dir
+from ...bridge.assets.cache import get_cache_dir
 
 logger = logging.getLogger("MoziToolKit.Utils.Assets.GuardEval")
 
@@ -44,9 +44,8 @@ class PurePackEntry:
 
 class PackConfigSnapshot:
     """Pure Python snapshot of preferences configuration for thread-safe evaluation."""
-    def __init__(self, resource_packs, resource_pack_path: str = "", cache_dir: str = "", thread_count: int = 0):
+    def __init__(self, resource_packs, cache_dir: str = "", thread_count: int = 0):
         self.resource_packs = list(resource_packs)
-        self.resource_pack_path = str(resource_pack_path)
         self.cache_dir = str(cache_dir)
         self.thread_count = int(thread_count)
 
@@ -70,7 +69,6 @@ def snapshot_pack_config(prefs=None) -> PackConfigSnapshot:
                 detected_kind=getattr(e, "detected_kind", "") or "",
             ))
 
-    single = str(getattr(prefs, "resource_pack_path", "") or "")
     try:
         resolved_cache_dir = str(get_cache_dir(prefs).resolve())
     except Exception:
@@ -80,7 +78,6 @@ def snapshot_pack_config(prefs=None) -> PackConfigSnapshot:
 
     return PackConfigSnapshot(
         resource_packs=packs,
-        resource_pack_path=single,
         cache_dir=resolved_cache_dir,
         thread_count=thread_count,
     )
@@ -105,15 +102,8 @@ def _get_pack_signature(prefs=None) -> tuple:
             except OSError:
                 mtime = 0.0
         entries.append((raw, enabled, pt, mtime))
-    single = getattr(prefs, "resource_pack_path", "") or ""
-    single_mtime = 0.0
-    if single:
-        try:
-            single_mtime = os.path.getmtime(single)
-        except OSError:
-            single_mtime = 0.0
     env_sig = tuple((k, os.environ.get(k, "")) for k in ENV_ASSET_ROOTS + ENV_ASSET_ARCHIVES)
-    return (tuple(entries), single, single_mtime, env_sig)
+    return (tuple(entries), env_sig)
 
 
 
@@ -123,8 +113,12 @@ def can_execute_asset_pipeline(prefs=None, check_status_fn=None) -> Tuple[bool, 
     Returns (can_execute, reason_message).
     When False, reason_message provides a clear, user-facing explanation suitable for UI tooltips or reports.
     """
+    if not has_libmtk():
+        return False, tr("Native engine (libmtk) is not loaded.")
     if not has_valid_vanilla_pack(prefs):
         status = check_status_fn(prefs) if check_status_fn else "NO_VANILLA"
+        if status == "NO_NATIVE":
+            return False, tr("Native engine (libmtk) is not loaded.")
         if status == "NO_PACKS":
             return False, tr("No Minecraft resource packs configured. Please configure a Vanilla Client JAR in Preferences.")
         return False, tr("A Minecraft Vanilla Client JAR is required. Resource packs and mods cannot be used without a vanilla base pack.")

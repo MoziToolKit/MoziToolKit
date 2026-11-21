@@ -53,6 +53,7 @@ def preload_atlas_images(
     image_reload_needed: bool = False,
     chunk_stem: Optional[str] = None,
     texture_sources: Optional[Dict[str, Dict[str, Any]]] = None,
+    prefs: Optional[Any] = None,
 ) -> dict[str, Any]:
     """Retrieve or load all atlas texture image datablocks for a chunk."""
     c_stem = chunk_stem or (
@@ -107,6 +108,7 @@ def preload_atlas_images(
             colorspace=albedo_cs,
             force_reload=image_reload_needed,
             chunk_id=albedo_cid,
+            prefs=prefs,
         )
         if albedo_source is not None
         else None
@@ -117,6 +119,7 @@ def preload_atlas_images(
             colorspace=overlay_cs,
             force_reload=image_reload_needed,
             chunk_id=overlay_cid,
+            prefs=prefs,
         )
         if overlay_source is not None
         else None
@@ -127,6 +130,7 @@ def preload_atlas_images(
             colorspace=normal_cs,
             force_reload=image_reload_needed,
             chunk_id=normal_cid,
+            prefs=prefs,
         )
         if normal_source is not None
         else None
@@ -137,6 +141,7 @@ def preload_atlas_images(
             colorspace=orm_cs,
             force_reload=image_reload_needed,
             chunk_id=orm_cid,
+            prefs=prefs,
         )
         if orm_source is not None
         else None
@@ -147,6 +152,7 @@ def preload_atlas_images(
             colorspace=aux_cs,
             force_reload=image_reload_needed,
             chunk_id=aux_cid,
+            prefs=prefs,
         )
         if aux_source is not None
         else None

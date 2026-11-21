@@ -32,7 +32,54 @@ logger = logging.getLogger("MoziToolKit.Bridge.World.Mesher")
 
 def _get_world_mod():
     import sys
-    return sys.modules.get("MoziToolKit.bridge.world")
+    root = (__package__ or "MoziToolKit").rsplit(".bridge.", 1)[0]
+    for mod_name in dict.fromkeys((f"{root}.bridge.world", "MoziToolKit.bridge.world")):
+        mod = sys.modules.get(mod_name)
+        if mod is not None:
+            return mod
+    return None
+
+
+def build_mesher_config(
+    mtk: Any,
+    *,
+    enable_ao: bool = True,
+    mesh_fluids: bool = True,
+    z_up: bool = True,
+    origin_centered: bool = True,
+    weld_vertices: bool = True,
+    num_threads: Optional[int] = None,
+    atlas: Optional[Any] = None,
+    biome_resolver: Optional[Any] = None,
+    ctm_solver: Optional[Any] = None,
+    colormaps: Optional[Any] = None,
+    custom_aliases: Optional[Any] = None,
+    enable_animated_textures: bool = True,
+    smooth_biome_blend: bool = True,
+    unknown_block_strategy: Optional[str] = None,
+) -> Any:
+    """Build a native MesherConfig from canonical meshing parameters."""
+    config_kwargs: Dict[str, Any] = {
+        "enable_ao": enable_ao,
+        "mesh_fluids": mesh_fluids,
+        "z_up_coordinates": z_up,
+        "origin_centered": origin_centered,
+        "weld_vertices": weld_vertices,
+        "num_threads": num_threads,
+        "atlas": atlas,
+        "biome_resolver": biome_resolver,
+        "enable_animated_textures": enable_animated_textures,
+        "smooth_biome_blend": smooth_biome_blend,
+    }
+    if ctm_solver is not None:
+        config_kwargs["ctm_solver"] = ctm_solver
+    if colormaps is not None:
+        config_kwargs["colormaps"] = colormaps
+    if custom_aliases is not None:
+        config_kwargs["custom_aliases"] = custom_aliases
+    if unknown_block_strategy is not None:
+        config_kwargs["unknown_block_strategy"] = unknown_block_strategy
+    return mtk.MesherConfig(**config_kwargs)
 
 
 def mesh_voxel_storage(
@@ -120,25 +167,22 @@ def mesh_voxel_storage(
         unknown_block_strategy = getattr(prefs, "unknown_block_strategy", "FALLBACK_CUBE")
 
     if config is None:
-        config_kwargs = {
-            "enable_ao": enable_ao,
-            "mesh_fluids": mesh_fluids,
-            "z_up_coordinates": z_up,
-            "origin_centered": origin_centered,
-            "weld_vertices": weld_vertices,
-            "num_threads": num_threads,
-            "atlas": atlas,
-            "biome_resolver": biome_resolver,
-            "enable_animated_textures": anim_tex_enabled,
-            "smooth_biome_blend": smooth_blend,
-        }
-        if ctm_solver is not None:
-            config_kwargs["ctm_solver"] = ctm_solver
-        if colormaps is not None:
-            config_kwargs["colormaps"] = colormaps
-        if unknown_block_strategy is not None:
-            config_kwargs["unknown_block_strategy"] = unknown_block_strategy
-        config = mtk.MesherConfig(**config_kwargs)
+        config = build_mesher_config(
+            mtk,
+            enable_ao=enable_ao,
+            mesh_fluids=mesh_fluids,
+            z_up=z_up,
+            origin_centered=origin_centered,
+            weld_vertices=weld_vertices,
+            num_threads=num_threads,
+            atlas=atlas,
+            biome_resolver=biome_resolver,
+            ctm_solver=ctm_solver,
+            colormaps=colormaps,
+            enable_animated_textures=anim_tex_enabled,
+            smooth_biome_blend=smooth_blend,
+            unknown_block_strategy=unknown_block_strategy,
+        )
     else:
         if num_threads is not None:
             config.num_threads = num_threads

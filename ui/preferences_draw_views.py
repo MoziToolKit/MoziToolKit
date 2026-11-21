@@ -236,15 +236,11 @@ def draw_misc_tab(prefs: Any, layout: Any, context: Any) -> None:
         from ..utils.assets import get_cache_stats
         stats = get_cache_stats(prefs)
     except Exception:
-        try:
-            from ..bridge import get_cache_stats
-            stats = get_cache_stats(prefs)
-        except Exception:
-            stats = {
-                "size_formatted": "0 B",
-                "files_count": 0,
-                "path": str(getattr(prefs, "cache_dir", "") or "Default"),
-            }
+        stats = {
+            "size_formatted": "0 B",
+            "files_count": 0,
+            "path": str(getattr(prefs, "cache_dir", "") or "Default"),
+        }
 
     cache_box = layout.box()
     cache_header = cache_box.row(align=True)

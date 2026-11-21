@@ -174,7 +174,7 @@ class MOZI_OT_sync_connect(bpy.types.Operator):
         biome_resolver = load_biome_resolver_from_cache(prefs)
 
         try:
-            from ...utils.assets.cache_utils import get_cache_dir
+            from ...utils.assets import get_cache_dir
             skin_cache = get_cache_dir() / "skins"
             skin_cache.mkdir(parents=True, exist_ok=True)
             session.set_skin_cache_dir(str(skin_cache))

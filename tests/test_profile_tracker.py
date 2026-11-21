@@ -5,7 +5,7 @@ Validates profile recording, stage extraction, total-duration handling, and life
 
 import unittest
 from types import SimpleNamespace
-from MoziToolKit.utils.diagnostics import (
+from MoziToolKit.bridge.diagnostics import (
     record_operation_profile,
     append_stage_to_last_profile,
     get_last_profile,

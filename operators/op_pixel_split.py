@@ -18,7 +18,7 @@ from ..utils.mesh.core import (
     poll_edit_mesh,
     poll_mesh_object,
 )
-from ..utils.diagnostics import format_timing
+from ..bridge.diagnostics import format_timing
 from ..utils.mesh.quadify import quadify_mesh
 from ..utils.system.menu_registry import register_menu_item
 

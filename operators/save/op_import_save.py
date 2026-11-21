@@ -34,7 +34,7 @@ from ...utils.save import (
     resolve_world_directory,
 )
 from ...utils.async_task import AsyncTask, ModalTaskRunner
-from ...utils.diagnostics import format_timing_parts
+from ...bridge.diagnostics import format_timing_parts
 from ...utils.progress import BlenderProgressReporter
 from ..common import CommonMeshingOptionsMixin
 

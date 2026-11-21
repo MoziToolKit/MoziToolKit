@@ -270,11 +270,15 @@ class TestMenuRegistration(unittest.TestCase):
         self.assertTrue(len(layout.labels) > 0)
         self.assertTrue(len(layout.operators) > 0)
 
-        # Unregister hooks
+        # Unregister hooks and restore session-wide menu registration afterwards
         ui.menu_uv.unregister()
         ui.menu_select.unregister()
         ui.menu_object.unregister()
         ui.menu_mesh.unregister()
+        ui.menu_mesh.register()
+        ui.menu_object.register()
+        ui.menu_select.register()
+        ui.menu_uv.register()
 
 
 if __name__ == "__main__":

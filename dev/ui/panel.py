@@ -64,7 +64,7 @@ class VIEW3D_PT_mtk_dev_panel(bpy.types.Panel):
 
         # 3. Execution Profile Breakdown (Most Recent Operation)
         try:
-            from ..profile_tracker import get_last_profile
+            from ...bridge.diagnostics import get_last_profile
             profile = get_last_profile()
         except Exception:
             profile = None
@@ -151,7 +151,8 @@ class VIEW3D_PT_mtk_dev_panel(bpy.types.Panel):
             cache_status = "UNKNOWN"
 
         try:
-            stats = bridge.get_cache_stats(prefs=prefs)
+            from ...utils.assets import get_cache_stats
+            stats = get_cache_stats(prefs=prefs)
             c_col = cache_box.column(align=True)
             status_icons = {
                 "READY": "CHECKMARK",

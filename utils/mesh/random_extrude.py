@@ -145,7 +145,7 @@ def repair_mesh_extruded_side_faces_batch(
     )
     rep_ms = (time.perf_counter() - t0_rep) * 1000.0
 
-    from ..diagnostics import record_operation_profile
+    from ...bridge.diagnostics import record_operation_profile
 
     record_operation_profile(
         "Extrude Repair",

@@ -72,8 +72,7 @@ class TestCacheResolver(unittest.TestCase):
             dir_pack.mkdir()
 
             mock_prefs = SimpleNamespace(
-                resource_pack_path=str(dir_pack),
-                resource_packs=[],
+                resource_packs=[SimpleNamespace(path=str(dir_pack), enabled=True, name="test_addon")],
                 cache_dir=tmpdir,
             )
 

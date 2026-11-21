@@ -18,10 +18,8 @@ logger = logging.getLogger("MoziToolKit.Utils.Launcher.Applier")
 
 
 def _get_launcher_delegate(name: str, default: Any) -> Any:
-    for mod_name in (
-        "bl_ext.vscode_development.MoziToolKit.utils.launcher_scan",
-        "MoziToolKit.utils.launcher_scan",
-    ):
+    root = (__package__ or "MoziToolKit").rsplit(".utils.", 1)[0]
+    for mod_name in dict.fromkeys((f"{root}.utils.launcher_scan", "MoziToolKit.utils.launcher_scan")):
         mod = sys.modules.get(mod_name)
         if mod is not None:
             val = getattr(mod, name, None)

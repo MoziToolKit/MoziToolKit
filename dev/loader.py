@@ -103,12 +103,14 @@ def reload_dev_binary() -> bool:
         spec = importlib.machinery.ModuleSpec(name="libmtk_py", loader=loader, origin=str(dest))
         mod = loader.create_module(spec)
         loader.exec_module(mod)
-        sys.modules["libmtk_py"] = mod
         try:
             from ..bridge import engine
+            if not engine._validate_native_api(mod):
+                return False
+            sys.modules["libmtk_py"] = mod
             engine._libmtk = mod
         except Exception:
-            pass
+            sys.modules["libmtk_py"] = mod
         try:
             from ..bridge.assets import invalidate_asset_cache_memory
             invalidate_asset_cache_memory()
@@ -119,6 +121,13 @@ def reload_dev_binary() -> bool:
             reset_shared_face_culler()
         except Exception:
             pass
+        for stale_hot in DEV_LIB_DIR.glob("libmtk_py_hot_*"):
+            if stale_hot == dest:
+                continue
+            try:
+                stale_hot.unlink()
+            except OSError:
+                pass
         return True
     except Exception:
         return False

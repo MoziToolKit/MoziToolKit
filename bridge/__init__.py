@@ -19,13 +19,11 @@ from .engine import (
 )
 from .assets import (
     check_cache_dirty,
-    clear_cache,
     ensure_atlas_textures_extracted,
     get_active_cache_package_path,
     get_cache_dir,
     get_cache_fingerprint,
     get_cache_manifest,
-    get_cache_stats,
     get_cache_timestamp,
     get_cached_texture_f32,
     get_cached_texture_rgba,
@@ -41,7 +39,6 @@ from .assets import (
     load_colormaps_from_cache,
     load_ctm_solver_from_cache,
     open_active_asset_cache,
-    open_cache_folder,
     precompile_stack,
     precompile_stack_async,
 )
@@ -154,10 +151,7 @@ __all__ = [
     "get_cache_fingerprint",
     "get_cache_timestamp",
     "check_cache_dirty",
-    "clear_cache",
     "get_cache_dir",
-    "get_cache_stats",
-    "open_cache_folder",
     # Mesh
     "extract_mesh_data",
     "inject_mesh_data",

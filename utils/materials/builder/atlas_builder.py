@@ -69,6 +69,7 @@ def build_atlas_chunk_material(
     enable_vertex_ao: Optional[bool] = None,
     enable_biome_tint: Optional[bool] = None,
     texture_sources: Optional[Dict[str, Dict[str, Any]]] = None,
+    prefs: Optional[Any] = None,
 ) -> Optional[Any]:
     """Build or update an Atlas Chunk material with standard Principled PBR."""
 
@@ -131,6 +132,7 @@ def build_atlas_chunk_material(
         image_reload_needed=image_reload_needed,
         chunk_stem=chunk_stem,
         texture_sources=texture_sources,
+        prefs=prefs,
     )
     has_overlay = images["has_overlay"]
     has_normal = images["has_normal"]

@@ -10,13 +10,12 @@ from __future__ import annotations
 
 from .cache import (
     check_cache_dirty,
-    clear_cache,
     ensure_atlas_textures_extracted,
+    evaluate_cache_status,
     get_active_cache_package_path,
     get_cache_dir,
     get_cache_fingerprint,
     get_cache_manifest,
-    get_cache_stats,
     get_cache_timestamp,
     get_cached_texture_f32,
     get_cached_texture_rgba,
@@ -28,13 +27,13 @@ from .cache import (
     load_colormaps_from_cache,
     load_ctm_solver_from_cache,
     open_active_asset_cache,
-    open_cache_folder,
 )
 from .pack import (
     get_configured_ctm_solver,
     get_configured_pack_paths,
     get_configured_pack_stack,
     get_configured_stack_fingerprint,
+    probe_pack_native,
 )
 from .precompile import precompile_stack, precompile_stack_async
 
@@ -44,6 +43,8 @@ __all__ = [
     "get_configured_stack_fingerprint",
     "get_configured_pack_stack",
     "get_configured_ctm_solver",
+    "probe_pack_native",
+    "evaluate_cache_status",
     "precompile_stack",
     "precompile_stack_async",
     "invalidate_asset_cache_memory",
@@ -62,8 +63,5 @@ __all__ = [
     "get_cache_fingerprint",
     "get_cache_timestamp",
     "check_cache_dirty",
-    "clear_cache",
     "get_cache_dir",
-    "get_cache_stats",
-    "open_cache_folder",
 ]

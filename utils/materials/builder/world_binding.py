@@ -356,6 +356,7 @@ def ensure_world_materials(
                         tile_height=16.0,
                         chunk_stem=stem,
                         texture_sources=texture_sources,
+                        prefs=prefs,
                     )
                     compact_materials.append(mat)
                     chunk_to_compact_slot[chunk_id] = slot_idx

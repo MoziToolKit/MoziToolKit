@@ -70,7 +70,7 @@ class MOZI_OT_dev_clear_profile(bpy.types.Operator):
 
     def execute(self, context):
         try:
-            from ..profile_tracker import clear_last_profile
+            from ...bridge.diagnostics import clear_last_profile
             clear_last_profile()
         except Exception:
             pass

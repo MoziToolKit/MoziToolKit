@@ -24,7 +24,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from ..bridge.engine import get_libmtk
+from ..bridge.assets import probe_pack_native
 
 logger = logging.getLogger("MoziToolKit.Utils.PackDetect")
 
@@ -223,19 +223,8 @@ def _pack_probe_from_dict(res: Dict[str, Any]) -> PackProbe:
 # ---------------------------------------------------------------------------
 
 
-def _classify_dir(path: Path, probe: PackProbe) -> PackProbe:
-    mtk = get_libmtk()
-    if mtk is None:
-        raise RuntimeError("libmtk native core is required for pack detection")
-    res = mtk.probe_pack(str(path))
-    return _pack_probe_from_dict(res)
-
-
-def _classify_file(path: Path, probe: PackProbe) -> PackProbe:
-    mtk = get_libmtk()
-    if mtk is None:
-        raise RuntimeError("libmtk native core is required for pack detection")
-    res = mtk.probe_pack(str(path))
+def _classify_path(path: Path) -> PackProbe:
+    res = probe_pack_native(str(path))
     return _pack_probe_from_dict(res)
 
 
@@ -272,10 +261,8 @@ def detect_pack_kind(path: Any, *, use_cache: bool = True) -> PackProbe:
 
     probe = PackProbe()
     try:
-        if resolved.is_dir():
-            probe = _classify_dir(resolved, probe)
-        elif resolved.is_file():
-            probe = _classify_file(resolved, probe)
+        if resolved.is_dir() or resolved.is_file():
+            probe = _classify_path(resolved)
         else:
             probe.error = "path does not exist"
     except Exception as exc:  # defensive: never break a Blender callback

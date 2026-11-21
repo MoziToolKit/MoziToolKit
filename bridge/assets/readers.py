@@ -64,8 +64,7 @@ def get_cached_texture_f32(open_cache_fn, chunk_id: str, prefs=None, flip_y: boo
 
 def load_baked_model_database_inner(
     open_cache_fn,
-    active_pkg_path: Optional[str],
-    active_mtime: float,
+    get_active_identity,
     cached_db: Optional[Any],
     cached_pkg: Optional[str],
     cached_mtime: float,
@@ -80,6 +79,8 @@ def load_baked_model_database_inner(
     cache = open_cache_fn(prefs)
     if cache is None:
         return None, cached_pkg, cached_mtime
+
+    active_pkg_path, active_mtime = get_active_identity()
 
     if verify_fingerprint:
         current_fp = get_configured_stack_fingerprint(prefs)
@@ -104,8 +105,7 @@ def load_baked_model_database_inner(
 
 def load_baked_atlas_inner(
     open_cache_fn,
-    active_pkg_path: Optional[str],
-    active_mtime: float,
+    get_active_identity,
     cached_atlas: Optional[Any],
     cached_pkg: Optional[str],
     cached_mtime: float,
@@ -118,6 +118,7 @@ def load_baked_atlas_inner(
 
     cache = open_cache_fn(prefs)
     if cache is not None:
+        active_pkg_path, active_mtime = get_active_identity()
         if (
             cached_atlas is not None
             and cached_pkg == active_pkg_path
@@ -135,8 +136,7 @@ def load_baked_atlas_inner(
 
 def load_biome_resolver_inner(
     open_cache_fn,
-    active_pkg_path: Optional[str],
-    active_mtime: float,
+    get_active_identity,
     cached_resolver: Optional[Any],
     cached_pkg: Optional[str],
     cached_mtime: float,
@@ -149,6 +149,7 @@ def load_biome_resolver_inner(
 
     cache = open_cache_fn(prefs)
     if cache is not None:
+        active_pkg_path, active_mtime = get_active_identity()
         if (
             cached_resolver is not None
             and cached_pkg == active_pkg_path
@@ -172,8 +173,7 @@ def load_biome_resolver_inner(
 
 def load_colormaps_inner(
     open_cache_fn,
-    active_pkg_path: Optional[str],
-    active_mtime: float,
+    get_active_identity,
     cached_cms: Optional[Any],
     cached_pkg: Optional[str],
     cached_mtime: float,
@@ -186,6 +186,7 @@ def load_colormaps_inner(
 
     cache = open_cache_fn(prefs)
     if cache is not None:
+        active_pkg_path, active_mtime = get_active_identity()
         if (
             cached_cms is not None
             and cached_pkg == active_pkg_path
@@ -203,8 +204,7 @@ def load_colormaps_inner(
 
 def load_ctm_solver_inner(
     open_cache_fn,
-    active_pkg_path: Optional[str],
-    active_mtime: float,
+    get_active_identity,
     cached_solver: Optional[Any],
     cached_pkg: Optional[str],
     cached_mtime: float,
@@ -217,6 +217,7 @@ def load_ctm_solver_inner(
 
     cache = open_cache_fn(prefs)
     if cache is not None:
+        active_pkg_path, active_mtime = get_active_identity()
         if (
             cached_solver is not None
             and cached_pkg == active_pkg_path

@@ -9,7 +9,7 @@ from typing import Any, Optional
 
 import bpy
 
-from ...bridge.engine import get_libmtk
+from ...bridge.point_cloud import inject_voxel_point_cloud, storage_to_point_cloud
 from ...bridge.point_cloud.constants import MASK_MODIFIER_NAME, VOXEL_VERTEX_GROUP
 
 logger = logging.getLogger("MoziToolKit.Utils.PointCloud.Hierarchy")
@@ -218,16 +218,11 @@ def ensure_voxel_child_cloud(
     if parent_obj is None or getattr(parent_obj, "type", "") not in ("MESH", "EMPTY"):
         return None
 
-    mtk = get_libmtk()
     if cloud_data is None:
-        if storage is None or mtk is None or not hasattr(storage, "to_point_cloud"):
+        if storage is None:
             return None
-        cfg = mtk.MesherConfig(
-            z_up_coordinates=True,
-            origin_centered=origin_centered,
-        )
         try:
-            cloud_data = storage.to_point_cloud(cfg)
+            cloud_data = storage_to_point_cloud(storage, origin_centered=origin_centered)
         except Exception as e:
             logger.warning("Failed extracting voxel point cloud from storage: %s", e)
             return None
@@ -279,8 +274,6 @@ def ensure_voxel_child_cloud(
         pass
 
     # 5. Inject points via bridge
-    from ...bridge.point_cloud import inject_voxel_point_cloud
-
     inject_voxel_point_cloud(
         cloud_obj,
         cloud_data,

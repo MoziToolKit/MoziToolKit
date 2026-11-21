@@ -14,6 +14,7 @@ from ..utils.assets import (
     check_asset_cache_status,
     clear_cache,
     get_cache_stats,
+    invalidate_cache_stats_memo,
     open_cache_folder,
     prepare_asset_context,
 )
@@ -157,7 +158,6 @@ class MOZI_OT_clear_cache(bpy.types.Operator):
             except Exception:
                 pass
             try:
-                from ..utils.assets.cache_utils import invalidate_cache_stats_memo
                 invalidate_cache_stats_memo()
                 get_cache_stats(prefs, force_refresh=True)
             except Exception:

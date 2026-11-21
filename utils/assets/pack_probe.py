@@ -51,10 +51,8 @@ def _guard_host():
 
 
 def _get_probe_delegate(name: str, default: Any) -> Any:
-    for mod_name in (
-        "bl_ext.vscode_development.MoziToolKit.ui.preferences_packs",
-        "MoziToolKit.ui.preferences_packs",
-    ):
+    root = (__package__ or "MoziToolKit").rsplit(".utils.", 1)[0]
+    for mod_name in dict.fromkeys((f"{root}.ui.preferences_packs", "MoziToolKit.ui.preferences_packs")):
         mod = sys.modules.get(mod_name)
         if mod is not None:
             val = getattr(mod, name, None)
@@ -184,8 +182,6 @@ def probe_entry_now(item: Any) -> Optional[PackProbe]:
 def _timers_available() -> bool:
     try:
         timers = bpy.app.timers
-        if type(timers).__module__.startswith("unittest.mock"):
-            return False
         return hasattr(timers, "register") and hasattr(timers, "is_registered")
     except Exception:
         return False

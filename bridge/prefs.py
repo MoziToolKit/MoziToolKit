@@ -41,13 +41,13 @@ def get_prefs(context: Optional[Any] = None) -> Optional[Any]:
     for addon in addons.values():
         pref = getattr(addon, "preferences", None)
         if pref is not None:
-            if pref_cls and isinstance(pref, pref_cls):
+            if (pref_cls and isinstance(pref, pref_cls)) or type(pref).__name__ == "MOZI_AddonPreferences":
                 return pref
             if hasattr(pref, "resource_packs") or hasattr(pref, "enable_dna_acceleration"):
                 return pref
 
-    # 2. Known package idnames (e.g. bl_ext.vscode_development.MoziToolKit, MoziToolKit)
-    candidates = ["bl_ext.vscode_development.MoziToolKit", "MoziToolKit"]
+    # 2. Extension package idname hierarchy + canonical addon idname
+    candidates = ["MoziToolKit"]
     pkg = __package__ or ""
     if pkg:
         parts = pkg.split(".")
@@ -59,17 +59,6 @@ def get_prefs(context: Optional[Any] = None) -> Optional[Any]:
         addon = addons.get(name)
         if addon and getattr(addon, "preferences", None) is not None:
             return addon.preferences
-
-    # 3. Headless/test environment fallback: ensure registered in addons
-    idname = getattr(pref_cls, "bl_idname", "MoziToolKit") if pref_cls else "MoziToolKit"
-    try:
-        if idname not in addons:
-            addons.new(name=idname)
-        addon = addons.get(idname)
-        if addon and getattr(addon, "preferences", None) is not None:
-            return addon.preferences
-    except Exception:
-        pass
 
     return None
 

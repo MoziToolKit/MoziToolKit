@@ -7,7 +7,7 @@ import bpy
 from ... import bridge
 from ...utils.async_task import AsyncTask, ModalTaskRunner
 from ...utils.progress import BlenderProgressReporter
-from ...utils.diagnostics import format_timing_parts
+from ...bridge.diagnostics import format_timing_parts
 
 
 class MOZI_OT_dev_load_debug_world(bpy.types.Operator):
@@ -152,7 +152,7 @@ class MOZI_OT_dev_load_debug_world(bpy.types.Operator):
             mesh_data, storage, elapsed_ms = result
             if mesh_data is not None and getattr(mesh_data, "profile", None) is not None:
                 try:
-                    from ..profile_tracker import record_operation_profile
+                    from ...bridge.diagnostics import record_operation_profile
                     record_operation_profile("Load Debug World", mesh_data.profile)
                 except Exception:
                     pass

@@ -12,11 +12,11 @@ import threading
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Set, Tuple
 
-from ...bridge.engine import get_libmtk
+from ...bridge.engine import has_libmtk
 from ...bridge.progress import ProgressCallback, ProgressReport
 from ...i18n import tr
 from ...utils.system import get_prefs
-from .cache_utils import get_cache_dir
+from ...bridge.assets.cache import get_cache_dir
 from .guard_eval import (
     BASE_PROBE_BLOCKS,
     ENV_ASSET_ARCHIVES,
@@ -69,11 +69,21 @@ def _precompile_stack(*args, **kwargs):
     return precompile_stack(*args, **kwargs)
 
 
+def _evaluate_cache_status_native(
+    cache_dir: str,
+    pack_count: int,
+    has_vanilla: bool,
+    expected_fp: str,
+) -> Optional[str]:
+    from ...bridge.assets.cache import evaluate_cache_status
+    return evaluate_cache_status(cache_dir, pack_count, has_vanilla, expected_fp)
+
+
 def _timers_available() -> bool:
     try:
         import bpy
         timers = getattr(getattr(bpy, "app", None), "timers", None)
-        if timers is None or type(timers).__module__.startswith("unittest.mock"):
+        if timers is None:
             return False
         return hasattr(timers, "register") and hasattr(timers, "is_registered")
     except Exception:
@@ -108,6 +118,7 @@ def check_asset_cache_status(prefs=None) -> str:
     - "STALE": Cache packages exist, but the fingerprint does not match the active configuration.
     - "NO_PACKS": No resource packs or JARs configured or enabled in preferences.
     - "NO_VANILLA": Resource packs or mod JARs are configured, but no valid Vanilla Client JAR base pack is enabled.
+    - "NO_NATIVE": Native libmtk core engine is unavailable.
     """
     sig = _get_pack_signature(prefs)
     cache_dir = get_cache_dir(prefs).resolve()
@@ -121,9 +132,8 @@ def check_asset_cache_status(prefs=None) -> str:
     if cache_key in _GUARD_STATUS_CACHE:
         return _GUARD_STATUS_CACHE[cache_key]
 
-    mtk = get_libmtk()
-    if mtk is None:
-        return "MISSING"
+    if not has_libmtk():
+        return "NO_NATIVE"
 
     descriptors = _get_configured_pack_paths(prefs)
     pack_count = len(descriptors)
@@ -144,7 +154,9 @@ def check_asset_cache_status(prefs=None) -> str:
         _GUARD_STATUS_CACHE[cache_key] = "READY"
         return "READY"
 
-    status = mtk.evaluate_cache_status(str(cache_dir), pack_count, has_vanilla, expected_fp)
+    status = _evaluate_cache_status_native(str(cache_dir), pack_count, has_vanilla, expected_fp)
+    if status is None:
+        return "NO_NATIVE"
     _GUARD_STATUS_CACHE[cache_key] = status
     return status
 
@@ -161,9 +173,8 @@ def get_ui_asset_cache_status(
             prefs = None
 
     packs = getattr(prefs, "resource_packs", None) or []
-    single = getattr(prefs, "resource_pack_path", "") or ""
     env_present = any(bool(os.environ.get(k)) for k in ENV_ASSET_ROOTS + ENV_ASSET_ARCHIVES)
-    if not packs and not single and not env_present:
+    if not packs and not env_present:
         return "NO_PACKS"
 
     snapshot = snapshot_pack_config(prefs)
@@ -249,9 +260,6 @@ def ensure_pipeline_assets_ready_sync(
     if status == "READY":
         return True, "READY"
 
-    if status in ("NO_PACKS", "NO_VANILLA"):
-        return False, status
-
     if status in ("MISSING", "STALE"):
         logger.info("Asset cache status is '%s'. Triggering automated precompilation...", status)
         try:
@@ -262,7 +270,7 @@ def ensure_pipeline_assets_ready_sync(
             logger.exception("Automated precompilation failed: %s", e)
             raise e
 
-    return True, status
+    return False, status
 
 
 def run_task_with_asset_guard(
@@ -288,9 +296,10 @@ def run_task_with_asset_guard(
         except Exception:
             pass
 
-    if status in ("NO_PACKS", "NO_VANILLA"):
+    if status not in ("READY", "MISSING", "STALE"):
         raise RuntimeError(
-            f"Cannot execute task: asset cache status is '{status}'. A Minecraft Vanilla Client JAR must be configured."
+            f"Cannot execute task: asset cache status is '{status}'. "
+            "Native core (libmtk) and a Minecraft Vanilla Client JAR are required."
         )
 
     did_precompile = False

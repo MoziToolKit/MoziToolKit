@@ -13,7 +13,7 @@ import bpy
 from ...bridge.mesh import inject_mesh_data
 from ...bridge.world import resolve_dynamic_entity_atlases
 from ...utils.point_cloud import ensure_voxel_child_cloud
-from ..diagnostics import append_stage_to_last_profile
+from ...bridge.diagnostics import append_stage_to_last_profile
 from ..materials.builder.world_binding import ensure_world_materials
 from ..mesh.ownership import ORIGIN_SAVE, stamp_geometry_origin
 from ..system.save_registry import get_save_registry
@@ -329,7 +329,7 @@ def import_save_to_blender(
 
     skin_cache_dir = None
     try:
-        from ..assets.cache_utils import get_cache_dir
+        from ..assets import get_cache_dir
         sc = get_cache_dir() / "skins"
         sc.mkdir(parents=True, exist_ok=True)
         skin_cache_dir = str(sc)

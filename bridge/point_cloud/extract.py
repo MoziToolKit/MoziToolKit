@@ -26,6 +26,24 @@ from .constants import (
 logger = logging.getLogger("MoziToolKit.Bridge.PointCloud.Extract")
 
 
+def _get_point_domain(data: Any) -> Optional[Any]:
+    if hasattr(data, "points"):
+        return data.points
+    return getattr(data, "vertices", None)
+
+
+def storage_to_point_cloud(storage: Any, origin_centered: bool = True) -> Optional[Any]:
+    """Convert a VoxelStorage to a native VoxelPointCloud without exposing libmtk_py outside bridge."""
+    mtk = require_libmtk("storage_to_point_cloud")
+    if storage is None:
+        return None
+    cfg = mtk.MesherConfig(
+        z_up_coordinates=True,
+        origin_centered=origin_centered,
+    )
+    return storage.to_point_cloud(cfg)
+
+
 def extract_voxel_point_cloud_dna(cloud_obj_or_mesh: Any) -> Optional[Any]:
     """
     Extracts a live Rust VoxelPointCloud using zero-copy DNA direct memory reads.
@@ -44,7 +62,8 @@ def extract_voxel_point_cloud_dna(cloud_obj_or_mesh: Any) -> Optional[Any]:
         obj = None
         mesh = cloud_obj_or_mesh
 
-    v_count = len(getattr(mesh, "vertices", []))
+    point_domain = _get_point_domain(mesh)
+    v_count = len(point_domain) if point_domain is not None else 0
     if v_count == 0:
         return mtk.VoxelPointCloud.new()
 
@@ -181,7 +200,8 @@ def extract_voxel_point_cloud_standard(
         obj = None
         mesh = cloud_obj_or_mesh
 
-    v_count = len(getattr(mesh, "vertices", []))
+    point_domain = _get_point_domain(mesh)
+    v_count = len(point_domain) if point_domain is not None else 0
     if v_count == 0:
         return mtk.VoxelPointCloud.new()
 
@@ -217,7 +237,7 @@ def extract_voxel_point_cloud_standard(
 
     # Extract 3D positions
     pos_arr = np.empty(v_count * 3, dtype=np.float32)
-    mesh.vertices.foreach_get("co", pos_arr)
+    point_domain.foreach_get("co", pos_arr)
 
     # Extract integer block coordinates
     bx_arr = np.empty(v_count, dtype=np.int32)

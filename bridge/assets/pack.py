@@ -51,10 +51,6 @@ def get_configured_pack_paths(prefs=None) -> List[str]:
         prefs = get_prefs()
 
     paths: List[str] = []
-    single_path = getattr(prefs, "resource_pack_path", None) if prefs else None
-    if single_path and Path(single_path).exists():
-        paths.append(str(Path(single_path).resolve()))
-
     if prefs and hasattr(prefs, "resource_packs"):
         for entry in prefs.resource_packs:
             if not getattr(entry, "enabled", True):
@@ -150,6 +146,14 @@ def get_configured_ctm_solver(prefs=None, force: bool = False) -> Optional[Any]:
     return None
 
 
+def probe_pack_native(path: str) -> Dict[str, Any]:
+    """Classify a resource pack archive or directory using libmtk.probe_pack."""
+    mtk = get_libmtk()
+    if mtk is None:
+        raise RuntimeError("libmtk native core is required for pack detection")
+    return dict(mtk.probe_pack(str(path)))
+
+
 def path_provides_vanilla_client(path: Path) -> bool:
     """Verifies that a path or ZIP/JAR provides core Minecraft vanilla client assets via libmtk_py."""
     mtk = get_libmtk()
@@ -185,8 +189,7 @@ def _has_configured_packs(prefs: Any) -> bool:
         raw_path = getattr(entry, "path", "")
         if isinstance(raw_path, str) and raw_path.strip():
             return True
-    single_path = getattr(prefs, "resource_pack_path", None)
-    return isinstance(single_path, str) and bool(single_path.strip())
+    return False
 
 
 def _get_pack_signature(prefs=None) -> tuple:
@@ -205,15 +208,8 @@ def _get_pack_signature(prefs=None) -> tuple:
             except OSError:
                 mtime = 0.0
         entries.append((raw, enabled, pt, mtime))
-    single = getattr(prefs, "resource_pack_path", "") or ""
-    single_mtime = 0.0
-    if single:
-        try:
-            single_mtime = os.path.getmtime(single)
-        except OSError:
-            single_mtime = 0.0
     env_sig = tuple((k, os.environ.get(k, "")) for k in ENV_ASSET_ROOTS + ENV_ASSET_ARCHIVES)
-    return (tuple(entries), single, single_mtime, env_sig)
+    return (tuple(entries), env_sig)
 
 
 def has_valid_vanilla_pack(prefs=None) -> bool:
@@ -231,12 +227,6 @@ def has_valid_vanilla_pack(prefs=None) -> bool:
             if _is_entry_valid_vanilla_client(entry):
                 result = True
                 break
-
-        if not result:
-            single_path = getattr(prefs, "resource_pack_path", None)
-            if isinstance(single_path, str) and single_path.strip():
-                if path_provides_vanilla_client(Path(single_path.strip())):
-                    result = True
 
         if not result and _has_configured_packs(prefs):
             _VANILLA_CHECK_CACHE[sig] = False
@@ -261,6 +251,7 @@ __all__ = [
     "invalidate_pack_stack_cache",
     "has_valid_vanilla_pack",
     "path_provides_vanilla_client",
+    "probe_pack_native",
     "ENV_ASSET_ROOTS",
     "ENV_ASSET_ARCHIVES",
     "_VANILLA_PROBE_CACHE",

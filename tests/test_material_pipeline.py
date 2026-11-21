@@ -59,15 +59,6 @@ class TestMaterialPipeline(unittest.TestCase):
         import MoziToolKit.ui.panel_biome
         ui.panel_biome.register()
 
-    @classmethod
-    def tearDownClass(cls):
-        import MoziToolKit.ui as ui
-        import MoziToolKit.ui.panel_biome
-        try:
-            ui.panel_biome.unregister()
-        except Exception:
-            pass
-
     def test_atlas_chunk_material_construction_in_blender(self):
         try:
             with tempfile.TemporaryDirectory() as tmpdir:

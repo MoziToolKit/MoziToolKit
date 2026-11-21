@@ -215,6 +215,7 @@ def get_or_create_image(
     chunk_id: Optional[str] = None,
     flip_y: bool = True,
     pack: bool = False,
+    prefs: Optional[Any] = None,
 ) -> Optional[Any]:
     """
     Load or retrieve an image datablock from memory (.mtkcache) or disk.
@@ -266,7 +267,7 @@ def get_or_create_image(
 
         # Tier 1: Zero-copy float32 streaming directly from native Rust (pre-flipped & converted)
         if get_cached_texture_f32 is not None:
-            f32_tuple = get_cached_texture_f32(resolved_chunk_id, flip_y=flip_y)
+            f32_tuple = get_cached_texture_f32(resolved_chunk_id, prefs=prefs, flip_y=flip_y)
             if f32_tuple is not None:
                 w, h, memview = f32_tuple
                 img = get_or_create_image_from_f32(
@@ -277,7 +278,7 @@ def get_or_create_image(
 
         # Tier 2: Flipped RGBA8 buffer directly from native Rust
         if get_cached_texture_rgba is not None:
-            rgba_tuple = get_cached_texture_rgba(resolved_chunk_id, flip_y=flip_y)
+            rgba_tuple = get_cached_texture_rgba(resolved_chunk_id, prefs=prefs, flip_y=flip_y)
             if rgba_tuple is not None:
                 w, h, memview = rgba_tuple
                 img = get_or_create_image_from_rgba(

@@ -110,7 +110,6 @@ class TestUnknownBlocksAndSceneRebuild(unittest.TestCase):
         )
         cls.mock_prefs = types.SimpleNamespace(
             cache_dir=cls.cache_dir,
-            resource_pack_path="",
             active_resource_pack_index=0,
             resource_packs=[pack_entry],
             thread_count=1,

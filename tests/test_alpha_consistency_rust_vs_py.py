@@ -68,6 +68,10 @@ class TestTextureAlphaBridge(unittest.TestCase):
         operators.register()
         ui.register()
 
+        obj = None
+        mesh = None
+        mat = None
+        img = None
         try:
             # Create a test mesh with 2 faces (grid)
             mesh = bpy.data.meshes.new("TestAlphaMesh")
@@ -135,23 +139,20 @@ class TestTextureAlphaBridge(unittest.TestCase):
             bm_check.faces.ensure_lookup_table()
             self.assertTrue(bm_check.faces[0].select, "Face 0 (transparent) should be selected")
             self.assertFalse(bm_check.faces[1].select, "Face 1 (opaque) should NOT be selected")
-
-            bpy.ops.object.mode_set(mode="OBJECT")
-
-            # Cleanup
-            bpy.data.objects.remove(obj)
-            bpy.data.meshes.remove(mesh)
-            bpy.data.materials.remove(mat)
-            bpy.data.images.remove(img)
         finally:
             try:
-                ui.unregister()
+                if getattr(bpy.context, "mode", "OBJECT") != "OBJECT":
+                    bpy.ops.object.mode_set(mode="OBJECT")
             except Exception:
                 pass
-            try:
-                operators.unregister()
-            except Exception:
-                pass
+            if obj is not None and obj.name in bpy.data.objects:
+                bpy.data.objects.remove(obj, do_unlink=True)
+            if mesh is not None and mesh.name in bpy.data.meshes:
+                bpy.data.meshes.remove(mesh)
+            if mat is not None and mat.name in bpy.data.materials:
+                bpy.data.materials.remove(mat)
+            if img is not None and img.name in bpy.data.images:
+                bpy.data.images.remove(img)
 
 
 if __name__ == "__main__":

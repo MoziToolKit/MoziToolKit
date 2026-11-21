@@ -24,7 +24,6 @@ from .guard import (
     safe_as_pointer,
 )
 from .v4_2 import DnaResolverV42
-from .v5_0 import DnaResolverV50
 
 logger = logging.getLogger("MoziToolKit.Bridge.DNA")
 
@@ -33,18 +32,13 @@ _active_resolver: Optional[BaseDnaResolver] = None
 
 def get_dna_resolver() -> BaseDnaResolver:
     """
-    Returns the appropriate singleton DnaResolver instance for the active Blender version.
+    Returns the singleton DnaResolver instance for Blender 4.2+ / 5.x+.
     """
     global _active_resolver
     if _active_resolver is not None:
         return _active_resolver
 
-    major, minor, _ = get_blender_version()
-    if major >= 5:
-        _active_resolver = DnaResolverV50()
-    else:
-        _active_resolver = DnaResolverV42()
-
+    _active_resolver = DnaResolverV42()
     return _active_resolver
 
 
@@ -111,7 +105,6 @@ def resolve_point_cloud_ptrs(
 __all__ = [
     "BaseDnaResolver",
     "DnaResolverV42",
-    "DnaResolverV50",
     "check_pointer_alignment",
     "get_blender_version",
     "get_dna_resolver",

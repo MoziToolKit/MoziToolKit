@@ -6,19 +6,18 @@ and precompiled asset manifest queries.
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-import shutil
-import subprocess
-import sys
-
 from ..engine import get_libmtk
 from ..prefs import get_prefs
-from .pack import get_configured_pack_stack, get_configured_stack_fingerprint
+from .pack import (
+    get_configured_pack_paths,
+    get_configured_pack_stack,
+    get_configured_stack_fingerprint,
+)
 from .readers import (
     get_cached_texture_f32 as _readers_get_cached_texture_f32,
     get_cached_texture_rgba as _readers_get_cached_texture_rgba,
@@ -30,8 +29,8 @@ from .readers import (
     load_ctm_solver_inner,
 )
 
-_cached_cache_stats: Optional[Dict[str, Any]] = None
-_cached_cache_stats_path: Optional[str] = None
+logger = logging.getLogger("MoziToolKit.Bridge.Assets.Cache")
+
 _CACHE_INVALIDATION_CALLBACKS: list[Any] = []
 
 
@@ -53,6 +52,22 @@ def _resolve_prefs(prefs=None):
     return get_prefs()
 
 
+def _resolve_prefs_cache_dir(target_prefs: Any) -> Optional[Path]:
+    if target_prefs is None or not hasattr(target_prefs, "cache_dir"):
+        return None
+    raw = str(getattr(target_prefs, "cache_dir", "") or "").strip()
+    if not raw:
+        return None
+    try:
+        import bpy
+        resolved = bpy.path.abspath(raw)
+    except Exception:
+        resolved = raw
+    p = Path(resolved)
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
 def get_cache_dir(prefs=None) -> Path:
     """
     Returns the persistent cache directory for compiled assets.
@@ -64,39 +79,22 @@ def get_cache_dir(prefs=None) -> Path:
        `bpy.utils.user_resource("DATAFILES") / "MoziToolKit" / "cache"`
     5. Fallback to `~/.config/blender/MoziToolKit/cache`.
     """
-    # 1. Highest precedence: Explicit caller-provided prefs with non-empty cache_dir
-    if prefs is not None and hasattr(prefs, "cache_dir"):
-        custom_path = getattr(prefs, "cache_dir", "")
-        if custom_path and str(custom_path).strip():
-            try:
-                import bpy
-                resolved = bpy.path.abspath(str(custom_path).strip())
-            except Exception:
-                resolved = str(custom_path).strip()
-            p = Path(resolved)
-            p.mkdir(parents=True, exist_ok=True)
-            return p
+    # 1. Highest precedence: explicit caller-provided prefs with non-empty cache_dir
+    explicit = _resolve_prefs_cache_dir(prefs)
+    if explicit is not None:
+        return explicit
 
-    # 2. Environment override (`MOZI_CACHE_DIR`) for test sandboxing / isolation.
+    # 2. Environment override (`MOZI_CACHE_DIR`) for test sandboxing / isolation
     env_dir = os.environ.get("MOZI_CACHE_DIR")
     if env_dir:
         p = Path(env_dir)
         p.mkdir(parents=True, exist_ok=True)
         return p
 
-    prefs = _resolve_prefs(prefs)
-
-    if prefs is not None and hasattr(prefs, "cache_dir"):
-        custom_path = getattr(prefs, "cache_dir", "").strip()
-        if custom_path:
-            try:
-                import bpy
-                resolved = bpy.path.abspath(custom_path)
-            except Exception:
-                resolved = custom_path
-            p = Path(resolved)
-            p.mkdir(parents=True, exist_ok=True)
-            return p
+    # 3. User-customized path in AddonPreferences
+    resolved_pref_dir = _resolve_prefs_cache_dir(_resolve_prefs(prefs))
+    if resolved_pref_dir is not None:
+        return resolved_pref_dir
 
     cache_dir = None
     try:
@@ -112,134 +110,11 @@ def get_cache_dir(prefs=None) -> Path:
     cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir
 
-
-def invalidate_cache_stats_memo() -> None:
-    """Invalidates the memoized cache statistics so the next read re-scans the directory."""
-    global _cached_cache_stats, _cached_cache_stats_path
-    _cached_cache_stats = None
-    _cached_cache_stats_path = None
-
-
-def get_cache_stats(prefs=None, force_refresh: bool = False) -> Dict[str, Any]:
-    """
-    Returns human-readable and byte statistics for all cached packages on disk.
-    Memoized against the resolved cache path string.
-    """
-    global _cached_cache_stats, _cached_cache_stats_path
-    cache_path = get_cache_dir(prefs)
-    path_str = str(cache_path)
-
-    if (
-        not force_refresh
-        and _cached_cache_stats_path is not None
-        and _cached_cache_stats is not None
-        and _cached_cache_stats_path == path_str
-    ):
-        return _cached_cache_stats
-
-    total_size = 0
-    file_count = 0
-
-    if cache_path.exists():
-        for root, _, files in os.walk(cache_path):
-            for f in files:
-                fp = Path(root) / f
-                try:
-                    total_size += fp.stat().st_size
-                    file_count += 1
-                except Exception:
-                    pass
-
-    if total_size < 1024:
-        size_str = f"{total_size} B"
-    elif total_size < 1024 * 1024:
-        size_str = f"{total_size / 1024:.1f} KB"
-    elif total_size < 1024 * 1024 * 1024:
-        size_str = f"{total_size / (1024 * 1024):.1f} MB"
-    else:
-        size_str = f"{total_size / (1024 * 1024 * 1024):.2f} GB"
-
-    _cached_cache_stats = {
-        "path": path_str,
-        "size_bytes": total_size,
-        "size_formatted": size_str,
-        "files_count": file_count,
-    }
-    _cached_cache_stats_path = path_str
-    return _cached_cache_stats
-
-
-def clear_cache(prefs=None, on_invalidate_callback=None) -> int:
-    """Empties all compiled caches in the cache directory and returns the total bytes freed."""
-    global _cached_cache_stats, _cached_cache_stats_path
-
-    invalidate_asset_cache_memory()
-
-    if on_invalidate_callback is not None:
-        try:
-            on_invalidate_callback()
-        except Exception:
-            pass
-
-    cache_path = get_cache_dir(prefs)
-    freed_bytes = 0
-
-    def _item_size(p: Path) -> int:
-        if p.is_file():
-            try:
-                return p.stat().st_size
-            except Exception:
-                return 0
-        total = 0
-        try:
-            for root, _, files in os.walk(p):
-                for f in files:
-                    try:
-                        total += (Path(root) / f).stat().st_size
-                    except Exception:
-                        pass
-        except Exception:
-            pass
-        return total
-
-    if cache_path.exists():
-        for item in list(cache_path.iterdir()):
-            size = _item_size(item)
-            try:
-                if item.is_dir():
-                    shutil.rmtree(item, ignore_errors=False)
-                else:
-                    item.unlink()
-                freed_bytes += size
-            except Exception as exc:
-                logger.warning("Failed to remove cache entry %s: %s", item, exc)
-
-    _cached_cache_stats = None
-    _cached_cache_stats_path = None
-    return freed_bytes
-
-
-def open_cache_folder(prefs=None) -> None:
-    """Opens the persistent cache directory in the host operating system's native file explorer."""
-    cache_path = get_cache_dir(prefs)
-    try:
-        cache_path.mkdir(parents=True, exist_ok=True)
-    except Exception:
-        pass
-
-    if sys.platform == "win32":
-        os.startfile(str(cache_path))
-    elif sys.platform == "darwin":
-        subprocess.Popen(["open", str(cache_path)])
-    else:
-        subprocess.Popen(["xdg-open", str(cache_path)])
-
-logger = logging.getLogger("MoziToolKit.Bridge.Assets.Cache")
-
 # In-memory session memoization to eliminate redundant disk hashing & package reopening
 _ACTIVE_ASSET_CACHE: Optional[Any] = None
 _ACTIVE_CACHE_PKG_PATH: Optional[str] = None
 _ACTIVE_CACHE_MTIME: float = 0.0
+_ACTIVE_CACHE_PACK_SIG: Optional[Tuple[Tuple[str, int], ...]] = None
 _ACTIVE_CACHE_MANIFEST: Optional[Dict[str, Any]] = None
 
 _CACHED_BIOME_RESOLVER: Optional[Any] = None
@@ -263,7 +138,7 @@ _CACHED_CTM_SOLVER_MTIME: float = 0.0
 
 def invalidate_asset_cache_memory() -> None:
     """Invalidates in-memory cached AssetCache, manifest, and pipeline objects."""
-    global _ACTIVE_ASSET_CACHE, _ACTIVE_CACHE_PKG_PATH, _ACTIVE_CACHE_MTIME, _ACTIVE_CACHE_MANIFEST
+    global _ACTIVE_ASSET_CACHE, _ACTIVE_CACHE_PKG_PATH, _ACTIVE_CACHE_MTIME, _ACTIVE_CACHE_PACK_SIG, _ACTIVE_CACHE_MANIFEST
     global _CACHED_BIOME_RESOLVER, _CACHED_BIOME_RESOLVER_PKG_PATH, _CACHED_BIOME_RESOLVER_MTIME
     global _CACHED_ATLAS, _CACHED_ATLAS_PKG_PATH, _CACHED_ATLAS_MTIME
     global _CACHED_MODEL_DB, _CACHED_MODEL_DB_PKG_PATH, _CACHED_MODEL_DB_MTIME
@@ -272,6 +147,7 @@ def invalidate_asset_cache_memory() -> None:
     _ACTIVE_ASSET_CACHE = None
     _ACTIVE_CACHE_PKG_PATH = None
     _ACTIVE_CACHE_MTIME = 0.0
+    _ACTIVE_CACHE_PACK_SIG = None
     _ACTIVE_CACHE_MANIFEST = None
     _CACHED_BIOME_RESOLVER = None
     _CACHED_BIOME_RESOLVER_PKG_PATH = None
@@ -299,8 +175,6 @@ def invalidate_asset_cache_memory() -> None:
         clear_world_sessions()
     except Exception:
         pass
-
-    invalidate_cache_stats_memo()
 
     for callback in list(_CACHE_INVALIDATION_CALLBACKS):
         try:
@@ -358,9 +232,25 @@ def get_active_cache_package_path(prefs=None, compute_fingerprint: bool = True) 
     return None
 
 
+def _cheap_pack_paths_sig(prefs=None) -> Tuple[Tuple[str, int], ...]:
+    """O(num_packs) signature of configured pack paths and top-level mtimes (no tree walk)."""
+    sig = []
+    for raw in get_configured_pack_paths(prefs):
+        try:
+            mtime_ns = os.stat(raw).st_mtime_ns
+        except OSError:
+            mtime_ns = 0
+        sig.append((raw, mtime_ns))
+    return tuple(sig)
+
+
+def _get_active_cache_identity() -> Tuple[Optional[str], float]:
+    return _ACTIVE_CACHE_PKG_PATH, _ACTIVE_CACHE_MTIME
+
+
 def open_active_asset_cache(prefs=None) -> Optional[Any]:
     """Opens active AssetCache reader from .mtkcache package, reusing open instance when valid."""
-    global _ACTIVE_ASSET_CACHE, _ACTIVE_CACHE_PKG_PATH, _ACTIVE_CACHE_MTIME, _ACTIVE_CACHE_MANIFEST
+    global _ACTIVE_ASSET_CACHE, _ACTIVE_CACHE_PKG_PATH, _ACTIVE_CACHE_MTIME, _ACTIVE_CACHE_PACK_SIG, _ACTIVE_CACHE_MANIFEST
     mtk = get_libmtk()
     if mtk is None:
         return None
@@ -371,8 +261,14 @@ def open_active_asset_cache(prefs=None) -> Optional[Any]:
             invalidate_asset_cache_memory()
         return None
 
-    # O(1) Fast-path: return currently cached instance if path & mtime still match on disk
-    if _ACTIVE_ASSET_CACHE is not None and _ACTIVE_CACHE_PKG_PATH is not None:
+    pack_sig = _cheap_pack_paths_sig(prefs)
+
+    # O(1) Fast-path: return currently cached instance only if pack stack, cache_dir, path & mtime match
+    if (
+        _ACTIVE_ASSET_CACHE is not None
+        and _ACTIVE_CACHE_PKG_PATH is not None
+        and _ACTIVE_CACHE_PACK_SIG == pack_sig
+    ):
         p = Path(_ACTIVE_CACHE_PKG_PATH)
         if p.parent == cache_dir and p.exists() and p.is_file():
             try:
@@ -402,12 +298,14 @@ def open_active_asset_cache(prefs=None) -> Optional[Any]:
         and _ACTIVE_CACHE_PKG_PATH == pkg_str
         and _ACTIVE_CACHE_MTIME == mtime
     ):
+        _ACTIVE_CACHE_PACK_SIG = pack_sig
         return _ACTIVE_ASSET_CACHE
 
     try:
         _ACTIVE_ASSET_CACHE = mtk.AssetCache.open(pkg_str)
         _ACTIVE_CACHE_PKG_PATH = pkg_str
         _ACTIVE_CACHE_MTIME = mtime
+        _ACTIVE_CACHE_PACK_SIG = pack_sig
         _ACTIVE_CACHE_MANIFEST = _ACTIVE_ASSET_CACHE.get_manifest()
         return _ACTIVE_ASSET_CACHE
     except Exception as e:
@@ -442,8 +340,7 @@ def load_baked_model_database(prefs=None, verify_fingerprint: bool = False) -> O
     global _CACHED_MODEL_DB, _CACHED_MODEL_DB_PKG_PATH, _CACHED_MODEL_DB_MTIME
     db, pkg, mtime = load_baked_model_database_inner(
         open_active_asset_cache,
-        _ACTIVE_CACHE_PKG_PATH,
-        _ACTIVE_CACHE_MTIME,
+        _get_active_cache_identity,
         _CACHED_MODEL_DB,
         _CACHED_MODEL_DB_PKG_PATH,
         _CACHED_MODEL_DB_MTIME,
@@ -461,8 +358,7 @@ def load_baked_atlas_from_cache(prefs=None) -> Optional[Any]:
     global _CACHED_ATLAS, _CACHED_ATLAS_PKG_PATH, _CACHED_ATLAS_MTIME
     atlas, pkg, mtime = load_baked_atlas_inner(
         open_active_asset_cache,
-        _ACTIVE_CACHE_PKG_PATH,
-        _ACTIVE_CACHE_MTIME,
+        _get_active_cache_identity,
         _CACHED_ATLAS,
         _CACHED_ATLAS_PKG_PATH,
         _CACHED_ATLAS_MTIME,
@@ -479,8 +375,7 @@ def load_biome_resolver_from_cache(prefs=None) -> Optional[Any]:
     global _CACHED_BIOME_RESOLVER, _CACHED_BIOME_RESOLVER_PKG_PATH, _CACHED_BIOME_RESOLVER_MTIME
     res, pkg, mtime = load_biome_resolver_inner(
         open_active_asset_cache,
-        _ACTIVE_CACHE_PKG_PATH,
-        _ACTIVE_CACHE_MTIME,
+        _get_active_cache_identity,
         _CACHED_BIOME_RESOLVER,
         _CACHED_BIOME_RESOLVER_PKG_PATH,
         _CACHED_BIOME_RESOLVER_MTIME,
@@ -497,8 +392,7 @@ def load_colormaps_from_cache(prefs=None) -> Optional[Any]:
     global _CACHED_COLORMAPS, _CACHED_COLORMAPS_PKG_PATH, _CACHED_COLORMAPS_MTIME
     cms, pkg, mtime = load_colormaps_inner(
         open_active_asset_cache,
-        _ACTIVE_CACHE_PKG_PATH,
-        _ACTIVE_CACHE_MTIME,
+        _get_active_cache_identity,
         _CACHED_COLORMAPS,
         _CACHED_COLORMAPS_PKG_PATH,
         _CACHED_COLORMAPS_MTIME,
@@ -515,8 +409,7 @@ def load_ctm_solver_from_cache(prefs=None) -> Optional[Any]:
     global _CACHED_CTM_SOLVER, _CACHED_CTM_SOLVER_PKG_PATH, _CACHED_CTM_SOLVER_MTIME
     solver, pkg, mtime = load_ctm_solver_inner(
         open_active_asset_cache,
-        _ACTIVE_CACHE_PKG_PATH,
-        _ACTIVE_CACHE_MTIME,
+        _get_active_cache_identity,
         _CACHED_CTM_SOLVER,
         _CACHED_CTM_SOLVER_PKG_PATH,
         _CACHED_CTM_SOLVER_MTIME,
@@ -604,6 +497,19 @@ def get_cache_timestamp(prefs=None) -> float:
     return 0.0
 
 
+def evaluate_cache_status(
+    cache_dir: str,
+    pack_count: int,
+    has_vanilla: bool,
+    expected_fp: str,
+) -> Optional[str]:
+    """Evaluate asset cache readiness natively via libmtk_py (returns None when native core is unloaded)."""
+    mtk = get_libmtk()
+    if mtk is None:
+        return None
+    return mtk.evaluate_cache_status(str(cache_dir), pack_count, has_vanilla, expected_fp)
+
+
 def check_cache_dirty(
     cached_fingerprint: Optional[str] = None,
     cached_timestamp: float = 0.0,
@@ -645,11 +551,8 @@ __all__ = [
     "get_cache_fingerprint",
     "get_cache_timestamp",
     "check_cache_dirty",
-    "clear_cache",
+    "evaluate_cache_status",
     "get_cache_dir",
-    "get_cache_stats",
-    "open_cache_folder",
-    "invalidate_cache_stats_memo",
     "register_cache_invalidation_callback",
     "unregister_cache_invalidation_callback",
 ]

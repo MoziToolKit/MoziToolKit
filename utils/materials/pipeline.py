@@ -203,6 +203,7 @@ def replace_materials(
         manifest_fingerprint=manifest_fingerprint,
         force_rebuild_materials=layout_changed,
         material_namespace="EXT",
+        prefs=prefs,
     )
     set_stored_layout_hash(mesh, current_layout_hash)
 
@@ -403,6 +404,7 @@ def restore_materials_from_provenance(
         atlas_uvs=atlas_uvs,
         manifest_fingerprint=manifest_fingerprint,
         material_namespace=material_namespace,
+        prefs=prefs,
     )
 
     # Step 3: Sync material slot / animation attributes

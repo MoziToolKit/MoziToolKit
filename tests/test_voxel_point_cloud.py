@@ -483,8 +483,15 @@ class TestVoxelPointCloudBridge:
         finally:
             bpy.data.meshes.remove(b_mesh, do_unlink=True)
 
-        # 2. Native PointCloud target (if supported in this Blender version)
+        # 2. Native PointCloud target (injection + DNA & standard extraction roundtrip)
         if hasattr(bpy.data, "pointclouds"):
+            import numpy as np
+            from MoziToolKit.bridge.dna import is_dna_enabled
+            from MoziToolKit.bridge.point_cloud import (
+                extract_voxel_point_cloud_dna,
+                extract_voxel_point_cloud_standard,
+            )
+
             b_pc = bpy.data.pointclouds.new("Test_DirectPtr_PC")
             pc_obj = bpy.data.objects.new("Test_DirectPtr_PCObj", b_pc)
             try:
@@ -498,7 +505,37 @@ class TestVoxelPointCloudBridge:
                 assert list(b_pc[PROP_BLOCK_PALETTE]) == ["minecraft:stone", "minecraft:dirt"]
                 assert b_pc.attributes[ATTR_BLOCK_STATE_IDX].data[0].value == 0
                 assert b_pc.attributes[ATTR_BLOCK_STATE_IDX].data[1].value == 1
+
+                # Standard extraction from PointCloud datablock (must use .points, not .vertices)
+                extracted_std = extract_voxel_point_cloud_standard(pc_obj)
+                assert extracted_std is not None
+                assert len(extracted_std) == 2
+                assert extracted_std.get_state_palette() == ["minecraft:stone", "minecraft:dirt"]
+                assert extracted_std.get_biome_palette() == ["minecraft:plains", "minecraft:desert"]
+                np.testing.assert_allclose(
+                    np.frombuffer(extracted_std.positions_memoryview(), dtype=np.float32),
+                    [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+                )
+                np.testing.assert_array_equal(
+                    np.frombuffer(extracted_std.block_x_memoryview(), dtype=np.int32),
+                    [10, 40],
+                )
+
+                # DNA extraction (when DNA is active) + unified wrapper roundtrip
+                if is_dna_enabled():
+                    extracted_dna = extract_voxel_point_cloud_dna(pc_obj)
+                    assert extracted_dna is not None
+                    assert len(extracted_dna) == 2
+                    assert extracted_dna.get_state_palette() == ["minecraft:stone", "minecraft:dirt"]
+                    np.testing.assert_allclose(
+                        np.frombuffer(extracted_dna.positions_memoryview(), dtype=np.float32),
+                        [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+                    )
+                extracted_pc = extract_voxel_point_cloud(pc_obj)
+                assert extracted_pc is not None
+                assert len(extracted_pc) == 2
             finally:
+                bpy.data.objects.remove(pc_obj, do_unlink=True)
                 bpy.data.pointclouds.remove(b_pc, do_unlink=True)
 
     def test_incremental_point_cloud_reuse_preserves_attributes_and_mask_modifier(self):

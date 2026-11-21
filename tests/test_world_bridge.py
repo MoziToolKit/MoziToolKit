@@ -297,7 +297,7 @@ class TestWorldBridgePipeline:
         for key in ("MC_DIR", "MC_ASSETS_DIR", "MTK_TEST_ASSETS", "MTK_TEST_JAR"):
             monkeypatch.delenv(key, raising=False)
 
-        empty_prefs = type("MockPrefs", (), {"resource_packs": [], "resource_pack_path": ""})()
+        empty_prefs = type("MockPrefs", (), {"resource_packs": []})()
 
         # Gate 1: is_debug_world_available must return False when no assets are present
         assert not is_debug_world_available(prefs=empty_prefs)
@@ -343,7 +343,6 @@ class TestWorldBridgePipeline:
             (),
             {
                 "resource_packs": [MockPackEntry(str(jar_path.resolve()))],
-                "resource_pack_path": "",
                 "thread_count": 0,
             },
         )()

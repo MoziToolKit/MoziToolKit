@@ -6,9 +6,9 @@ Contains host-level asset helpers including cache directory resolvers and execut
 
 from __future__ import annotations
 
-from .cache_utils import (
+from ...bridge.assets.cache import get_cache_dir
+from .cache_ops import (
     clear_cache,
-    get_cache_dir,
     get_cache_stats,
     invalidate_cache_stats_memo,
     open_cache_folder,

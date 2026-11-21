@@ -65,6 +65,23 @@ except Exception:
 try:
     import MoziToolKit
     MoziToolKit.register()
+    from MoziToolKit.ui.preferences import MOZI_AddonPreferences
+    _addons = getattr(getattr(bpy.context, "preferences", None), "addons", None)
+    if _addons is not None and MOZI_AddonPreferences.bl_idname not in _addons:
+        _addon_entry = _addons.new()
+        _addon_entry.module = MOZI_AddonPreferences.bl_idname
+    from MoziToolKit.bridge.prefs import get_prefs
+    _prefs = get_prefs()
+    if _prefs is not None:
+        _prefs.resource_packs.clear()
+        _prefs.cache_dir = ""
+        _prefs.enable_dna_acceleration = True
+        _prefs.enable_ctm = True
+        _prefs.enable_animated_textures = True
+        _prefs.smooth_biome_blend = True
+        _prefs.unknown_block_strategy = "FALLBACK_CUBE"
+    from MoziToolKit.bridge.assets import invalidate_asset_cache_memory
+    invalidate_asset_cache_memory()
 except Exception:
     pass
 

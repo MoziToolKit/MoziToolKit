@@ -107,8 +107,7 @@ class TestCtmBridge(unittest.TestCase):
         pack_path = str(self.synthetic_pack_zip.resolve())
         mock_prefs = SimpleNamespace(
             cache_dir=str(self.tmp_dir.name),
-            resource_pack_path=pack_path,
-            resource_packs=[],
+            resource_packs=[SimpleNamespace(path=pack_path, enabled=True, name="ctm_pack")],
         )
 
         # Without an active compiled .mtkcache package, get_configured_ctm_solver returns None (no fallback)
@@ -155,8 +154,7 @@ class TestCtmBridge(unittest.TestCase):
         invalidate_asset_cache_memory()
         mock_prefs = SimpleNamespace(
             cache_dir=str(cache_dir.resolve()),
-            resource_pack_path=pack_path,
-            resource_packs=[],
+            resource_packs=[SimpleNamespace(path=pack_path, enabled=True, name="ctm_pack")],
             enable_ctm=True,
         )
         cached_solver = load_ctm_solver_from_cache(mock_prefs)

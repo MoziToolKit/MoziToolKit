@@ -214,19 +214,6 @@ def export_scene_package(
     elif resolved_enable_ctm is not None:
         resolved_enable_ctm = bool(resolved_enable_ctm)
 
-    # Older caches may predate the packaged `ctm/rules` chunk. If the active cache has
-    # no CTM rules but the live pack stack does, fall back to the live solver so a stale
-    # cache does not silently strip working connected textures from the export.
-    if resolved_enable_ctm and resolved_ctm_solver is None and prefs is not None:
-        if not cache.has_ctm_rules():
-            from .assets.pack import get_configured_ctm_solver
-
-            resolved_ctm_solver = get_configured_ctm_solver(prefs, force=True)
-            if resolved_ctm_solver is not None:
-                logger.warning(
-                    "Active asset cache has no packaged CTM rules; using the live resource-pack CTM solver for scene export. Recompile the cache to make it self-contained."
-                )
-
     export_options = {
         "max_atlas_size": opts.get("max_atlas_size", max_atlas_size),
         "mip_level": opts.get("mip_level", mip_level),

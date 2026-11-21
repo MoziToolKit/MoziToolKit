@@ -9,7 +9,7 @@
     "required_native_symbols_present": true
   },
   "forbidden_hits": [],
-  "generated_at": "2026-11-15T05:43:49.359056+00:00",
+  "generated_at": "2026-11-21T09:18:13.692476+00:00",
   "libmtk_blender_dna": {
     "api_version": 2,
     "functions": [
@@ -26,7 +26,7 @@
     ]
   },
   "libmtk_py": {
-    "api_version": 2,
+    "api_version": 3,
     "mesh_data_methods": [
       "add_attribute_from_buffer",
       "add_string_attribute",
@@ -45,6 +45,7 @@
       "indices_memoryview",
       "is_empty",
       "loop_uvs_memoryview",
+      "materials_are_slots",
       "normals_memoryview",
       "positions_memoryview",
       "profile",
@@ -62,9 +63,6 @@
       "BakedModelDatabase",
       "BiomeResolver",
       "CtmSolver",
-      "EntityRenderNode",
-      "EntityRenderPlan",
-      "EntityRenderTransform",
       "FaceCuller",
       "GridAtlasSpec",
       "LiveSyncServer",
@@ -88,14 +86,13 @@
       "analyze_mesh_hard_edges",
       "api_version",
       "batch_analyze_transparent_faces_f32",
-      "build_entity_render_plan",
       "build_material_palette",
       "builtin_biome_suffixes",
       "calculate_uv_area",
       "clean_material_identifier",
       "compute_biome_tint_attributes_paletted",
       "compute_mesh_biome_attributes_from_storage",
-      "compute_stack_fingerprint_from_names",
+      "compute_stack_fingerprint_from_paths",
       "evaluate_cache_status",
       "export_scene_package",
       "generate_random_extrude_heights",
@@ -105,9 +102,9 @@
       "get_fluid_top_uvs",
       "get_uv_bounds",
       "get_uv_center",
-      "host_transform_to_mc",
       "inspect_minecraft_save",
       "load_and_mesh_minecraft_save",
+      "newest_cache_package",
       "normalize_banner_pattern",
       "path_provides_vanilla_client",
       "precompile_all_assets",
@@ -118,7 +115,8 @@
       "resolve_active_cache_package",
       "sample_colormap_colors",
       "scale_uv",
-      "supported_visual_entity_ids",
+      "set_thread_count",
+      "threading_info",
       "unstable",
       "version"
     ],

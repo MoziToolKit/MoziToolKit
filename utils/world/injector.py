@@ -125,7 +125,7 @@ def apply_voxel_mesh_to_blender(
         cloud_ms = 0.0
         cloud_count = 0
 
-    from ..diagnostics import append_stage_to_last_profile
+    from ...bridge.diagnostics import append_stage_to_last_profile
 
     append_stage_to_last_profile("blender_mesh_injection", inject_ms, getattr(mesh_data, "vertex_count", None))
     append_stage_to_last_profile("blender_material_binding", mat_ms, len(used_chunk_ids) if used_chunk_ids else None)

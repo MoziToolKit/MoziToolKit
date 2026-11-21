@@ -519,6 +519,34 @@ class TestAssetBakeGuard(unittest.TestCase):
             self.assertEqual(MOZI_OT_precompile_cache.execute(op, context), {"CANCELLED"})
         self.assertEqual(op.reported[0], {"WARNING"})
 
+    def test_status_no_native_and_fail_closed_guard(self):
+        """H-05 / H-06: missing native engine returns NO_NATIVE and unknown/NO_NATIVE fail closed."""
+        prefs_a = self._make_prefs([self.pack_a])
+
+        with patch("MoziToolKit.utils.assets.guard.has_libmtk", return_value=False):
+            self.assertEqual(check_asset_cache_status(prefs_a), "NO_NATIVE")
+
+        with patch("MoziToolKit.utils.assets.guard_eval.has_libmtk", return_value=False):
+            can_run, reason = can_execute_asset_pipeline(prefs_a)
+            self.assertFalse(can_run)
+            self.assertTrue(reason)
+
+        called = []
+
+        def worker():
+            called.append(True)
+            return "should_not_run"
+
+        for bad_status in ("NO_NATIVE", "UNKNOWN", "CORRUPT_STATE"):
+            with patch("MoziToolKit.utils.assets.guard.check_asset_cache_status", return_value=bad_status):
+                ok, st = ensure_pipeline_assets_ready_sync(prefs_a)
+                self.assertFalse(ok)
+                self.assertEqual(st, bad_status)
+                with self.assertRaises(RuntimeError):
+                    run_task_with_asset_guard(target_func=worker, prefs=prefs_a)
+
+        self.assertEqual(called, [])
+
 
 
 if __name__ == "__main__":

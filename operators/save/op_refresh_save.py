@@ -26,7 +26,7 @@ from ...utils.assets import (
 )
 from ...utils.save import apply_imported_save_to_blender
 from ...utils.async_task import AsyncTask, ModalTaskRunner
-from ...utils.diagnostics import format_timing_parts
+from ...bridge.diagnostics import format_timing_parts
 from ...utils.progress import BlenderProgressReporter, blender_progress_scope
 from ...utils.system.dependencies import get_prefs
 from ...utils.system.save_registry import get_save_registry

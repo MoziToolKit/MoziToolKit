@@ -67,27 +67,27 @@ def invalidate_world_pipeline_assets() -> None:
     _WORLD_PIPELINE_SIGNATURE = None
 
 
-def _newest_package_mtime(cache_dir: str) -> int:
-    """Newest `.mtkcache` mtime in `cache_dir`, or 0. One directory scan, no pack walk."""
+def _cache_dir_packages_sig(cache_dir: str) -> Tuple[Tuple[str, int], ...]:
+    """Signature of all `.mtkcache` files in `cache_dir` (name + mtime_ns)."""
     try:
         from pathlib import Path
 
-        newest = 0
+        entries = []
         for entry in Path(cache_dir).glob("*.mtkcache"):
             try:
-                newest = max(newest, entry.stat().st_mtime_ns)
+                entries.append((entry.name, entry.stat().st_mtime_ns))
             except OSError:
                 continue
-        return newest
+        return tuple(sorted(entries))
     except Exception:
-        return 0
+        return ()
 
 
 def _assets_signature(prefs=None) -> Tuple[Any, ...]:
-    """Cheap key for the asset memo: packs, cache dir, package identity.
+    """Cheap key for the asset memo: packs, cache dir, package identities.
 
-    Includes the newest package mtime so baking or replacing a cache invalidates the memo
-    without recomputing the stack fingerprint.
+    Includes all package filenames and mtimes so adding, baking, replacing, or
+    deleting a cache invalidates the memo without recomputing the stack fingerprint.
     """
     from ..assets import get_cache_dir
     from ..assets.pack import get_configured_pack_paths
@@ -100,7 +100,7 @@ def _assets_signature(prefs=None) -> Tuple[Any, ...]:
         cache_dir = str(get_cache_dir(prefs))
     except Exception:
         cache_dir = ""
-    return (paths, cache_dir, _newest_package_mtime(cache_dir))
+    return (paths, cache_dir, _cache_dir_packages_sig(cache_dir))
 
 
 def get_world_pipeline_assets(prefs=None) -> Tuple[Optional[Any], Optional[Any], Optional[Any]]:

@@ -3,8 +3,7 @@ from _mtk_helpers import mesh_world
 """
 Unit and integration tests for voxel mesh vertex welding and bottom-center origin alignment.
 Verifies that libmtk voxel meshing matches MoziToolKit requirements:
-1. Meshes weld vertices that share a position *and a face direction* (24 verts for 1 cube, 32 for
-   2 joined cubes): every quad keeps its own flat normal, which a position-only weld would lose.
+1. Meshes have duplicate spatial vertices welded into manifold topology (8 verts for 1 cube, 12 for 2 joined cubes).
 2. The object origin (0, 0, 0) is situated at the bottom center of the bounding volume.
 3. Corner-domain UVs and colors/AO are properly preserved during Blender injection.
 """
@@ -30,7 +29,7 @@ class TestVoxelWeldingAndOrigin(unittest.TestCase):
             self.skipTest("libmtk_py not available")
 
     def test_single_cube_welding(self):
-        """A single cube needs 24 vertices either way: 8 corners x 3 exposed face directions."""
+        """A single solid cube should have 8 vertices when welded, and 24 when unwelded."""
         storage = mtk_py.VoxelStorage()
         storage.set_bounds(0, 0, 0, 1, 1, 1)
         storage.set_block(0, 0, 0, "minecraft:stone")
@@ -42,7 +41,7 @@ class TestVoxelWeldingAndOrigin(unittest.TestCase):
             z_up_coordinates=True,
         )
         mesh_welded = mesh_world(storage, cfg_welded)
-        self.assertEqual(mesh_welded.vertex_count, 24)
+        self.assertEqual(mesh_welded.vertex_count, 8)
         self.assertEqual(mesh_welded.face_count, 6)
         self.assertEqual(mesh_welded.quad_count, 6)
         self.assertEqual(mesh_welded.triangle_count, 12)
@@ -60,7 +59,7 @@ class TestVoxelWeldingAndOrigin(unittest.TestCase):
         self.assertEqual(mesh_unwelded.face_count, 6)
 
     def test_two_joined_cubes_welding(self):
-        """Two adjacent cubes cull their shared face (10 faces) and weld to 32 vertices (one per corner and face direction)."""
+        """Two adjacent solid cubes should cull their shared face (leaving 10 faces) and weld to 12 vertices."""
         storage = mtk_py.VoxelStorage()
         storage.set_bounds(0, 0, 0, 2, 1, 1)
         storage.set_block(0, 0, 0, "minecraft:stone")
@@ -72,7 +71,7 @@ class TestVoxelWeldingAndOrigin(unittest.TestCase):
             z_up_coordinates=True,
         )
         mesh_welded = mesh_world(storage, cfg_welded)
-        self.assertEqual(mesh_welded.vertex_count, 32)
+        self.assertEqual(mesh_welded.vertex_count, 12)
         self.assertEqual(mesh_welded.face_count, 10)
         self.assertEqual(mesh_welded.quad_count, 10)
         self.assertEqual(mesh_welded.triangle_count, 20)
@@ -107,7 +106,8 @@ class TestVoxelWeldingAndOrigin(unittest.TestCase):
         world = mtk_py.VoxelWorld.from_storage(storage, cfg, None, None)
 
         full = world.rebuild_all()
-        self.assertEqual(full.vertex_count, 32)
+        self.assertEqual(full.vertex_count, 12)
+        self._assert_unique_positions(full)
 
         # Unrelated edit in Section 0: the Live Sync debounce takes the dirty path.
         storage.set_block(0, 5, 5, "minecraft:dirt")
@@ -115,14 +115,22 @@ class TestVoxelWeldingAndOrigin(unittest.TestCase):
         world.rebuild_dirty()
         incremental = world.get_world_mesh()
 
-        # Two seam cubes (32) + one isolated dirt cube (24).
-        self.assertEqual(incremental.vertex_count, 56)
+        # Two welded cubes (12) + one welded dirt cube (8).
+        self.assertEqual(incremental.vertex_count, 20)
         self.assertEqual(incremental.face_count, 16)
+        self._assert_unique_positions(incremental)
 
         # A from-scratch rebuild must produce the same welded topology.
         rebuilt = world.rebuild_all()
         self.assertEqual(rebuilt.vertex_count, incremental.vertex_count)
         self.assertEqual(rebuilt.face_count, incremental.face_count)
+
+    @staticmethod
+    def _assert_unique_positions(mesh):
+        pos = ma.positions(mesh)
+        coords = [tuple(pos[i : i + 3]) for i in range(0, len(pos), 3)]
+        duplicates = len(coords) - len(set(coords))
+        assert duplicates == 0, f"{duplicates} duplicate vertex position(s) survived welding"
 
     def test_bottom_center_origin_alignment(self):
         """

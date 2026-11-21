@@ -114,9 +114,7 @@ class TestItemGeneratorBridge(unittest.TestCase):
         sword_welded, _ = db.get_mesh("minecraft:diamond_sword", False, True)
         self.assertEqual(sword_unwelded.quad_count, sword_welded.quad_count)
         self.assertEqual(sword_unwelded.vertex_count, 408)
-        # Welding keys on (position, normal), so it only merges corners that share a face
-        # direction.
-        self.assertEqual(sword_welded.vertex_count, 396)
+        self.assertEqual(sword_welded.vertex_count, 140)
         self.assertLess(sword_welded.vertex_count, sword_unwelded.vertex_count)
 
         # Test full items showcase gallery grid generation in Rust
@@ -164,7 +162,7 @@ class TestItemGeneratorBridge(unittest.TestCase):
         sword_obj = bpy.data.objects.get("MTK_Diamond_sword")
         self.assertIsNotNone(sword_obj)
         self.assertEqual(sword_obj.type, "MESH")
-        self.assertEqual(len(sword_obj.data.vertices), 396)
+        self.assertEqual(len(sword_obj.data.vertices), 140)
         self.assertEqual(len(sword_obj.data.polygons), 102)
         self.assertTrue(sword_obj.get("mtk:is_debug_item", False))
         self.assertEqual(sword_obj.get("mtk:item_id"), "minecraft:diamond_sword")

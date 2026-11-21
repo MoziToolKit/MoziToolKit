@@ -9,7 +9,7 @@
     "required_native_symbols_present": true
   },
   "forbidden_hits": [],
-  "generated_at": "2026-11-21T09:18:13.692476+00:00",
+  "generated_at": "2026-11-21T10:04:00.765802+00:00",
   "libmtk_blender_dna": {
     "api_version": 2,
     "functions": [
@@ -26,7 +26,7 @@
     ]
   },
   "libmtk_py": {
-    "api_version": 3,
+    "api_version": 4,
     "mesh_data_methods": [
       "add_attribute_from_buffer",
       "add_string_attribute",

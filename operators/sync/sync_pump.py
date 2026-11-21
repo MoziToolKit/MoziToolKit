@@ -11,7 +11,9 @@ from typing import Any, Optional
 
 import bpy
 
+from ...bridge.network import is_online_access_allowed
 from ...bridge.sync import get_sync_bridge_session
+from ...i18n import tr
 from ...utils.world.sync_container import (
     _safe_get_custom_prop,
     _safe_set_custom_prop,
@@ -195,6 +197,35 @@ def _sync_timer_tick() -> Optional[float]:
     global _pending_cloud_sync_time
     get_session_fn = _get_pump_delegate("get_sync_bridge_session", get_sync_bridge_session)
     session = get_session_fn()
+
+    if not is_online_access_allowed():
+        if session is not None and getattr(session, "is_active", False):
+            try:
+                session.stop()
+            except Exception as e:
+                logger.debug("Failed stopping session when online access disabled: %s", e)
+
+        scene = getattr(bpy.context, "scene", None) if bpy.context else None
+        get_active_container_fn = _get_pump_delegate("get_active_sync_container", get_active_sync_container)
+        active_container = get_active_container_fn(scene) if scene is not None else None
+        props = getattr(active_container, "mozi_sync", None) if active_container is not None else None
+        scene_props = getattr(scene, "mozi_sync", None) if scene is not None else None
+        for target_props in (props, scene_props):
+            if target_props is None:
+                continue
+            if hasattr(target_props, "is_connected"):
+                target_props.is_connected = False
+            if hasattr(target_props, "is_streaming"):
+                target_props.is_streaming = False
+            if hasattr(target_props, "connection_status"):
+                target_props.connection_status = "DISCONNECTED"
+            if hasattr(target_props, "validation_info"):
+                target_props.validation_info = tr("Network Access Disabled")
+
+        _close_progress_reporter()
+        stop_fn = _get_pump_delegate("stop_sync_timer", stop_sync_timer)
+        stop_fn()
+        return None
 
     # Drain pending events BEFORE checking is_active. The terminal DISCONNECTED
     # event is queued just before the worker exits; checking is_active first would

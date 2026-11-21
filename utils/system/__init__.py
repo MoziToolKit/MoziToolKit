@@ -8,6 +8,9 @@ from .dependencies import (
 )
 
 from .network import (
+    ONLINE_ACCESS_DENIED_MESSAGE,
+    is_online_access_allowed,
+    require_online_access,
     sync_system_proxies,
 )
 
@@ -39,6 +42,10 @@ from .menu_config import (
 __all__ = [
     "has_libmtk",
     "get_prefs",
+    "ONLINE_ACCESS_DENIED_MESSAGE",
+    "is_online_access_allowed",
+    "require_online_access",
+    "sync_system_proxies",
     "register_menu_item",
     "register_operator_menu_item",
     "normalize_operator_id",

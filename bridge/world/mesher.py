@@ -57,8 +57,12 @@ def build_mesher_config(
     enable_animated_textures: bool = True,
     smooth_biome_blend: bool = True,
     unknown_block_strategy: Optional[str] = None,
+    allow_network: Optional[bool] = None,
 ) -> Any:
     """Build a native MesherConfig from canonical meshing parameters."""
+    from ..network import is_online_access_allowed
+
+    net_allowed = is_online_access_allowed() if allow_network is None else bool(allow_network)
     config_kwargs: Dict[str, Any] = {
         "enable_ao": enable_ao,
         "mesh_fluids": mesh_fluids,
@@ -70,6 +74,7 @@ def build_mesher_config(
         "biome_resolver": biome_resolver,
         "enable_animated_textures": enable_animated_textures,
         "smooth_biome_blend": smooth_biome_blend,
+        "allow_network": net_allowed,
     }
     if ctm_solver is not None:
         config_kwargs["ctm_solver"] = ctm_solver

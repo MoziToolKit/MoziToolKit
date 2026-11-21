@@ -47,7 +47,6 @@ from .launcher import (
     scan_modrinth_instances,
     scan_official_instances,
     scan_prism_instances,
-    schedule_background_auto_setup,
 )
 
 __all__ = [
@@ -91,5 +90,4 @@ __all__ = [
     "scan_modrinth_instances",
     "scan_official_instances",
     "scan_prism_instances",
-    "schedule_background_auto_setup",
 ]

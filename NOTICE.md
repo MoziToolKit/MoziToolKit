@@ -8,31 +8,14 @@ Copyright (c) 2020-2026 Mozi Arasaka (`mozi1924`). All rights reserved.
 
 ## Bundled & Linked Third-Party Components
 
-### 1. libmozitoolkit (`libmtk_py`)
+### 1. libmozitoolkit (`libmtk_py` & `libmtk_blender_dna`)
 - **License**: GNU General Public License v3.0 (GPL-3.0-only or GPL-3.0-or-later)
-- **Description**: High-performance host-agnostic 3D voxel and geometry calculation kernel.
+- **Description**: High-performance host-agnostic 3D voxel, texture/atlas stitching, Anvil save parsing, and WebSocket Live Sync kernel with Blender DNA memory acceleration.
 - **Copyright**: (c) 2024-2026 MoziToolKit Contributors.
 
 ---
 
-### 2. Pillow (PIL)
-- **License**: Historical Permission Notice and Disclaimer (HPND)
-- **Description**: Python Imaging Library used in asset preprocessing and thumbnail generation.
-- **Copyright**:
-  - Copyright (c) 1997-2011 by Secret Labs AB
-  - Copyright (c) 1995-2011 by Fredrik Lundh
-  - Copyright (c) 2010-2026 by Jeffrey A. Clark and contributors
-
----
-
-### 3. websockets
+### 2. NumPy
 - **License**: BSD 3-Clause "New" or "Revised" License
-- **Description**: Python WebSocket protocol client/server implementation.
-- **Copyright**: Copyright (c) 2013-2026 Aymeric Augustin and contributors.
-
----
-
-### 4. NumPy
-- **License**: BSD 3-Clause "New" or "Revised" License
-- **Description**: Numerical array manipulation library.
+- **Description**: Numerical array manipulation library bundled by Blender's Python environment.
 - **Copyright**: Copyright (c) 2005-2026 NumPy Developers.

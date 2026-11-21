@@ -51,7 +51,6 @@ from .applier import (
     auto_configure_initial_asset_stack,
     find_latest_vanilla_instance,
     parse_minecraft_version,
-    schedule_background_auto_setup,
 )
 
 __all__ = [
@@ -95,5 +94,4 @@ __all__ = [
     "auto_configure_initial_asset_stack",
     "find_latest_vanilla_instance",
     "parse_minecraft_version",
-    "schedule_background_auto_setup",
 ]

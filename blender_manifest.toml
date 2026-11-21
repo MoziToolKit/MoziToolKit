@@ -50,7 +50,7 @@ platforms = [
 # Resources required by the extension (files permissions)
 [permissions]
 files = "Read Minecraft packs and write texture atlas files"
-network = "Connect to Minecraft Live Sync WebSocket server"
+network = "Connect to Live Sync WebSocket & fetch player head skins"
 
 # Build settings for `blender --command extension build`
 [build]
@@ -74,6 +74,8 @@ paths_exclude_pattern = [
   ".github/",
   ".pytest_cache/",
   ".blender-test-config/",
+  ".ci-cache/",
+  ".ci-config/",
   "tools/",
   "*.md",
 ]

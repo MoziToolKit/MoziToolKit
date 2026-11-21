@@ -22,7 +22,7 @@ class TestEngineBridge:
         assert "version" in info
         assert info["version"] != "Unknown"
         assert len(info["version"]) > 0
-        assert info["api_version"] == 3
+        assert info["api_version"] == 4
         assert info["dna_available"] is True
         assert info["dna_version"] != "Unknown"
         assert len(info["dna_version"]) > 0

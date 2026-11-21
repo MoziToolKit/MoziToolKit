@@ -18,7 +18,7 @@ from ..utils.world.sync_container import (
 )
 from ..operators.sync.properties import get_active_sync_container
 from ..utils.system import get_prefs
-from .common import draw_vanilla_pack_warning
+from .common import draw_online_access_warning, draw_vanilla_pack_warning
 
 
 class MOZI_UL_sync_palette_list(bpy.types.UIList):
@@ -91,14 +91,10 @@ def _draw_live_sync_content(layout: bpy.types.UILayout, context: bpy.types.Conte
         return
 
     # Check network permission if applicable
-    if hasattr(bpy.app, "online_access") and not bpy.app.online_access:
-        box_online = layout.box()
-        box_online.alert = True
-        box_online.label(text=tr("Network Access Disabled"), icon='ERROR')
-        box_online.label(text=tr("Enable in Preferences > System > Network to use Live Sync."))
-        row_pref = box_online.row()
-        op_pref = row_pref.operator("screen.userpref_show", text=tr("Open Preferences"), icon='PREFERENCES')
-        op_pref.section = 'SYSTEM'
+    if draw_online_access_warning(
+        layout,
+        "Enable 'Allow Online Access' in Preferences > System > Network to use Live Sync.",
+    ):
         return
 
     # Check vanilla client base pack
@@ -324,6 +320,11 @@ class MOZI_PT_view3d_live_sync(bpy.types.Panel):
         if root_obj:
             _draw_live_sync_content(layout, context)
         else:
+            draw_online_access_warning(
+                layout,
+                "Enable 'Allow Online Access' in Preferences > System > Network to use Live Sync.",
+                separator=True,
+            )
             box = layout.box()
             box.label(text=tr("Live Sync (Yefira)"), icon="WORLD")
             col = box.column(align=True)

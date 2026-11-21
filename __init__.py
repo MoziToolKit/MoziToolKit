@@ -39,13 +39,6 @@ from . import ui
 
 
 def register():
-    # 0. Sync OS system proxies into process environment
-    try:
-        from .utils.system.network import sync_system_proxies
-        sync_system_proxies()
-    except Exception:
-        pass
-
     # 1. Development environment & local native library mounting
     try:
         from . import dev
@@ -63,13 +56,6 @@ def register():
         from .bridge.prefs import get_prefs
 
         apply_thread_count(get_prefs())
-    except Exception:
-        pass
-
-    # 4. Out-of-the-box non-blocking background auto-discovery
-    try:
-        from .utils.launcher_scan import schedule_background_auto_setup
-        schedule_background_auto_setup()
     except Exception:
         pass
 

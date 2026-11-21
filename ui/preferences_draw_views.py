@@ -248,6 +248,41 @@ def draw_misc_tab(prefs: Any, layout: Any, context: Any) -> None:
     cache_header.label(text=f"{tr('Total')}: {stats['size_formatted']} ({stats['files_count']} {tr('files')})", icon="INFO")
     cache_header.operator("mozi.refresh_cache_stats", text=tr("Refresh"), icon="FILE_REFRESH")
 
+    layout.separator()
+
+    # Network & Online Access Gate
+    from ..bridge.network import is_online_access_allowed
+
+    net_allowed = is_online_access_allowed()
+    net_box = layout.box()
+    if not net_allowed:
+        net_box.alert = True
+    net_header = net_box.row(align=True)
+    net_header.label(text=tr("Network & Online Access:"), icon="URL")
+    if net_allowed:
+        net_header.label(text=tr("Authorized (Online Mode)"), icon="CHECKMARK")
+    else:
+        net_header.label(text=tr("Disabled (Offline Mode)"), icon="ERROR")
+
+    net_desc = net_box.column(align=True)
+    net_desc.scale_y = 0.85
+    net_desc.label(
+        text=tr(
+            "All network operations (Live Sync & online player head skin downloads) strictly follow Blender's Online Access setting."
+        )
+    )
+    if not net_allowed:
+        net_desc.label(
+            text=tr("Enable 'Allow Online Access' in Preferences > System > Network to authorize network features.")
+        )
+        net_btn = net_box.row(align=True)
+        op_net = net_btn.operator(
+            "screen.userpref_show",
+            text=tr("Open Network Settings..."),
+            icon="PREFERENCES",
+        )
+        op_net.section = "SYSTEM"
+
     cache_col = cache_box.column(align=True)
     cache_col.prop(prefs, "cache_dir", text=tr("Cache Location"))
     cache_col.scale_y = 0.85

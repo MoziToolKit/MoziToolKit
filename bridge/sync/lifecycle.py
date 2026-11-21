@@ -11,6 +11,7 @@ import logging
 import sys
 from typing import Any, Dict, Optional, Tuple
 
+from ..network import ONLINE_ACCESS_DENIED_MESSAGE, is_online_access_allowed
 from ..world.mesher import build_mesher_config
 
 logger = logging.getLogger("MoziToolKit.Bridge.Sync.Lifecycle")
@@ -157,6 +158,11 @@ class SyncLifecycleMixin:
         prefs: Optional[Any] = None,
     ) -> bool:
         """Starts the background LiveSync client thread connecting to `url`."""
+        if not is_online_access_allowed():
+            self._last_error = ONLINE_ACCESS_DENIED_MESSAGE
+            logger.warning("Refused LiveSync start: %s", ONLINE_ACCESS_DENIED_MESSAGE)
+            return False
+
         config, clean_token, mtk = self._prepare_config(
             url=url,
             model_db=model_db,
@@ -257,6 +263,11 @@ class SyncLifecycleMixin:
         Starts the LiveSync client using cached handshake parameters for 0ms zero-rebuild reconnect.
         Restores VoxelStorage from `point_cloud` if provided.
         """
+        if not is_online_access_allowed():
+            self._last_error = ONLINE_ACCESS_DENIED_MESSAGE
+            logger.warning("Refused LiveSync cached start: %s", ONLINE_ACCESS_DENIED_MESSAGE)
+            return False
+
         config, clean_token, mtk = self._prepare_config(
             url=url,
             model_db=model_db,

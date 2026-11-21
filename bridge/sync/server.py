@@ -11,6 +11,7 @@ import logging
 from typing import Any, Optional
 
 from ..engine import require_libmtk
+from ..network import require_online_access
 
 logger = logging.getLogger("MoziToolKit.Bridge.Sync.Server")
 
@@ -25,6 +26,7 @@ class SyncBridgeServer:
         allow_loopback: bool = True,
         server_uuid: Optional[str] = None,
     ) -> None:
+        require_online_access("Live Sync server binding")
         mtk = require_libmtk()
         self._server = mtk.LiveSyncServer(
             bind_address=bind_address,

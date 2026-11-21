@@ -73,6 +73,11 @@ from .mesh import (
     extract_mesh_data,
     inject_mesh_data,
 )
+from .network import (
+    ONLINE_ACCESS_DENIED_MESSAGE,
+    is_online_access_allowed,
+    require_online_access,
+)
 from .point_cloud import (
     extract_voxel_point_cloud,
     inject_voxel_point_cloud,
@@ -159,6 +164,10 @@ __all__ = [
     "BLENDER_TO_MTK_TYPE",
     "MTK_TO_BLENDER_DOMAIN",
     "MTK_TO_BLENDER_TYPE",
+    # Network Permission Gate
+    "ONLINE_ACCESS_DENIED_MESSAGE",
+    "is_online_access_allowed",
+    "require_online_access",
     # Point Cloud (Data streams)
     "extract_voxel_point_cloud",
     "inject_voxel_point_cloud",

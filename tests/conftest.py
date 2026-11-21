@@ -70,6 +70,9 @@ try:
     if _addons is not None and MOZI_AddonPreferences.bl_idname not in _addons:
         _addon_entry = _addons.new()
         _addon_entry.module = MOZI_AddonPreferences.bl_idname
+    _system = getattr(getattr(bpy.context, "preferences", None), "system", None)
+    if _system is not None and hasattr(_system, "use_online_access"):
+        _system.use_online_access = True
     from MoziToolKit.bridge.prefs import get_prefs
     _prefs = get_prefs()
     if _prefs is not None:

@@ -22,7 +22,7 @@ from ..operators.save.utils import (
 )
 from ..utils.system.save_registry import get_save_registry
 from ..utils.system import get_prefs
-from .common import draw_vanilla_pack_warning
+from .common import draw_online_access_warning, draw_vanilla_pack_warning
 
 
 def _draw_save_container_ui(layout: bpy.types.UILayout, context: bpy.types.Context):
@@ -31,6 +31,12 @@ def _draw_save_container_ui(layout: bpy.types.UILayout, context: bpy.types.Conte
         layout,
         get_prefs(context),
         "Configure a Vanilla Client JAR in Preferences to enable save refresh.",
+    )
+    draw_online_access_warning(
+        layout,
+        "Offline save import works normally, but online player head skin downloads require 'Allow Online Access' in Preferences > System > Network.",
+        alert=False,
+        separator=True,
     )
 
     active_obj = getattr(context, "active_object", None)
@@ -283,6 +289,12 @@ class MOZI_PT_view3d_save_container(bpy.types.Panel):
                 self.layout,
                 get_prefs(context),
                 "Configure a Vanilla Client JAR in Preferences to enable save import and refresh.",
+            )
+            draw_online_access_warning(
+                self.layout,
+                "Offline save import works normally, but online player head skin downloads require 'Allow Online Access' in Preferences > System > Network.",
+                alert=False,
+                separator=True,
             )
             box = self.layout.box()
             box.label(text=tr("Minecraft World Save (.mca)"), icon='WORLD')

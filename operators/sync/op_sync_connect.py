@@ -18,6 +18,8 @@ from ...bridge.sync import (
     load_biome_resolver_from_cache,
 )
 from ...bridge.assets import invalidate_asset_cache_memory
+from ...bridge.network import ONLINE_ACCESS_DENIED_MESSAGE, is_online_access_allowed
+from ...i18n import tr
 from ...utils.materials.builder.atlas_refresh import reload_atlas_images
 from ...utils.assets import (
     can_execute_asset_pipeline,
@@ -68,6 +70,11 @@ class MOZI_OT_sync_connect(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
+        if not is_online_access_allowed():
+            if hasattr(cls, "poll_message_set"):
+                cls.poll_message_set(tr(ONLINE_ACCESS_DENIED_MESSAGE))
+            return False
+
         from ...utils.system import get_prefs
 
         prefs = get_prefs(context)
@@ -105,9 +112,19 @@ class MOZI_OT_sync_connect(bpy.types.Operator):
         return self.execute(context)
 
     def execute(self, context):
+        if not is_online_access_allowed():
+            self.report({'ERROR'}, tr(ONLINE_ACCESS_DENIED_MESSAGE))
+            return {'CANCELLED'}
+
         if not is_sync_available():
             self.report({'ERROR'}, "Native libmtk core is missing or not installed!")
             return {'CANCELLED'}
+
+        try:
+            from ...utils.system.network import sync_system_proxies
+            sync_system_proxies()
+        except Exception:
+            pass
 
         target_obj = None
         if self.target_container and self.target_container in bpy.data.objects:
@@ -340,7 +357,23 @@ class MOZI_OT_sync_refresh(bpy.types.Operator):
         default="",
     )
 
+    @classmethod
+    def poll(cls, context):
+        if not is_online_access_allowed():
+            if hasattr(cls, "poll_message_set"):
+                cls.poll_message_set(tr(ONLINE_ACCESS_DENIED_MESSAGE))
+            return False
+        return True
+
     def execute(self, context):
+        if not is_online_access_allowed():
+            stop_sync_timer()
+            session = get_sync_bridge_session()
+            if getattr(session, "is_active", False):
+                session.stop()
+            self.report({'ERROR'}, tr(ONLINE_ACCESS_DENIED_MESSAGE))
+            return {'CANCELLED'}
+
         session = get_sync_bridge_session()
 
         target_obj = None

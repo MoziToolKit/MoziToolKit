@@ -279,7 +279,7 @@ class TestSceneInterchangeEndToEnd(unittest.TestCase):
         )
 
         self.assertEqual(meta["voxel_count"], 2)
-        self.assertEqual(meta["format_version"], 5)  # animated strips follow .mcmeta frames (v5)
+        self.assertEqual(meta["format_version"], 6)  # CTM rule payload matches asset-cache v14 (v6)
         self.assertEqual(meta["bounds"], [0, 0, 0, 2, 1, 1])
         self.assertEqual(meta["unique_states_count"], 2)
         self.assertTrue(os.path.exists(scene_path))

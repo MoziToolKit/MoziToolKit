@@ -467,6 +467,263 @@ class TestLiveSyncAtlasMaterials(unittest.TestCase):
                     bpy.data.objects.remove(test_obj)
                     bpy.data.meshes.remove(test_mesh)
 
+    def _open_real_cache_assets(self):
+        from _assets import blender_datafiles_cache
+
+        cache_root = blender_datafiles_cache()
+        if cache_root is None:
+            self.skipTest("Blender asset cache not found (set MOZI_CACHE_DIR / MTK_TEST_CACHE)")
+        packages = sorted(cache_root.glob("*.mtkcache"))
+        if not packages:
+            self.skipTest(f"No .mtkcache package found at {cache_root}")
+        try:
+            cache = mtk_py.AssetCache.open(str(packages[0]))
+            atlas = cache.load_atlas()
+            model_db = cache.load_models()
+            return atlas, model_db
+        except Exception as exc:
+            self.skipTest(f"Failed to open .mtkcache: {exc}")
+
+    def _assert_all_face_materials_match_chunk_ids(self, mesh, label: str):
+        import numpy as np
+
+        poly_count = len(mesh.polygons)
+        self.assertGreater(poly_count, 0, f"{label}: mesh must have polygons")
+        self.assertGreater(len(mesh.materials), 0, f"{label}: mesh must have bound material slots")
+
+        mat_indices = np.empty(poly_count, dtype=np.int32)
+        mesh.polygons.foreach_get("material_index", mat_indices)
+
+        chunk_attr = mesh.attributes.get("mtk_atlas_chunk_id")
+        self.assertIsNotNone(chunk_attr, f"{label}: mtk_atlas_chunk_id attribute must exist")
+        face_chunks = np.empty(poly_count, dtype=np.int32)
+        chunk_attr.data.foreach_get("value", face_chunks)
+
+        slot_cids = [
+            int(mat.get("mtk_atlas_chunk_id", -1)) if mat is not None else -1
+            for mat in mesh.materials
+        ]
+        for poly_idx in range(poly_count):
+            slot_idx = int(mat_indices[poly_idx])
+            self.assertGreaterEqual(slot_idx, 0, f"{label}: negative material_index at poly {poly_idx}")
+            self.assertLess(
+                slot_idx,
+                len(slot_cids),
+                f"{label}: out-of-range material_index {slot_idx} >= {len(slot_cids)} at poly {poly_idx}",
+            )
+            self.assertEqual(
+                slot_cids[slot_idx],
+                int(face_chunks[poly_idx]),
+                f"{label}: poly {poly_idx} points to chunk {slot_cids[slot_idx]} instead of {int(face_chunks[poly_idx])}",
+            )
+
+    def _cleanup_sync_objects(self, root_name: str, obj_names: list[str]):
+        for name in list(obj_names) + [root_name, f"{root_name}_Mesh", f"{root_name}_VoxelCloud"]:
+            obj = bpy.data.objects.get(name)
+            if obj is not None:
+                data = getattr(obj, "data", None)
+                bpy.data.objects.remove(obj, do_unlink=True)
+                if data is not None and getattr(data, "users", 0) == 0 and data.name in bpy.data.meshes:
+                    bpy.data.meshes.remove(data)
+
+    def test_live_sync_non_contiguous_chunks_repeated_update_addressing(self):
+        """
+        Regression test for Fast Path 0 + uncompacted face_materials:
+        Repeated update_world_mesh calls with non-contiguous chunk IDs (blocks, water, chest,
+        decorated_pot, banner, 0xFFF0 dynamic atlas) must keep every polygon mapped to its
+        matching material slot instead of leaving raw chunk IDs in material_index.
+        """
+        atlas, model_db = self._open_real_cache_assets()
+
+        def build_world_mesh(offset_x: int, blocks):
+            storage = mtk_py.VoxelStorage()
+            storage.set_bounds(offset_x, 0, 0, 8, 4, 8)
+            for bx, by, bz, state in blocks:
+                storage.set_block(offset_x + bx, by, bz, state, "minecraft:plains")
+            cfg = mtk_py.MesherConfig(
+                enable_ao=True,
+                mesh_fluids=True,
+                z_up_coordinates=True,
+                origin_centered=True,
+                weld_vertices=True,
+                atlas=atlas,
+            )
+            world = mtk_py.VoxelWorld.from_storage(storage, config=cfg, model_db=model_db)
+            return world.rebuild_all(), storage
+
+        blocks_full = [
+            (0, 0, 0, "minecraft:stone"),
+            (1, 0, 0, "minecraft:water[level=0]"),
+            (2, 0, 0, "minecraft:chest[facing=north,type=single,waterlogged=false]"),
+            (3, 0, 0, "minecraft:decorated_pot[cracked=false,facing=north,waterlogged=false]"),
+            (4, 0, 0, "minecraft:white_banner[rotation=0]"),
+            (5, 0, 0, "minecraft:redstone_wire[east=none,north=none,power=15,south=none,west=none]"),
+        ]
+        blocks_subset = [
+            (0, 0, 0, "minecraft:stone"),
+            (2, 0, 0, "minecraft:chest[facing=north,type=single,waterlogged=false]"),
+        ]
+
+        mesh_datablock = bpy.data.meshes.new("NonContigSyncMesh")
+        world_obj = bpy.data.objects.new("NonContigSyncObj", mesh_datablock)
+        try:
+            mesh1, st1 = build_world_mesh(0, blocks_full)
+            self.assertFalse(mesh1.materials_are_slots)
+            used1 = sorted(mesh1.used_materials())
+            self.assertGreaterEqual(len(used1), 4)
+            self.assertIn(65520, used1)
+
+            update_world_mesh(world_obj, mesh1, skip_string_attributes=True, storage=st1, sync_point_cloud=False, atlas=atlas)
+            self._assert_all_face_materials_match_chunk_ids(world_obj.data, "Sync 1")
+
+            # Sync 2: moved bounds, same non-contiguous chunk set (previously hit Fast Path 0 bug)
+            mesh2, st2 = build_world_mesh(16, blocks_full)
+            self.assertFalse(mesh2.materials_are_slots)
+            self.assertEqual(sorted(mesh2.used_materials()), used1)
+            update_world_mesh(world_obj, mesh2, skip_string_attributes=True, storage=st2, sync_point_cloud=False, atlas=atlas)
+            self._assert_all_face_materials_match_chunk_ids(world_obj.data, "Sync 2")
+
+            # Sync 3: subset of existing slots (stone + chest)
+            mesh3, st3 = build_world_mesh(32, blocks_subset)
+            update_world_mesh(world_obj, mesh3, skip_string_attributes=True, storage=st3, sync_point_cloud=False, atlas=atlas)
+            self._assert_all_face_materials_match_chunk_ids(world_obj.data, "Sync 3")
+        finally:
+            self._cleanup_sync_objects("NonContigSyncObj", ["NonContigSyncObj", "NonContigSyncObj_VoxelCloud"])
+
+    def test_live_sync_loopback_selection_move_and_hot_reload(self):
+        """
+        End-to-end LiveSyncServer -> LiveSyncSession -> Blender regression test:
+        1. Initial baseline with non-contiguous block-entity & dynamic chunks (0xFFF0)
+        2. Selection move (second baseline with same chunk set) preserves 100% valid slot addressing
+        3. session.hot_reload preserves dynamic entity atlas registration (0xFFF0)
+        """
+        import time
+
+        atlas, model_db = self._open_real_cache_assets()
+        root_name = "TestLoopbackSyncRoot"
+        root_obj = bpy.data.objects.new(root_name, None)
+        bpy.context.scene.collection.objects.link(root_obj)
+        world_obj = get_or_create_world_mesh_object(bpy.context, root_container=root_obj)
+
+        server = mtk_py.LiveSyncServer(bind_address="127.0.0.1:0", allow_loopback_without_token=True)
+        cfg = mtk_py.MesherConfig(
+            enable_ao=True,
+            mesh_fluids=True,
+            z_up_coordinates=True,
+            origin_centered=True,
+            weld_vertices=True,
+            atlas=atlas,
+        )
+        session = mtk_py.LiveSyncSession(config=cfg, culler=mtk_py.FaceCuller(), model_db=model_db)
+
+        def submit_and_wait_mesh(min_pos, palette, voxels):
+            server.poll_events()
+            server.submit_baseline(
+                0,
+                min_pos,
+                (4, 2, 4),
+                "minecraft:overworld",
+                voxels,
+                palette,
+                [0],
+                ["minecraft:plains"],
+                [],
+            )
+            deadline = time.monotonic() + 10.0
+            while time.monotonic() < deadline:
+                for ev in session.poll_events(coalesce_meshes=True):
+                    if ev.get("type") == "WORLD_MESH_READY":
+                        return ev["mesh"]
+                time.sleep(0.02)
+            self.fail(f"Timed out waiting for WORLD_MESH_READY at {min_pos}")
+
+        try:
+            url = f"ws://{server.local_addr()}"
+            session.start(url=url, auto_reconnect=False, max_reconnect_attempts=1)
+
+            handshake_ok = False
+            deadline = time.monotonic() + 10.0
+            while time.monotonic() < deadline and not handshake_ok:
+                for ev in session.poll_events(coalesce_meshes=True):
+                    if ev.get("type") == "HANDSHAKE":
+                        handshake_ok = True
+                        break
+                if not handshake_ok:
+                    time.sleep(0.02)
+            self.assertTrue(handshake_ok, "LiveSyncSession did not complete HANDSHAKE")
+
+            pal = [
+                "minecraft:air",
+                "minecraft:stone",
+                "minecraft:chest[facing=north,type=single,waterlogged=false]",
+                "minecraft:decorated_pot[cracked=false,facing=north,waterlogged=false]",
+                "minecraft:white_banner[rotation=0]",
+                "minecraft:redstone_wire[east=none,north=none,power=15,south=none,west=none]",
+                "minecraft:water[level=0]",
+            ]
+            vox = [0] * (4 * 2 * 4)
+            vox[0] = 1
+            vox[1] = 2
+            vox[2] = 3
+            vox[3] = 4
+            vox[4] = 5
+            vox[5] = 6
+
+            mesh1 = submit_and_wait_mesh((0, 64, 0), pal, vox)
+            self.assertFalse(mesh1.materials_are_slots)
+            self.assertIn(65520, mesh1.used_materials())
+            update_world_mesh(
+                world_obj,
+                mesh1,
+                skip_string_attributes=True,
+                storage=session.get_storage(),
+                sync_point_cloud=True,
+                atlas=atlas,
+                session=session,
+            )
+            self._assert_all_face_materials_match_chunk_ids(world_obj.data, "Loopback Sync 1")
+
+            # Selection moved in-game -> second baseline with same chunk set
+            mesh2 = submit_and_wait_mesh((16, 64, 0), pal, vox)
+            self.assertFalse(mesh2.materials_are_slots)
+            self.assertIn(65520, mesh2.used_materials())
+            update_world_mesh(
+                world_obj,
+                mesh2,
+                skip_string_attributes=True,
+                storage=session.get_storage(),
+                sync_point_cloud=True,
+                atlas=atlas,
+                session=session,
+            )
+            self._assert_all_face_materials_match_chunk_ids(world_obj.data, "Loopback Sync 2 (moved selection)")
+
+            # Hot-reload config (reconnect / cache reload) must preserve 0xFFF0 dynamic entity atlas
+            session.hot_reload(cfg, model_db)
+            mesh3 = submit_and_wait_mesh((32, 64, 0), pal, vox)
+            self.assertIn(65520, mesh3.used_materials(), "Dynamic chunk 0xFFF0 lost after hot_reload")
+            self.assertTrue(bool(mesh3.dynamic_entity_atlases), "dynamic_entity_atlases missing after hot_reload")
+            update_world_mesh(
+                world_obj,
+                mesh3,
+                skip_string_attributes=True,
+                storage=session.get_storage(),
+                sync_point_cloud=True,
+                atlas=atlas,
+                session=session,
+            )
+            self._assert_all_face_materials_match_chunk_ids(world_obj.data, "Loopback Sync 3 (after hot_reload)")
+        finally:
+            try:
+                session.stop()
+            except Exception:
+                pass
+            try:
+                server.stop()
+            except Exception:
+                pass
+            self._cleanup_sync_objects(root_name, [getattr(world_obj, "name", "")])
+
 
 if __name__ == "__main__":
     unittest.main(argv=[sys.argv[0]])

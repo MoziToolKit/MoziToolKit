@@ -315,6 +315,18 @@ def assemble_voxel_world(req: VoxelWorldAssemblyRequest) -> Dict[str, Any]:
             reg_col_fn(container_id_str, req.colormaps)
 
     if b_mesh is not None and mesh_obj is not None:
+        inv_fn = getattr(_biome_updater, "invalidate_mesh_biome_cache", None)
+        if inv_fn is not None:
+            try:
+                inv_fn(b_mesh)
+            except Exception:
+                pass
+        snap_fn = getattr(_biome_updater, "snapshot_world_biome_buffers", None)
+        if snap_fn is not None:
+            try:
+                snap_fn(b_mesh)
+            except Exception:
+                pass
         prime_fn = getattr(_biome_updater, "resolve_mesh_base_tint_types", None)
         if prime_fn is not None:
             try:
@@ -326,6 +338,13 @@ def assemble_voxel_world(req: VoxelWorldAssemblyRequest) -> Dict[str, Any]:
     active_target = root_obj or mesh_obj
     if active_target is not None and context and hasattr(context, "view_layer"):
         try:
+            if root_obj is not None and active_target is root_obj:
+                for child_target in (mesh_obj, cloud_obj):
+                    if child_target is not None and child_target is not root_obj and hasattr(child_target, "select_set"):
+                        try:
+                            child_target.select_set(False)
+                        except Exception:
+                            pass
             if hasattr(active_target, "select_set"):
                 active_target.select_set(True)
             if hasattr(context.view_layer, "objects"):

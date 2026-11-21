@@ -9,7 +9,7 @@ import logging
 from typing import Any, Optional
 import numpy as np
 
-from ....bridge.mesh.attribute_schema import ATTR_SOURCE_TEXTURE_IDX
+from ....bridge.mesh.attribute_schema import ATTR_BIOME_TINT_DATA, ATTR_SOURCE_TEXTURE_IDX
 from ..constants import PROP_CREATED_BY
 from .biome import (
     TINT_TYPE_NONE,
@@ -18,6 +18,28 @@ from .biome import (
 from .registry import _MESH_BASE_TINT_TYPES
 
 logger = logging.getLogger("MoziToolKit.Materials.Biome.BaseTint")
+
+
+def _extract_raw_tint_data_2d(mesh: Any, num_polys: int, raw_tint_data_2d: Optional[Any]) -> Optional[np.ndarray]:
+    if raw_tint_data_2d is not None:
+        arr = np.asarray(raw_tint_data_2d, dtype=np.float32)
+        if arr.size == num_polys * 4:
+            return arr.reshape(num_polys, 4)
+    if hasattr(mesh, "attributes"):
+        tint_attr = mesh.attributes.get(ATTR_BIOME_TINT_DATA)
+        if tint_attr is not None and len(tint_attr.data) == num_polys and hasattr(tint_attr.data, "foreach_get"):
+            arr = np.empty(num_polys * 4, dtype=np.float32)
+            tint_attr.data.foreach_get("color", arr)
+            return arr.reshape(num_polys, 4)
+    return None
+
+
+def _mask_untinted_faces(base_tt: np.ndarray, raw_2d: Optional[np.ndarray], num_polys: int) -> None:
+    if raw_2d is not None and len(raw_2d) == num_polys:
+        # A face is untinted if its baked tint_weight (channel 2) is <= 0.0
+        # or its tint_type (channel 3) is explicitly TINT_TYPE_NONE (0.0).
+        raw_zero_mask = (raw_2d[:, 2] <= 0.0) | (raw_2d[:, 3] == float(TINT_TYPE_NONE))
+        base_tt[raw_zero_mask] = TINT_TYPE_NONE
 
 
 def resolve_mesh_base_tint_types(
@@ -44,6 +66,8 @@ def resolve_mesh_base_tint_types(
     cached = _MESH_BASE_TINT_TYPES.get(mesh_name)
     if cached is not None and len(cached) == num_polys:
         return cached
+
+    effective_raw_2d = _extract_raw_tint_data_2d(mesh, num_polys, raw_tint_data_2d)
 
     from .biome import get_or_load_biome_resolver
     resolver = get_or_load_biome_resolver(pack_stack=pack_stack)
@@ -72,11 +96,9 @@ def resolve_mesh_base_tint_types(
             base_tt = np.zeros(num_polys, dtype=np.int32)
             base_tt[valid_mask] = pal_tt[idx_arr[valid_mask]]
 
-            if raw_tint_data_2d is not None and len(raw_tint_data_2d) == num_polys:
-                raw_zero_mask = (raw_tint_data_2d[:, 3] == float(TINT_TYPE_NONE))
-                base_tt[raw_zero_mask] = TINT_TYPE_NONE
+            _mask_untinted_faces(base_tt, effective_raw_2d, num_polys)
 
-            if np.any(base_tt > 0):
+            if np.any(base_tt > 0) or effective_raw_2d is not None:
                 if mesh_name:
                     _MESH_BASE_TINT_TYPES[mesh_name] = base_tt
                 return base_tt
@@ -99,9 +121,7 @@ def resolve_mesh_base_tint_types(
         valid_mask = (poly_mat_indices >= 0) & (poly_mat_indices < len(slot_tt_arr))
         base_tt = np.zeros(num_polys, dtype=np.int32)
         base_tt[valid_mask] = slot_tt_arr[poly_mat_indices[valid_mask]]
-        if raw_tint_data_2d is not None and len(raw_tint_data_2d) == num_polys:
-            raw_zero_mask = (raw_tint_data_2d[:, 3] == float(TINT_TYPE_NONE))
-            base_tt[raw_zero_mask] = TINT_TYPE_NONE
+        _mask_untinted_faces(base_tt, effective_raw_2d, num_polys)
 
         if np.any(base_tt > 0):
             if mesh_name:
@@ -109,8 +129,9 @@ def resolve_mesh_base_tint_types(
             return base_tt
 
     # Strategy D: Fallback to raw_tint_data_2d
-    if raw_tint_data_2d is not None and len(raw_tint_data_2d) == num_polys:
-        base_tt = np.round(raw_tint_data_2d[:, 3]).astype(np.int32)
+    if effective_raw_2d is not None and len(effective_raw_2d) == num_polys:
+        base_tt = np.round(effective_raw_2d[:, 3]).astype(np.int32)
+        _mask_untinted_faces(base_tt, effective_raw_2d, num_polys)
         if mesh_name:
             _MESH_BASE_TINT_TYPES[mesh_name] = base_tt
         return base_tt

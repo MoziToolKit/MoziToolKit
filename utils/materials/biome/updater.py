@@ -30,6 +30,9 @@ from .registry import (
     _STORAGE_CACHE,
     _COLORMAPS_CACHE,
     clear_biome_updater_cache,
+    invalidate_mesh_biome_cache,
+    snapshot_world_biome_buffers,
+    get_world_biome_snapshot,
     resolve_container_id,
     register_object_colormaps,
     get_object_colormaps,
@@ -390,6 +393,9 @@ def update_object_biome(
 
 __all__ = [
     "clear_biome_updater_cache",
+    "invalidate_mesh_biome_cache",
+    "snapshot_world_biome_buffers",
+    "get_world_biome_snapshot",
     "resolve_container_id",
     "register_object_colormaps",
     "get_object_colormaps",

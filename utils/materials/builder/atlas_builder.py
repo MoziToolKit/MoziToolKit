@@ -103,11 +103,17 @@ def build_atlas_chunk_material(
         and mat.get("mtk_has_biome_tint") is not None
         and mat.get("mtk_has_biome_tint") != enable_biome_tint
     )
+    is_stale_attr_node = bool(
+        mat is not None
+        and getattr(mat, "node_tree", None) is not None
+        and (mat.node_tree.nodes.get("Atlas UV Tiling") is not None) != bool(use_attribute_node)
+    )
     if (
         not force_rebuild
         and not is_stale_fingerprint
         and not is_stale_layout
         and not is_stale_biome_tint
+        and not is_stale_attr_node
         and mat is not None
         and getattr(mat, "node_tree", None)
         and len(mat.node_tree.nodes) > 0

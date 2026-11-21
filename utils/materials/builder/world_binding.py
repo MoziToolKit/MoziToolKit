@@ -153,7 +153,11 @@ def ensure_world_materials(
             if cid is None:
                 all_valid = False
                 break
-            if getattr(mat, "node_tree", None) is None or len(mat.node_tree.nodes) == 0:
+            if (
+                getattr(mat, "node_tree", None) is None
+                or len(mat.node_tree.nodes) == 0
+                or mat.node_tree.nodes.get("Atlas UV Tiling") is not None
+            ):
                 all_valid = False
                 break
             existing_chunk_to_slot[int(cid)] = s_idx
@@ -177,14 +181,11 @@ def ensure_world_materials(
             has_chunk_attr = hasattr(mesh, "attributes") and "mtk_atlas_chunk_id" in mesh.attributes
             is_identity_mapping = all(existing_chunk_to_slot[cid] == cid for cid in target_chunk_ids)
 
-            # Fast Path 0: assembled world meshes carry compacted slot indices (`face_materials`
-            # = 0..n-1 in sorted chunk-id order), and `inject_mesh_data` already wrote them into
-            # `material_index`. Hosts must opt in with `material_indices_are_slots=True` because
-            # per-section meshes keep raw chunk ids.
-            # `inject_mesh_data` writes `face_materials` (0..n-1 in sorted chunk-id order) into
-            # `material_index`; when the existing slots are in that same order there is nothing
-            # to remap, and reading the per-face chunk attribute back over the whole mesh was the
-            # most expensive part of this function (~45 ms for 336k faces, every rebuild).
+            # Fast Path 0: strictly opt-in for callers whose `face_materials` buffer was actually
+            # pre-compacted to `0..n-1` slot indices in sorted chunk-id order (`materials_are_slots=True`).
+            # Assembled `VoxelWorld` meshes keep raw atlas chunk IDs (`materials_are_slots=False`) and
+            # must flow through the LUT remapping below whenever `chunk_id != slot_index` (e.g. chest,
+            # pot, banner, shulker, or dynamic entity chunks).
             if (
                 material_indices_are_slots
                 and used_chunk_ids is not None
@@ -324,6 +325,7 @@ def ensure_world_materials(
                         and not is_stale_layout
                         and getattr(existing_mat, "node_tree", None)
                         and len(existing_mat.node_tree.nodes) > 0
+                        and existing_mat.node_tree.nodes.get("Atlas UV Tiling") is None
                         and existing_mat.get("mtk_atlas_chunk_id") == chunk_id
                     ):
                         compact_materials.append(existing_mat)

@@ -10,6 +10,7 @@ from typing import Any, List, Optional
 import numpy as np
 
 from ....bridge.mesh.attribute_schema import (
+    ATTR_BIOME_TINT_COLOR,
     ATTR_BIOME_TINT_DATA,
     ATTR_SOURCE_TEXTURE_KEY,
     ATTR_SOURCE_TEXTURE_IDX,
@@ -18,6 +19,7 @@ from .registry import (
     resolve_container_id,
     get_object_storage,
     get_object_colormaps,
+    get_world_biome_snapshot,
     _rehydrate_storage_from_point_cloud,
 )
 
@@ -52,6 +54,32 @@ def resolve_and_apply_world_biome_tint(
         read_face_string_attribute,
         get_or_load_biome_resolver,
     )
+
+    # Fast lossless restore: if we have a mesher-baked 4-corner WORLD snapshot for this
+    # exact topology, restore it directly without flattening corner colors or re-sampling.
+    snap = get_world_biome_snapshot(target_mesh)
+    if snap is not None and hasattr(target_mesh, "attributes"):
+        td_flat, tc_flat = snap
+        attr_data = target_mesh.attributes.get(ATTR_BIOME_TINT_DATA)
+        attr_col = target_mesh.attributes.get(ATTR_BIOME_TINT_COLOR)
+        if (
+            attr_data is not None
+            and attr_col is not None
+            and len(attr_data.data) * 4 == len(td_flat)
+            and len(attr_col.data) * 4 == len(tc_flat)
+            and hasattr(attr_data.data, "foreach_set")
+            and hasattr(attr_col.data, "foreach_set")
+        ):
+            attr_data.data.foreach_set("color", td_flat)
+            attr_col.data.foreach_set("color", tc_flat)
+            if hasattr(mesh_or_obj, "__setitem__"):
+                try:
+                    mesh_or_obj["mtk:biome_preset"] = "WORLD"
+                except Exception:
+                    pass
+            if hasattr(target_mesh, "update"):
+                target_mesh.update()
+            return True
 
     storage = getattr(mesh_or_obj, "_storage", None) or getattr(target_mesh, "_storage", None)
     if storage is None:
@@ -139,7 +167,27 @@ def resolve_and_apply_world_biome_tint(
             smooth=True,
             colormaps=colormaps,
         )
-        apply_biome_tint_attributes(target_mesh, res["packed_tint_data"], res["tint_colors"])
+        packed_out = np.asarray(res["packed_tint_data"], dtype=np.float32).reshape(num_polys, 4)
+        colors_out = np.asarray(res["tint_colors"], dtype=np.float32).reshape(num_polys, 4)
+
+        # Preserve faces that were explicitly baked as untinted (tint_weight <= 0.0, e.g.
+        # SPBR pre-colored redstone wire or snowy grass top) so storage re-sampling
+        # without face tint_index never forces a tint onto untinted faces.
+        existing_td_attr = target_mesh.attributes.get(ATTR_BIOME_TINT_DATA) if hasattr(target_mesh, "attributes") else None
+        if existing_td_attr is not None and len(existing_td_attr.data) == num_polys and hasattr(existing_td_attr.data, "foreach_get"):
+            old_td = np.empty(num_polys * 4, dtype=np.float32)
+            existing_td_attr.data.foreach_get("color", old_td)
+            old_td_2d = old_td.reshape(num_polys, 4)
+            # Only trust old_td untinted mask if old_td had some tinted faces or was initialized
+            if np.any(old_td_2d[:, 2] > 0.0):
+                untinted_mask = old_td_2d[:, 2] <= 0.0
+                packed_out[untinted_mask, 0] = old_td_2d[untinted_mask, 0]
+                packed_out[untinted_mask, 1] = old_td_2d[untinted_mask, 1]
+                packed_out[untinted_mask, 2] = 0.0
+                packed_out[untinted_mask, 3] = 0.0
+                colors_out[untinted_mask] = [1.0, 1.0, 1.0, 1.0]
+
+        apply_biome_tint_attributes(target_mesh, packed_out, colors_out)
         if hasattr(mesh_or_obj, "__setitem__"):
             try:
                 mesh_or_obj["mtk:biome_preset"] = "WORLD"

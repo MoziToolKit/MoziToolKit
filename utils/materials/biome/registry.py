@@ -11,6 +11,7 @@ logger = logging.getLogger("MoziToolKit.Materials.Biome.Registry")
 
 # In-memory cache for original face tint types (to prevent RNA allocation overhead and preserve base categories)
 _MESH_BASE_TINT_TYPES: dict[str, Any] = {}
+_WORLD_BIOME_SNAPSHOTS: dict[str, tuple[int, int, Any, Any]] = {}
 
 # In-memory storage registry to avoid serializing unpicklable native VoxelStorage into bpy properties
 _STORAGE_CACHE: dict[str, Any] = {}
@@ -20,8 +21,68 @@ _COLORMAPS_CACHE: dict[str, Any] = {}
 def clear_biome_updater_cache() -> None:
     """Clear in-memory caches for mesh tint types, voxel storage registry, and colormaps."""
     _MESH_BASE_TINT_TYPES.clear()
+    _WORLD_BIOME_SNAPSHOTS.clear()
     _STORAGE_CACHE.clear()
     _COLORMAPS_CACHE.clear()
+
+
+def invalidate_mesh_biome_cache(mesh_or_name: Any = None) -> None:
+    """Invalidate cached base tint types and world biome snapshots for one mesh or all meshes."""
+    if mesh_or_name is None:
+        _MESH_BASE_TINT_TYPES.clear()
+        _WORLD_BIOME_SNAPSHOTS.clear()
+        return
+    name = mesh_or_name if isinstance(mesh_or_name, str) else getattr(mesh_or_name, "name", "")
+    if name:
+        _MESH_BASE_TINT_TYPES.pop(name, None)
+        _WORLD_BIOME_SNAPSHOTS.pop(name, None)
+
+
+def snapshot_world_biome_buffers(mesh: Any) -> None:
+    """Snapshot mesher-baked WORLD biome tint data (FACE) and 4-corner colors (CORNER) on mesh."""
+    if mesh is None or not hasattr(mesh, "attributes") or not hasattr(mesh, "polygons"):
+        return
+    mesh_name = getattr(mesh, "name", "")
+    if not mesh_name:
+        return
+    num_polys = len(mesh.polygons)
+    if num_polys == 0:
+        return
+    attr_data = mesh.attributes.get("mtk_biome_tint_data")
+    attr_col = mesh.attributes.get("mtk_biome_tint_color")
+    if (
+        attr_data is None
+        or attr_col is None
+        or len(attr_data.data) != num_polys
+        or not hasattr(attr_data.data, "foreach_get")
+        or not hasattr(attr_col.data, "foreach_get")
+    ):
+        return
+    import numpy as np
+
+    td = np.empty(num_polys * 4, dtype=np.float32)
+    attr_data.data.foreach_get("color", td)
+    col_elems = len(attr_col.data)
+    tc = np.empty(col_elems * 4, dtype=np.float32)
+    attr_col.data.foreach_get("color", tc)
+    _WORLD_BIOME_SNAPSHOTS[mesh_name] = (num_polys, col_elems, td, tc)
+
+
+def get_world_biome_snapshot(mesh: Any) -> Optional[tuple[Any, Any]]:
+    """Return `(packed_tint_data_flat, tint_colors_flat)` if a valid WORLD snapshot exists for `mesh`."""
+    if mesh is None or not hasattr(mesh, "polygons") or not hasattr(mesh, "attributes"):
+        return None
+    mesh_name = getattr(mesh, "name", "")
+    snap = _WORLD_BIOME_SNAPSHOTS.get(mesh_name)
+    if snap is None:
+        return None
+    snap_polys, snap_col_elems, td, tc = snap
+    num_polys = len(mesh.polygons)
+    attr_col = mesh.attributes.get("mtk_biome_tint_color")
+    col_elems = len(attr_col.data) if attr_col is not None else (len(mesh.loops) if hasattr(mesh, "loops") else num_polys * 4)
+    if snap_polys != num_polys or snap_col_elems != col_elems:
+        return None
+    return td, tc
 
 
 def resolve_container_id(obj: Any) -> Optional[str]:

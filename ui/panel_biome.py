@@ -144,14 +144,13 @@ def _draw_biome_ui(layout, context, obj: bpy.types.Object):
         row_w.label(text=tr("Water Color"))
         row_w.prop(obj, "mtk_biome_water_color", text="")
     elif current_biome == "WORLD":
-        # WORLD is a per-face 3D sampler, not a uniform palette: showing the
-        # Plains temperature/colors here would be misleading.
+        # WORLD uses corner-domain 3D biome attributes interpolated natively by Blender.
         col_world = box.column(align=True)
         row_world = col_world.row(align=True)
         row_world.label(text=tr("True 3D Minecraft biomes"), icon="WORLD")
         row_world_info = col_world.row(align=True)
         row_world_info.scale_y = 0.8
-        row_world_info.label(text=tr("Per-face sampling from voxel storage, 5x5 smooth blending"))
+        row_world_info.label(text=tr("Corner-domain 3D biome attributes (Blender native interpolation)"))
     else:
         # Standard Biome Preset Info
         biome_info = get_biome_colors(current_biome)
@@ -168,11 +167,24 @@ def _draw_biome_ui(layout, context, obj: bpy.types.Object):
         row_cols.label(text=f"{tr('Grass')}: {grass_hex}")
         row_cols.label(text=f"{tr('Foliage')}: {foliage_hex}")
 
-    # Batch button if multiple objects selected
-    sel_mtk = [o for o in context.selected_objects if is_mtk_object(o)]
-    if len(sel_mtk) > 1:
+    # Batch button only when multiple distinct MTK containers/objects are selected
+    from ..utils.world.hierarchy import resolve_hierarchy
+
+    unique_targets = []
+    seen_target_keys = set()
+    for o in getattr(context, "selected_objects", []) or []:
+        if not is_mtk_object(o):
+            continue
+        ctx_h = resolve_hierarchy(o)
+        canonical = ctx_h.root or ctx_h.primary_mesh or o
+        key = getattr(canonical, "name", id(canonical))
+        if key not in seen_target_keys:
+            seen_target_keys.add(key)
+            unique_targets.append(canonical)
+
+    if len(unique_targets) > 1:
         row_batch = box.row(align=True)
-        op = row_batch.operator("mozi.set_object_biome", text=f"{tr('Apply to All Selected')} ({len(sel_mtk)})", icon="COPYDOWN")
+        op = row_batch.operator("mozi.set_object_biome", text=f"{tr('Apply to All Selected')} ({len(unique_targets)})", icon="COPYDOWN")
         op.biome_preset = current_biome
         op.apply_to_selected = True
 

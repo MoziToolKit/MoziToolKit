@@ -366,6 +366,141 @@ class Test3DBiomeTinting(unittest.TestCase):
         self.assertTrue(bool(b_surf))
         self.assertTrue(bool(b_deep))
 
+    def test_second_build_biome_switch_no_partial_face_writes_or_redstone_corruption(self):
+        """Regression test: repeated world mesh builds must invalidate base tint cache so biome switches never write partial faces or corrupt redstone wire."""
+        import numpy as np
+        from _assets import save_world
+        from MoziToolKit.bridge.assets import load_baked_atlas_from_cache
+        from MoziToolKit.bridge.save import load_and_mesh_minecraft_save
+        from MoziToolKit.utils.world.sync_container import (
+            get_or_create_world_container,
+            get_or_create_world_mesh_object,
+            update_world_mesh,
+        )
+
+        self.addCleanup(clear_biome_updater_cache)
+        world_path = save_world()
+        if world_path is None:
+            self.skipTest("Sample Minecraft save not found (set MTK_TEST_SAVE)")
+
+        atlas = load_baked_atlas_from_cache()
+        mesh_data1, _, storage1, _ = load_and_mesh_minecraft_save(
+            world_dir=world_path,
+            dimension="overworld",
+            min_block=(-16, -64, -16),
+            max_block=(15, 0, 15),
+        )
+        mesh_data2, _, storage2, _ = load_and_mesh_minecraft_save(
+            world_dir=world_path,
+            dimension="overworld",
+            min_block=(-16, -64, -16),
+            max_block=(15, 0, 15),
+        )
+
+        root = get_or_create_world_container(bpy.context, target_name="Yefira_Biome_Reg_Test")
+        w_obj = get_or_create_world_mesh_object(bpy.context, root_container=root)
+        self.addCleanup(lambda: bpy.data.objects.remove(w_obj, do_unlink=True) if w_obj.name in bpy.data.objects else None)
+        self.addCleanup(lambda: bpy.data.objects.remove(root, do_unlink=True) if root.name in bpy.data.objects else None)
+
+        # First build followed by second build on the same mesh object
+        update_world_mesh(w_obj, mesh_data1, skip_string_attributes=True, storage=storage1, sync_point_cloud=True, atlas=atlas)
+        update_world_mesh(w_obj, mesh_data2, skip_string_attributes=True, storage=storage2, sync_point_cloud=True, atlas=atlas)
+
+        # Viewport activation on root container must not leave both parent and child mesh selected
+        self.assertFalse(w_obj.select_get(), "Child mesh must be deselected when root container is activated")
+
+        b_mesh = w_obj.data
+        num_polys = len(b_mesh.polygons)
+        pal = list(b_mesh["mtk_source_textures"])
+        idx = np.empty(num_polys, dtype=np.int32)
+        b_mesh.attributes["mtk_source_texture_idx"].data.foreach_get("value", idx)
+
+        td_initial = np.empty(num_polys * 4, dtype=np.float32)
+        b_mesh.attributes[ATTR_BIOME_TINT_DATA].data.foreach_get("color", td_initial)
+        td_initial = td_initial.reshape(num_polys, 4)
+
+        tc_initial = np.empty(len(b_mesh.loops) * 4, dtype=np.float32)
+        b_mesh.attributes[ATTR_BIOME_TINT_COLOR].data.foreach_get("color", tc_initial)
+
+        # Switch to BADLANDS after the second build
+        self.assertTrue(update_object_biome(w_obj, "BADLANDS"))
+
+        td_badlands = np.empty(num_polys * 4, dtype=np.float32)
+        b_mesh.attributes[ATTR_BIOME_TINT_DATA].data.foreach_get("color", td_badlands)
+        td_badlands = td_badlands.reshape(num_polys, 4)
+
+        tc_badlands = np.empty(len(b_mesh.loops) * 4, dtype=np.float32)
+        b_mesh.attributes[ATTR_BIOME_TINT_COLOR].data.foreach_get("color", tc_badlands)
+        tc_badlands_2d = tc_badlands.reshape(num_polys, 4, 4)
+
+        for pal_i, tex in enumerate(pal):
+            faces = np.where(idx == pal_i)[0]
+            if len(faces) == 0:
+                continue
+            if tex in ("minecraft:block/grass_block_top", "minecraft:block/grass_block_side"):
+                # Every single grass face must be updated uniformly (no partial face writes!)
+                unique_cols = np.unique(np.round(tc_badlands_2d[faces, 0, :3], 3), axis=0)
+                self.assertEqual(
+                    len(unique_cols),
+                    1,
+                    f"All faces of {tex} must receive the uniform BADLANDS grass color, got {unique_cols.tolist()}",
+                )
+                self.assertLess(unique_cols[0][0], 0.9, f"{tex} must not remain white [1,1,1]")
+            elif "dirt" in tex or "stone" in tex or "redstone_dust" in tex:
+                # Untinted faces (including SPBR pre-colored redstone_dust_*) must stay untinted
+                untinted_faces = faces[td_initial[faces, 2] <= 0.0]
+                if len(untinted_faces) > 0:
+                    np.testing.assert_allclose(
+                        td_badlands[untinted_faces, 2],
+                        0.0,
+                        err_msg=f"Untinted {tex} must keep tint_weight=0.0 after biome switch",
+                    )
+                    np.testing.assert_allclose(
+                        td_badlands[untinted_faces, 3],
+                        0.0,
+                        err_msg=f"Untinted {tex} must keep tint_type=0.0 after biome switch",
+                    )
+                    np.testing.assert_allclose(
+                        tc_badlands_2d[untinted_faces, 0, :3],
+                        1.0,
+                        err_msg=f"Untinted {tex} must keep white [1,1,1] tint multiplier after biome switch",
+                    )
+
+        # Switch back to WORLD: must losslessly restore the original 4-corner WORLD colors and tint_data
+        self.assertTrue(update_object_biome(w_obj, "WORLD"))
+        td_restored = np.empty(num_polys * 4, dtype=np.float32)
+        b_mesh.attributes[ATTR_BIOME_TINT_DATA].data.foreach_get("color", td_restored)
+        tc_restored = np.empty(len(b_mesh.loops) * 4, dtype=np.float32)
+        b_mesh.attributes[ATTR_BIOME_TINT_COLOR].data.foreach_get("color", tc_restored)
+        np.testing.assert_allclose(td_restored, td_initial.ravel())
+        np.testing.assert_allclose(tc_restored, tc_initial)
+
+    def test_storage_biome_attributes_preserves_redstone_power_and_untinted_faces(self):
+        """compute_mesh_biome_attributes_from_storage must query blockstate power from VoxelStorage for redstone wire."""
+        storage = self.lib.VoxelStorage()
+        storage.set_bounds(0, 0, 0, 16, 16, 16)
+        storage.set_block(
+            1, 1, 1, "minecraft:redstone_wire[east=side,north=none,power=15,south=none,west=side]", "minecraft:plains"
+        )
+        storage.set_block(
+            2, 1, 1, "minecraft:redstone_wire[east=side,north=none,power=0,south=none,west=side]", "minecraft:plains"
+        )
+
+        res = compute_mesh_biome_attributes_from_storage(
+            face_texture_keys=["minecraft:block/redstone_dust_dot", "minecraft:block/redstone_dust_dot"],
+            block_xs=[1, 2],
+            block_ys=[1, 1],
+            block_zs=[1, 1],
+            storage=storage,
+            resolver=BiomeResolver(),
+            smooth=True,
+        )
+        colors = res["tint_colors"]
+        # power=15 red channel (~1.0 linear) must be much brighter than power=0 (~0.073 linear)
+        self.assertGreater(colors[0][0], 0.9)
+        self.assertLess(colors[1][0], 0.15)
+
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -35,10 +35,22 @@ class MOZI_OT_set_object_biome(bpy.types.Operator):
     )
 
     def execute(self, context):
-        target_objs = [
-            obj for obj in context.selected_objects
+        from ..utils.world.hierarchy import resolve_hierarchy
+
+        raw_objs = [
+            obj for obj in (getattr(context, "selected_objects", []) or [])
             if is_mtk_object(obj)
         ] if self.apply_to_selected else ([context.object] if is_mtk_object(context.object) else [])
+
+        target_objs = []
+        seen_keys = set()
+        for obj in raw_objs:
+            ctx_h = resolve_hierarchy(obj)
+            canonical = ctx_h.root or ctx_h.primary_mesh or obj
+            key = getattr(canonical, "name", id(canonical))
+            if key not in seen_keys:
+                seen_keys.add(key)
+                target_objs.append(canonical)
 
         if not target_objs:
             self.report({"WARNING"}, "No Minecraft mesh objects found in selection.")

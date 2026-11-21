@@ -87,9 +87,9 @@ def get_configured_stack_fingerprint(prefs=None) -> str:
     """
     paths = get_configured_pack_paths(prefs)
     mtk = get_libmtk()
-    if mtk is not None and hasattr(mtk, "compute_stack_fingerprint_from_paths"):
-        return mtk.compute_stack_fingerprint_from_paths(paths)
-    return ""
+    if mtk is None:
+        return ""
+    return mtk.compute_stack_fingerprint_from_paths(paths)
 
 
 def get_configured_pack_stack(prefs=None) -> Optional[Any]:

@@ -25,7 +25,10 @@ _dna_api_error: Optional[str] = None
 #
 # v2: removed the dead `cached_*` kwargs from `LiveSyncSession.start()` and the
 #     singular `dynamic_entity_atlas` accessors in favour of `dynamic_entity_atlases`.
-REQUIRED_API_VERSION = 2
+# v3: dropped the continuous visual entity surface, tightened attribute buffer format
+#     validation, and standardized on `set_thread_count` / `threading_info` /
+#     `newest_cache_package` / `MeshData.materials_are_slots`.
+REQUIRED_API_VERSION = 3
 # v2: added direct read functions and zero-copy memoryviews (read_f32, as_memoryview_f32, etc.)
 REQUIRED_DNA_API_VERSION = 2
 
@@ -288,15 +291,11 @@ def apply_thread_count(prefs=None) -> int:
     mtk = get_libmtk()
     if mtk is None:
         return 0
-    setter = getattr(mtk, "set_thread_count", None)
-    if not callable(setter):
-        logger.debug("Native module exposes no set_thread_count; keeping its default policy")
-        return 0
 
     raw = getattr(prefs, "thread_count", 0) if prefs is not None else 0
     threads = raw if isinstance(raw, int) and not isinstance(raw, bool) and raw > 0 else 0
     try:
-        setter(threads)
+        mtk.set_thread_count(threads)
         info = mtk.threading_info()
         workers = int(info.get("workers", 0))
         logger.debug(

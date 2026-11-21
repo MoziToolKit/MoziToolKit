@@ -39,7 +39,7 @@ class ProgressReport:
 ProgressCallback = Callable[[ProgressReport], None]
 
 
-def wrap_progress_callback(cb: Optional[Union[ProgressCallback, Callable[[Dict[str, Any]], None]]]) -> Optional[Callable[[Dict[str, Any]], None]]:
+def wrap_progress_callback(cb: Optional[ProgressCallback]) -> Optional[Callable[[Union[Dict[str, Any], ProgressReport]], None]]:
     """
     Wraps a ProgressCallback so it can accept either a dict (from PyO3 Rust callback)
     or a ProgressReport instance.
@@ -49,11 +49,7 @@ def wrap_progress_callback(cb: Optional[Union[ProgressCallback, Callable[[Dict[s
 
     def _wrapper(payload: Union[Dict[str, Any], ProgressReport]):
         if isinstance(payload, dict):
-            report = ProgressReport.from_dict(payload)
-            try:
-                cb(report)
-            except TypeError:
-                cb(payload)  # type: ignore
+            cb(ProgressReport.from_dict(payload))
         elif isinstance(payload, ProgressReport):
             cb(payload)
 

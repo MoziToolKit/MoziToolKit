@@ -96,8 +96,12 @@ def inject_mesh_data(
         return False
 
     topology_updated = False
-    reused_topology = False
     needs_topology = update_topology or len(getattr(mesh, "vertices", [])) != v_count
+    # Blender 4.2+/5.x shares mesh attribute buffers via implicit sharing (CoW). Raw DNA
+    # pointer writes are only safe immediately after `clear_geometry()` + `add()` creates a
+    # fresh unshared buffer; in-place updates without topology reallocation must go through
+    # RNA `foreach_set` so Blender unshares CoW buffers first.
+    allow_dna = use_dna and is_dna_enabled() and needs_topology
 
     if needs_topology:
         face_count = mesh_data.face_count
@@ -108,23 +112,9 @@ def inject_mesh_data(
             and total_indices % 6 == 0
             and face_count == total_indices // 6
         )
-        poly_count = (total_indices // 6) if is_quad else (total_indices // 3)
-        stride = 4 if is_quad else 3
-
-        # Repeat injections of a rebuilt world keep the same counts; rewriting the buffers in
-        # place avoids `clear_geometry` + three `add()` calls, which dominate the cost.
-        # Any count mismatch (see test_mesh_injection_reuse) falls back to a real reallocation.
-        reused_topology = (
-            use_dna
-            and is_dna_enabled()
-            and total_indices > 0
-            and len(getattr(mesh, "vertices", [])) == v_count
-            and len(getattr(mesh, "polygons", [])) == poly_count
-            and len(getattr(mesh, "loops", [])) == poly_count * stride
-        )
 
         # 1. Try DNA fast path if enabled
-        if use_dna and is_dna_enabled():
+        if allow_dna:
             try:
                 topology_updated = inject_topology_dna(
                     mesh,
@@ -133,7 +123,6 @@ def inject_mesh_data(
                     is_quad,
                     total_indices,
                     shade_smooth=shade_smooth,
-                    reuse_existing=reused_topology,
                 )
             except Exception as e:
                 logger.debug("DNA direct topology injection fallback: %s", e)
@@ -151,7 +140,7 @@ def inject_mesh_data(
     # Vertex positions injection if topology was not recreated
     if not topology_updated:
         pos_injected = False
-        if use_dna and is_dna_enabled():
+        if allow_dna:
             try:
                 pos_injected = inject_vertex_positions_dna(mesh, mesh_data)
             except Exception as e:
@@ -164,7 +153,7 @@ def inject_mesh_data(
     # Normals injection
     if update_normals:
         norm_injected = False
-        if use_dna and is_dna_enabled():
+        if allow_dna:
             try:
                 norm_injected = inject_vertex_normals_dna(mesh, mesh_data)
             except Exception as e:
@@ -176,7 +165,7 @@ def inject_mesh_data(
 
     # UVs injection
     uv_injected = False
-    if use_dna and is_dna_enabled():
+    if allow_dna:
         try:
             uv_injected = inject_uvs_dna(mesh, mesh_data, uv_layer_name=uv_layer_name)
         except Exception as e:
@@ -186,7 +175,7 @@ def inject_mesh_data(
 
     # Color attributes injection
     col_injected = False
-    if use_dna and is_dna_enabled():
+    if allow_dna:
         try:
             col_injected = inject_color_attributes_dna(mesh, mesh_data)
         except Exception as e:
@@ -196,7 +185,7 @@ def inject_mesh_data(
 
     # Face materials injection (Fast-Path DNA direct write, Safe-Path fallback)
     mat_injected = False
-    if use_dna and is_dna_enabled():
+    if allow_dna:
         try:
             mat_injected = inject_face_materials_dna(mesh, mesh_data)
         except Exception as e:
@@ -210,12 +199,10 @@ def inject_mesh_data(
             mesh,
             mesh_data,
             skip_string_attributes=skip_string_attributes,
-            use_dna=use_dna,
+            use_dna=allow_dna,
         )
 
-    # Reusing the topology means the edge list is unchanged, so the (7.6 ms) edge rebuild is
-    # skipped as well; a real reallocation still recomputes it.
-    mesh.update(calc_edges=topology_updated and not reused_topology)
+    mesh.update(calc_edges=topology_updated)
     return True
 
 

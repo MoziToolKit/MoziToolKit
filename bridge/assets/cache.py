@@ -539,13 +539,10 @@ def _newest_cache_package(prefs=None) -> Optional[Path]:
     if not cache_dir.is_dir():
         return None
     mtk = get_libmtk()
-    if mtk is not None and hasattr(mtk, "newest_cache_package"):
-        resolved = mtk.newest_cache_package(str(cache_dir))
-        return Path(resolved) if resolved else None
-    candidates = sorted(
-        cache_dir.glob("*.mtkcache"), key=lambda p: p.stat().st_mtime, reverse=True
-    )
-    return candidates[0] if candidates else None
+    if mtk is None:
+        return None
+    resolved = mtk.newest_cache_package(str(cache_dir))
+    return Path(resolved) if resolved else None
 
 
 def get_cache_manifest(prefs=None) -> Optional[Dict[str, Any]]:

@@ -8,12 +8,11 @@ into host memory using the standalone `libmtk_blender_dna` adapter.
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
 
 from ..dna import (
-    is_dna_available,
     is_dna_enabled,
     resolve_attribute_ptr,
     resolve_colors_ptr,
@@ -57,16 +56,10 @@ def inject_topology_dna(
     is_quad: bool,
     total_indices: int,
     shade_smooth: bool = False,
-    reuse_existing: bool = False,
 ) -> bool:
     """
     Directly allocates and injects topology arrays via hardware-level raw memory writes.
     Returns True if successfully injected, or False if direct copy failed.
-
-    `reuse_existing` rewrites the buffers without reallocating the geometry. It is only valid when
-    the caller verified that vertex/loop/polygon counts already match, and it saves the dominant
-    cost of a repeat injection (`clear_geometry` + three `add()` calls): 35 ms -> 6 ms for a
-    336k-quad world.
     """
     blender_dna = get_libmtk_dna()
     if blender_dna is None or not is_dna_enabled():
@@ -79,15 +72,14 @@ def inject_topology_dna(
     stride = 4 if is_quad else 3
     total_loops = poly_count * stride
 
-    if not reuse_existing:
-        clean_zombie_attributes(mesh)
-        mesh.clear_geometry()
-        clean_zombie_attributes(mesh)
+    clean_zombie_attributes(mesh)
+    mesh.clear_geometry()
+    clean_zombie_attributes(mesh)
 
-        # Atomic allocation of geometry counts
-        mesh.vertices.add(v_count)
-        mesh.loops.add(total_loops)
-        mesh.polygons.add(poly_count)
+    # Atomic allocation of geometry counts
+    mesh.vertices.add(v_count)
+    mesh.loops.add(total_loops)
+    mesh.polygons.add(poly_count)
 
     # 1. Direct copy vertex positions (DNA fast path, fallback to foreach_set)
     pos_ptr = resolve_positions_ptr(mesh, expected_count=v_count)
@@ -243,6 +235,18 @@ def inject_face_materials_dna(mesh: Any, mesh_data: Any) -> bool:
             num_polys,
             max_bytes=num_polys * 4,
         )
+        if hasattr(mesh, "attributes"):
+            chunk_attr = mesh.attributes.get("mtk_atlas_chunk_id")
+            if chunk_attr is None and hasattr(mesh.attributes, "new"):
+                try:
+                    chunk_attr = mesh.attributes.new(
+                        name="mtk_atlas_chunk_id", type="INT", domain="FACE"
+                    )
+                except Exception as e:
+                    logger.debug("Failed creating mtk_atlas_chunk_id attribute: %s", e)
+            if chunk_attr is not None and len(chunk_attr.data) == num_polys:
+                if not inject_custom_attribute_dna(chunk_attr, mats_mv, "INT", num_polys):
+                    chunk_attr.data.foreach_set("value", mats_mv)
         return True
     except Exception as e:
         logger.debug("DNA direct copy face materials failed: %s", e)
@@ -341,7 +345,7 @@ def inject_color_attributes_dna(mesh: Any, mesh_data: Any) -> bool:
         except Exception:
             pass
 
-    col_ptr = resolve_colors_ptr(mesh, expected_count=num_color_elems)
+    col_ptr = resolve_colors_ptr(mesh, color_name="color", expected_count=num_color_elems)
     if col_ptr is None:
         return False
 

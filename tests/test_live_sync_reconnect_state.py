@@ -123,8 +123,8 @@ class TestLiveSyncConnectionState(unittest.TestCase):
     def test_bridge_poll_events_drains_after_inactive(self):
         session = SyncBridgeSession()
         poll_called = []
-        def fake_poll():
-            poll_called.append(True)
+        def fake_poll(coalesce_meshes=False):
+            poll_called.append(coalesce_meshes)
             return [{"type": "STATUS_CHANGE", "status": "DISCONNECTED (Connection failed: x)"}]
 
         native = SimpleNamespace(poll_events=fake_poll)

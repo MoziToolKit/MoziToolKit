@@ -27,13 +27,6 @@ def is_debug_world_available(prefs=None) -> bool:
     return _has_valid_vanilla_pack(prefs)
 
 
-def clear_debug_world_cache() -> None:
-    """Clears the internally cached debug storage in libmtk_py."""
-    mtk = get_libmtk()
-    if mtk is not None:
-        mtk.VoxelStorage.clear_debug_world_cache()
-
-
 def load_debug_world_storage(prefs=None, states=None, stack=None):
     """
     Loads or dynamically generates the canonical Minecraft debug world into a VoxelStorage instance.
@@ -52,7 +45,6 @@ def load_debug_world_storage(prefs=None, states=None, stack=None):
         return voxel_storage.create_debug_world_from_states(states)
 
     if not _has_valid_vanilla_pack(prefs):
-        clear_debug_world_cache()
         raise ValueError(
             "Cannot load debug world: no Minecraft Vanilla Client assets are configured"
         )
@@ -80,8 +72,12 @@ def load_debug_world_storage(prefs=None, states=None, stack=None):
         except Exception as e:
             logger.warning(f"Failed to generate debug world from pack stack: {e}")
 
-    # 3. Direct backend creation; libmtk re-validates the host-level asset roots itself.
-    return voxel_storage.create_debug_world()
+    # No silent environment fallback: the core only generates from what the host hands it
+    # (states / model database / pack stack), so an unconfigured host is a hard error.
+    raise ValueError(
+        "Cannot load debug world: no precompiled cache and no configured resource pack stack; "
+        "load the game assets or precompile the cache first"
+    )
 
 
 def generate_debug_world_mesh(
@@ -201,7 +197,6 @@ def build_debug_world_data(
 
 __all__ = [
     "is_debug_world_available",
-    "clear_debug_world_cache",
     "load_debug_world_storage",
     "generate_debug_world_mesh",
     "build_debug_world_data",

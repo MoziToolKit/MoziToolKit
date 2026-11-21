@@ -48,13 +48,17 @@ def test_shared_culler_warms_across_mesh_calls():
 
     try:
         from _assets import require_assets
-        require_assets()
+        assets = require_assets()
     except Exception:
-        pass
+        assets = None
 
     reset_shared_face_culler()
     try:
-        storage = mtk.VoxelStorage.create_debug_world()
+        storage = (
+            mtk.VoxelStorage.create_debug_world(path=str(assets))
+            if assets is not None
+            else mtk.VoxelStorage.create_debug_world(states=["minecraft:stone"])
+        )
     except ValueError as e:
         import pytest
         pytest.skip(f"Debug world unavailable without client assets: {e}")

@@ -7,7 +7,6 @@ Strictly host-agnostic, zero scene-orchestration, and zero-computation.
 
 from .debug import (
     build_debug_world_data,
-    clear_debug_world_cache,
     generate_debug_world_mesh,
     is_debug_world_available,
     load_debug_world_storage,
@@ -204,7 +203,6 @@ __all__ = [
     "build_material_palette",
     # Debug
     "is_debug_world_available",
-    "clear_debug_world_cache",
     "load_debug_world_storage",
     "generate_debug_world_mesh",
     "build_debug_world_data",

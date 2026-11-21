@@ -249,11 +249,6 @@ def clear_material_cache(prefs=None) -> int:
             prefs = None
 
     try:
-        bridge.clear_debug_world_cache()
-    except Exception:
-        pass
-
-    try:
         bridge.reset_shared_face_culler()
     except Exception:
         pass
@@ -304,11 +299,6 @@ def precompile_material_cache(
         stack=asset_context.get("stack"),
         cache_dir=asset_context.get("cache_dir"),
     )
-
-    try:
-        bridge.clear_debug_world_cache()
-    except Exception:
-        pass
 
     try:
         bridge.get_cache_stats(prefs, force_refresh=True)

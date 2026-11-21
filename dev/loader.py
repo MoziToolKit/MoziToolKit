@@ -115,11 +115,6 @@ def reload_dev_binary() -> bool:
         except Exception:
             pass
         try:
-            from ..bridge.debug import clear_debug_world_cache
-            clear_debug_world_cache()
-        except Exception:
-            pass
-        try:
             from ..bridge.world import reset_shared_face_culler
             reset_shared_face_culler()
         except Exception:

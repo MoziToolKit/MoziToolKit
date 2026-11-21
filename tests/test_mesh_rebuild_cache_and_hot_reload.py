@@ -168,9 +168,11 @@ class TestMeshRebuildCacheAndHotReload(unittest.TestCase):
             pass
 
         try:
-            world = mtk.VoxelWorld.create_debug_world()
+            world = mtk.VoxelWorld.create_debug_world(
+                states=["minecraft:stone", "minecraft:granite", "minecraft:oak_stairs"]
+            )
         except ValueError as e:
-            self.skipTest(f"Debug world unavailable without client assets: {e}")
+            self.skipTest(f"Debug world unavailable: {e}")
         mesh = world.rebuild_all()
         self.assertGreater(mesh.vertex_count, 0)
         self.assertGreater(world.get_world_mesh().vertex_count, 0)
@@ -209,9 +211,11 @@ class TestMeshRebuildCacheAndHotReload(unittest.TestCase):
 
         session = get_sync_bridge_session()
         try:
-            world = mtk.VoxelWorld.create_debug_world()
+            world = mtk.VoxelWorld.create_debug_world(
+                states=["minecraft:stone", "minecraft:granite", "minecraft:oak_stairs"]
+            )
         except ValueError as e:
-            self.skipTest(f"Debug world unavailable without client assets: {e}")
+            self.skipTest(f"Debug world unavailable: {e}")
         real_mesh = world.rebuild_all()
 
         try:

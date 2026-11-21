@@ -15,6 +15,7 @@ from ..utils.materials.biome import (
     BIOME_ENUM_ITEMS,
     get_biome_colors,
     is_mtk_object,
+    resolve_biome_targets,
     detect_object_material_mode,
     update_object_biome,
 )
@@ -167,26 +168,14 @@ def _draw_biome_ui(layout, context, obj: bpy.types.Object):
         row_cols.label(text=f"{tr('Grass')}: {grass_hex}")
         row_cols.label(text=f"{tr('Foliage')}: {foliage_hex}")
 
-    # Batch button only when multiple distinct MTK containers/objects are selected
-    from ..utils.world.hierarchy import resolve_hierarchy
-
-    unique_targets = []
-    seen_target_keys = set()
-    for o in getattr(context, "selected_objects", []) or []:
-        if not is_mtk_object(o):
-            continue
-        ctx_h = resolve_hierarchy(o)
-        canonical = ctx_h.root or ctx_h.primary_mesh or o
-        key = getattr(canonical, "name", id(canonical))
-        if key not in seen_target_keys:
-            seen_target_keys.add(key)
-            unique_targets.append(canonical)
-
-    if len(unique_targets) > 1:
-        row_batch = box.row(align=True)
-        op = row_batch.operator("mozi.set_object_biome", text=f"{tr('Apply to All Selected')} ({len(unique_targets)})", icon="COPYDOWN")
-        op.biome_preset = current_biome
-        op.apply_to_selected = True
+    # Batch button only when applying a uniform/custom preset across multiple distinct MTK targets
+    if current_biome != "WORLD":
+        unique_targets = resolve_biome_targets(getattr(context, "selected_objects", []))
+        if len(unique_targets) > 1:
+            row_batch = box.row(align=True)
+            op = row_batch.operator("mozi.set_object_biome", text=f"{tr('Apply to All Selected')} ({len(unique_targets)})", icon="COPYDOWN")
+            op.biome_preset = current_biome
+            op.apply_to_selected = True
 
 
 class MOZI_PT_object_biome(bpy.types.Panel):

@@ -12,7 +12,6 @@ import numpy as np
 from ....bridge.mesh.attribute_schema import (
     ATTR_BIOME_TINT_COLOR,
     ATTR_BIOME_TINT_DATA,
-    ATTR_SOURCE_TEXTURE_KEY,
     ATTR_SOURCE_TEXTURE_IDX,
 )
 from .registry import (
@@ -49,12 +48,6 @@ def resolve_and_apply_world_biome_tint(
     if not hasattr(target_mesh, "polygons"):
         return False
 
-    from .biome import (
-        apply_biome_tint_attributes,
-        read_face_string_attribute,
-        get_or_load_biome_resolver,
-    )
-
     # Fast lossless restore: if we have a mesher-baked 4-corner WORLD snapshot for this
     # exact topology, restore it directly without flattening corner colors or re-sampling.
     snap = get_world_biome_snapshot(target_mesh)
@@ -80,6 +73,12 @@ def resolve_and_apply_world_biome_tint(
             if hasattr(target_mesh, "update"):
                 target_mesh.update()
             return True
+
+    from .biome import (
+        apply_biome_tint_attributes,
+        get_or_load_biome_resolver,
+    )
+    from ....bridge.mesh import resolve_source_texture_keys
 
     storage = getattr(mesh_or_obj, "_storage", None) or getattr(target_mesh, "_storage", None)
     if storage is None:
@@ -107,8 +106,8 @@ def resolve_and_apply_world_biome_tint(
 
     source_keys = list(face_source_keys) if face_source_keys else []
     if not any(source_keys) and hasattr(target_mesh, "attributes"):
-        if ATTR_SOURCE_TEXTURE_KEY in target_mesh.attributes or ATTR_SOURCE_TEXTURE_IDX in target_mesh.attributes:
-            source_keys = read_face_string_attribute(target_mesh, ATTR_SOURCE_TEXTURE_KEY)
+        if ATTR_SOURCE_TEXTURE_IDX in target_mesh.attributes:
+            source_keys = resolve_source_texture_keys(target_mesh)
 
     if not any(source_keys) and obj and len(getattr(obj, "material_slots", [])) > 0:
         derived = []

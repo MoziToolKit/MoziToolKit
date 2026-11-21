@@ -302,37 +302,16 @@ def assemble_voxel_world(req: VoxelWorldAssemblyRequest) -> Dict[str, Any]:
         for k, v in req.metadata_props.items():
             safe_set_custom_prop(target, k, v)
 
-    # 8. Register in-memory caches by immutable container_id and prime tint types
+    # 8. Register in-memory caches by immutable container_id and invalidate stale biome cache
     container_id_str = str(container_id)
     if req.storage is not None:
-        reg_fn = getattr(_biome_updater, "register_object_storage", None)
-        if reg_fn is not None:
-            reg_fn(container_id_str, req.storage)
+        _biome_updater.register_object_storage(container_id_str, req.storage)
 
     if req.colormaps is not None:
-        reg_col_fn = getattr(_biome_updater, "register_object_colormaps", None)
-        if reg_col_fn is not None:
-            reg_col_fn(container_id_str, req.colormaps)
+        _biome_updater.register_object_colormaps(container_id_str, req.colormaps)
 
-    if b_mesh is not None and mesh_obj is not None:
-        inv_fn = getattr(_biome_updater, "invalidate_mesh_biome_cache", None)
-        if inv_fn is not None:
-            try:
-                inv_fn(b_mesh)
-            except Exception:
-                pass
-        snap_fn = getattr(_biome_updater, "snapshot_world_biome_buffers", None)
-        if snap_fn is not None:
-            try:
-                snap_fn(b_mesh)
-            except Exception:
-                pass
-        prime_fn = getattr(_biome_updater, "resolve_mesh_base_tint_types", None)
-        if prime_fn is not None:
-            try:
-                prime_fn(b_mesh, mesh_obj)
-            except Exception:
-                pass
+    if b_mesh is not None:
+        _biome_updater.invalidate_mesh_biome_cache(b_mesh)
 
     # 10. Viewport activation
     active_target = root_obj or mesh_obj

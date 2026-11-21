@@ -14,16 +14,17 @@ from .biome import (
     get_biome_colors,
     compute_biome_tint_attributes_paletted,
     apply_biome_tint_attributes,
-    read_face_string_attribute,
     BIOME_ENUM_ITEMS,
 )
 import bpy
 from .updater import (
     is_mtk_object,
+    resolve_biome_targets,
     detect_object_material_mode,
     update_object_biome,
     resolve_and_apply_world_biome_tint,
     mark_world_biome,
+    invalidate_mesh_biome_cache,
     clear_biome_updater_cache,
 )
 
@@ -38,12 +39,13 @@ __all__ = [
     "get_biome_colors",
     "compute_biome_tint_attributes_paletted",
     "apply_biome_tint_attributes",
-    "read_face_string_attribute",
     "BIOME_ENUM_ITEMS",
     "is_mtk_object",
+    "resolve_biome_targets",
     "detect_object_material_mode",
     "update_object_biome",
     "resolve_and_apply_world_biome_tint",
     "mark_world_biome",
+    "invalidate_mesh_biome_cache",
     "clear_biome_updater_cache",
 ]

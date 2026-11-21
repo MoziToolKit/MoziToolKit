@@ -23,8 +23,10 @@ from MoziToolKit.utils.materials.biome.biome import BIOME_ENUM_ITEMS
 from MoziToolKit.utils.materials.biome.updater import (
     clear_biome_updater_cache,
     get_object_storage,
+    get_world_biome_snapshot,
     mark_world_biome,
     register_object_storage,
+    resolve_biome_targets,
     update_object_biome,
 )
 from MoziToolKit.ui.panel_biome import _get_object_biome, _resolve_biome_preset
@@ -408,8 +410,11 @@ class Test3DBiomeTinting(unittest.TestCase):
 
         # Viewport activation on root container must not leave both parent and child mesh selected
         self.assertFalse(w_obj.select_get(), "Child mesh must be deselected when root container is activated")
+        self.assertEqual(resolve_biome_targets([root, w_obj]), [root])
 
         b_mesh = w_obj.data
+        # Rebuild/sync hot path must not eagerly copy WORLD buffers before a biome switch
+        self.assertIsNone(get_world_biome_snapshot(b_mesh))
         num_polys = len(b_mesh.polygons)
         pal = list(b_mesh["mtk_source_textures"])
         idx = np.empty(num_polys, dtype=np.int32)
@@ -422,8 +427,10 @@ class Test3DBiomeTinting(unittest.TestCase):
         tc_initial = np.empty(len(b_mesh.loops) * 4, dtype=np.float32)
         b_mesh.attributes[ATTR_BIOME_TINT_COLOR].data.foreach_get("color", tc_initial)
 
-        # Switch to BADLANDS after the second build
+        # Switch to BADLANDS after the second build (lazily snapshots WORLD buffers before overwrite)
         self.assertTrue(update_object_biome(w_obj, "BADLANDS"))
+        self.assertIsNotNone(get_world_biome_snapshot(b_mesh))
+        self.assertEqual(root.get("mtk:biome_preset"), "BADLANDS")
 
         td_badlands = np.empty(num_polys * 4, dtype=np.float32)
         b_mesh.attributes[ATTR_BIOME_TINT_DATA].data.foreach_get("color", td_badlands)
@@ -468,6 +475,8 @@ class Test3DBiomeTinting(unittest.TestCase):
 
         # Switch back to WORLD: must losslessly restore the original 4-corner WORLD colors and tint_data
         self.assertTrue(update_object_biome(w_obj, "WORLD"))
+        self.assertEqual(w_obj.get("mtk:biome_preset"), "WORLD")
+        self.assertEqual(root.get("mtk:biome_preset"), "WORLD")
         td_restored = np.empty(num_polys * 4, dtype=np.float32)
         b_mesh.attributes[ATTR_BIOME_TINT_DATA].data.foreach_get("color", td_restored)
         tc_restored = np.empty(len(b_mesh.loops) * 4, dtype=np.float32)

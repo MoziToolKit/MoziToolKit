@@ -16,7 +16,6 @@ from ....bridge.mesh.attribute_schema import (
     ATTR_ATLAS_CHUNK_ID,
     ATTR_BIOME_TINT_DATA,
     ATTR_BIOME_TINT_COLOR,
-    ATTR_SOURCE_TEXTURE_KEY,
     ATTR_SOURCE_TEXTURE_IDX,
 )
 from ..constants import PROP_ATLAS_MAPPING
@@ -67,7 +66,6 @@ def is_mtk_object(obj: Optional[bpy.types.Object]) -> bool:
     if any(
         name in attrs
         for name in (
-            ATTR_SOURCE_TEXTURE_KEY,
             ATTR_SOURCE_TEXTURE_IDX,
             ATTR_BIOME_TINT_DATA,
             ATTR_BIOME_TINT_COLOR,
@@ -87,6 +85,24 @@ def is_mtk_object(obj: Optional[bpy.types.Object]) -> bool:
             ):
                 return True
     return False
+
+
+def resolve_biome_targets(objects: Any) -> list[bpy.types.Object]:
+    """Deduplicate selected MTK objects by container hierarchy root."""
+    from ...world.hierarchy import resolve_hierarchy
+
+    targets: list[bpy.types.Object] = []
+    seen_keys: set[Any] = set()
+    for obj in objects or ():
+        if not is_mtk_object(obj):
+            continue
+        ctx_h = resolve_hierarchy(obj)
+        canonical = ctx_h.root or ctx_h.primary_mesh or obj
+        key = getattr(canonical, "name", id(canonical))
+        if key not in seen_keys:
+            seen_keys.add(key)
+            targets.append(canonical)
+    return targets
 
 
 def detect_object_material_mode(obj: bpy.types.Object) -> str:
@@ -143,7 +159,32 @@ def update_object_biome(
         return updated or bool(target_meshes)
 
     mesh = obj.data
-    mode = detect_object_material_mode(obj)
+    effective_stack = pack_stack
+    num_polys = len(mesh.polygons) if hasattr(mesh, "polygons") else 0
+
+    if num_polys > 0 and biome_name.upper() == "WORLD":
+        if not resolve_and_apply_world_biome_tint(
+            mesh_or_obj=obj,
+            mesh=mesh,
+            effective_stack=effective_stack,
+        ):
+            logger.warning(
+                "Cannot restore WORLD biome for '%s': no voxel storage or source-texture "
+                "provenance. Rebuild the voxel mesh from its point cloud/storage.",
+                getattr(obj, "name", "<unnamed>"),
+            )
+            return False
+
+        obj["mtk:biome_preset"] = "WORLD"
+        if getattr(obj, "parent", None) and getattr(obj.parent, "type", "") == "EMPTY":
+            try:
+                obj.parent["mtk:biome_preset"] = "WORLD"
+            except Exception:
+                pass
+        if hasattr(mesh, "update"):
+            mesh.update()
+        return True
+
     if is_custom:
         def _get_prop(k: str, default: Any) -> Any:
             if hasattr(obj, "get") and obj.get(k) is not None:
@@ -189,37 +230,26 @@ def update_object_biome(
         has_custom_foliage = bool(biome_colors.get("has_custom_foliage", False))
         has_custom_dry_foliage = bool(biome_colors.get("has_custom_dry_foliage", False))
 
-    effective_stack = pack_stack
-
     # Update mesh face attributes
-    num_polys = len(mesh.polygons) if hasattr(mesh, "polygons") else 0
     if num_polys > 0:
         from .biome import (
             compute_biome_tint_attributes_paletted,
             apply_biome_tint_attributes,
-            read_face_string_attribute,
             get_or_load_biome_resolver,
         )
         from ....bridge.mesh import resolve_source_texture_keys_paletted
 
-        if biome_name.upper() == "WORLD":
-            source_keys = []
-            if ATTR_SOURCE_TEXTURE_KEY in mesh.attributes or ATTR_SOURCE_TEXTURE_IDX in mesh.attributes:
-                source_keys = read_face_string_attribute(mesh, ATTR_SOURCE_TEXTURE_KEY)
-            if resolve_and_apply_world_biome_tint(
-                mesh_or_obj=obj,
-                mesh=mesh,
-                face_source_keys=source_keys,
-                effective_stack=effective_stack,
+        # Lazily snapshot mesher-baked CORNER-domain WORLD biome buffers right before
+        # a uniform/custom preset overwrites them, avoiding eager copies on every rebuild.
+        curr_preset = obj.get("mtk:biome_preset") if hasattr(obj, "get") else None
+        if get_world_biome_snapshot(mesh) is None:
+            attr_col_existing = mesh.attributes.get(ATTR_BIOME_TINT_COLOR)
+            if (
+                attr_col_existing is not None
+                and getattr(attr_col_existing, "domain", None) == "CORNER"
+                and (curr_preset is None or str(curr_preset).upper() == "WORLD")
             ):
-                return True
-
-            logger.warning(
-                "Cannot restore WORLD biome for '%s': no voxel storage or source-texture "
-                "provenance. Rebuild the voxel mesh from its point cloud/storage.",
-                getattr(obj, "name", "<unnamed>"),
-            )
-            return False
+                snapshot_world_biome_buffers(mesh)
 
         # FAST IN-PLACE VECTORIZED UPDATE PATH (< 1.5ms)
         tint_data_attr = mesh.attributes.get(ATTR_BIOME_TINT_DATA)
@@ -313,14 +343,6 @@ def update_object_biome(
 
         if not fast_path_done:
             pal, pal_idx = resolve_source_texture_keys_paletted(mesh)
-            if not pal or len(pal_idx) != num_polys:
-                source_keys = []
-                if ATTR_SOURCE_TEXTURE_KEY in mesh.attributes or ATTR_SOURCE_TEXTURE_IDX in mesh.attributes:
-                    source_keys = read_face_string_attribute(mesh, ATTR_SOURCE_TEXTURE_KEY)
-                if any(source_keys):
-                    pal = list(dict.fromkeys(source_keys))
-                    k2i = {k: i for i, k in enumerate(pal)}
-                    pal_idx = np.fromiter((k2i[k] for k in source_keys), dtype=np.uint32, count=len(source_keys))
 
             if pal and len(pal_idx) == num_polys and any(pal):
                 biome_resolver = get_or_load_biome_resolver(pack_stack=effective_stack)
@@ -405,6 +427,7 @@ __all__ = [
     "resolve_mesh_base_tint_types",
     "resolve_and_apply_world_biome_tint",
     "is_mtk_object",
+    "resolve_biome_targets",
     "detect_object_material_mode",
     "update_object_biome",
 ]

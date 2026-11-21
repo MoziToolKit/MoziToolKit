@@ -252,21 +252,15 @@ def apply_rebuilt_mesh_biomes(
     root_container: Optional[bpy.types.Object],
     storage: Any,
 ) -> None:
-    """Marks world biome cache and resolves base tint types on rebuilt mesh."""
-    from ...utils.materials.biome.updater import mark_world_biome, clear_biome_updater_cache, resolve_mesh_base_tint_types
-    clear_biome_updater_cache()
-    if mark_world_biome is not None:
-        aliases = []
-        if root_container is not None:
-            aliases.append(getattr(root_container, "name", ""))
-            container_id = root_container.get("mtk:container_id", "") if hasattr(root_container, "get") else ""
-            if isinstance(container_id, str) and container_id:
-                aliases.append(container_id)
-            mark_world_biome(root_container, storage)
-        mark_world_biome(world_mesh_obj, storage, aliases=aliases)
+    """Marks world biome preset and invalidates per-mesh cached biome lookup tables."""
+    from ...utils.materials.biome.updater import invalidate_mesh_biome_cache, mark_world_biome
 
-    if resolve_mesh_base_tint_types is not None:
-        try:
-            resolve_mesh_base_tint_types(world_mesh_obj.data, world_mesh_obj)
-        except Exception:
-            pass
+    invalidate_mesh_biome_cache(getattr(world_mesh_obj, "data", None))
+    aliases = []
+    if root_container is not None:
+        aliases.append(getattr(root_container, "name", ""))
+        container_id = root_container.get("mtk:container_id", "") if hasattr(root_container, "get") else ""
+        if isinstance(container_id, str) and container_id:
+            aliases.append(container_id)
+        mark_world_biome(root_container, storage)
+    mark_world_biome(world_mesh_obj, storage, aliases=aliases)

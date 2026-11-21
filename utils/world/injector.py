@@ -104,22 +104,11 @@ def apply_voxel_mesh_to_blender(
 
     # Voxel meshes always bake true 3D biomes; tag them so the biome panel's
     # WORLD preset is selected instead of the uniform Plains fallback.
-    from ..materials.biome.updater import (
-        invalidate_mesh_biome_cache,
-        mark_world_biome,
-        resolve_mesh_base_tint_types,
-        snapshot_world_biome_buffers,
-    )
+    from ..materials.biome.updater import invalidate_mesh_biome_cache, mark_world_biome
+
     if b_mesh is not None:
         invalidate_mesh_biome_cache(b_mesh)
-        snapshot_world_biome_buffers(b_mesh)
-    if mark_world_biome is not None:
-        mark_world_biome(obj, storage)
-    if b_mesh is not None and resolve_mesh_base_tint_types is not None:
-        try:
-            resolve_mesh_base_tint_types(b_mesh, obj)
-        except Exception:
-            pass
+    mark_world_biome(obj, storage)
 
     # 4. Extract unculled VoxelPointCloud and ensure child companion object
     cloud_obj = None

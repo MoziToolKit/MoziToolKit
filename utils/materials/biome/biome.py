@@ -26,7 +26,6 @@ from ..cleaner import clean_obsolete_mesh_attributes
 from ....bridge.mesh.attribute_schema import (
     ATTR_BIOME_TINT_DATA,
     ATTR_BIOME_TINT_COLOR,
-    ATTR_SOURCE_TEXTURE_KEY,
 )
 
 # Canonical Tint Type Identifiers imported from Rust SSOT via bridge.material
@@ -256,29 +255,6 @@ def apply_biome_tint_attributes(
 
     # 3. Purge retired legacy attributes (e.g. mtk_colormap_uv).
     clean_obsolete_mesh_attributes(mesh)
-
-
-def read_face_string_attribute(mesh: Any, name: str) -> List[str]:
-    """Read a FACE domain string attribute in bulk."""
-    if not hasattr(mesh, "attributes") or not hasattr(mesh, "polygons"):
-        return []
-    num_polys = len(mesh.polygons)
-    if name == ATTR_SOURCE_TEXTURE_KEY:
-        from ....bridge.mesh import resolve_source_texture_keys
-        resolved = resolve_source_texture_keys(mesh) if resolve_source_texture_keys is not None else []
-        return resolved if len(resolved) == num_polys else [""] * num_polys
-
-    attr = mesh.attributes.get(name)
-    if not attr or attr.domain != "FACE":
-        return [""] * num_polys
-
-    values = []
-    for item in attr.data:
-        value = item.value
-        if isinstance(value, (bytes, bytearray)):
-            value = value.decode("utf-8", errors="replace")
-        values.append(str(value).strip())
-    return values if len(values) == num_polys else [""] * num_polys
 
 
 # Canonical list of UI dropdown enum items generated from libmtk

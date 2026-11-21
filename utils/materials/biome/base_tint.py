@@ -10,11 +10,7 @@ from typing import Any, Optional
 import numpy as np
 
 from ....bridge.mesh.attribute_schema import ATTR_BIOME_TINT_DATA, ATTR_SOURCE_TEXTURE_IDX
-from ..constants import PROP_CREATED_BY
-from .biome import (
-    TINT_TYPE_NONE,
-    TINT_TYPE_HARDCODED,
-)
+from .biome import TINT_TYPE_NONE
 from .registry import _MESH_BASE_TINT_TYPES
 
 logger = logging.getLogger("MoziToolKit.Materials.Biome.BaseTint")
@@ -72,16 +68,11 @@ def resolve_mesh_base_tint_types(
     from .biome import get_or_load_biome_resolver
     resolver = get_or_load_biome_resolver(pack_stack=pack_stack)
 
-    # Strategy A: Sub-millisecond INT Palette Indexing ('mtk_source_textures' + 'mtk_source_texture_idx')
-    palette = None
-    if hasattr(mesh, "get") and mesh.get("mtk_source_textures") is not None:
-        palette = list(mesh.get("mtk_source_textures"))
-    elif hasattr(mesh, "__contains__") and "mtk_source_textures" in mesh:
-        palette = list(mesh["mtk_source_textures"])
-    elif hasattr(mesh, "keys") and "mtk_source_textures" in mesh:
-        palette = list(mesh["mtk_source_textures"])
-    elif obj is not None and hasattr(obj, "get") and "mtk_source_textures" in obj:
-        palette = list(obj["mtk_source_textures"])
+    # 1. Palette indexing ('mtk_source_textures' + 'mtk_source_texture_idx')
+    raw_palette = mesh.get("mtk_source_textures") if hasattr(mesh, "get") else None
+    if raw_palette is None and obj is not None and hasattr(obj, "get"):
+        raw_palette = obj.get("mtk_source_textures")
+    palette = list(raw_palette) if raw_palette is not None else None
 
     attr_idx = mesh.attributes.get(ATTR_SOURCE_TEXTURE_IDX) if hasattr(mesh, "attributes") else None
     if palette is not None and attr_idx is not None and len(attr_idx.data) == num_polys:
@@ -103,7 +94,7 @@ def resolve_mesh_base_tint_types(
                     _MESH_BASE_TINT_TYPES[mesh_name] = base_tt
                 return base_tt
 
-    # Strategy C: Material slots on object
+    # 2. Material slots on object
     if obj is not None and len(getattr(obj, "material_slots", [])) > 0:
         slot_tt = []
         for slot in obj.material_slots:
@@ -128,7 +119,7 @@ def resolve_mesh_base_tint_types(
                 _MESH_BASE_TINT_TYPES[mesh_name] = base_tt
             return base_tt
 
-    # Strategy D: Fallback to raw_tint_data_2d
+    # 3. Fallback to baked mtk_biome_tint_data
     if effective_raw_2d is not None and len(effective_raw_2d) == num_polys:
         base_tt = np.round(effective_raw_2d[:, 3]).astype(np.int32)
         _mask_untinted_faces(base_tt, effective_raw_2d, num_polys)

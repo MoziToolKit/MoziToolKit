@@ -27,9 +27,6 @@ from .materials import bind_scene_materials
 
 logger = logging.getLogger("MoziToolKit.Scene.Hierarchy")
 
-# Backwards compatibility alias
-_safe_set_custom_prop = safe_set_custom_prop
-
 
 def apply_imported_scene_to_blender(
     data: Dict[str, Any],
@@ -124,7 +121,6 @@ def apply_imported_scene_to_blender(
 
 __all__ = [
     "apply_imported_scene_to_blender",
-    "_safe_set_custom_prop",
     "ensure_voxel_child_cloud",
     "bind_scene_materials",
 ]

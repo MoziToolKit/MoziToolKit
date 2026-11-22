@@ -10,7 +10,7 @@ import bpy
 def menu_func_import(self, context):
     from ..i18n import tr
     self.layout.operator(
-        "mtk.import_minecraft_save",
+        "mozi.import_minecraft_save",
         text=tr("Minecraft World / Save (.mca / level.dat)"),
         icon="WORLD",
     )

@@ -13,7 +13,7 @@ import bpy
 from MoziToolKit.i18n import tr
 from MoziToolKit.i18n.dictionary import translations_dict
 from MoziToolKit.operators.common import CommonMeshingOptionsMixin, draw_meshing_options
-from MoziToolKit.operators.save.op_import_save import MTK_OT_import_minecraft_save
+from MoziToolKit.operators.save.op_import_save import MOZI_OT_import_minecraft_save
 from MoziToolKit.operators.scene.op_export_scene import MOZI_OT_export_scene
 from MoziToolKit.operators.scene.op_import_scene import MOZI_OT_import_scene
 
@@ -23,7 +23,7 @@ class TestSceneOptionsSSOTAndI18n(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        for op_cls in (MTK_OT_import_minecraft_save, MOZI_OT_import_scene, MOZI_OT_export_scene):
+        for op_cls in (MOZI_OT_import_minecraft_save, MOZI_OT_import_scene, MOZI_OT_export_scene):
             try:
                 bpy.utils.register_class(op_cls)
             except ValueError:
@@ -31,7 +31,7 @@ class TestSceneOptionsSSOTAndI18n(unittest.TestCase):
 
     def test_01_ssot_inheritance(self):
         """Verifies that both save and scene import operators inherit from CommonMeshingOptionsMixin."""
-        self.assertTrue(issubclass(MTK_OT_import_minecraft_save, CommonMeshingOptionsMixin))
+        self.assertTrue(issubclass(MOZI_OT_import_minecraft_save, CommonMeshingOptionsMixin))
         self.assertTrue(issubclass(MOZI_OT_import_scene, CommonMeshingOptionsMixin))
 
     def test_02_canonical_meshing_properties_present(self):
@@ -45,7 +45,7 @@ class TestSceneOptionsSSOTAndI18n(unittest.TestCase):
             ("enable_animated_textures", True, "Animated Textures"),
         ]
 
-        save_rna = bpy.ops.mtk.import_minecraft_save.get_rna_type()
+        save_rna = bpy.ops.mozi.import_minecraft_save.get_rna_type()
         scene_rna = bpy.ops.mozi.import_scene.get_rna_type()
 
         for prop_id, expected_default, expected_name in canonical_props:

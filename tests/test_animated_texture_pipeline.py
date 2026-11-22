@@ -10,10 +10,10 @@ class TestAnimatedTexturePipeline(unittest.TestCase):
     def test_preferences_and_save_operator_properties(self):
         try:
             from MoziToolKit.ui.preferences import MOZI_AddonPreferences
-            from MoziToolKit.operators.save.op_import_save import MTK_OT_import_minecraft_save
+            from MoziToolKit.operators.save.op_import_save import MOZI_OT_import_minecraft_save
         except ImportError:
             from MoziToolKit.ui.preferences import MOZI_AddonPreferences
-            from MoziToolKit.operators.save.op_import_save import MTK_OT_import_minecraft_save
+            from MoziToolKit.operators.save.op_import_save import MOZI_OT_import_minecraft_save
 
         # Verify preference property definition (either through RNA descriptor or annotation)
         has_pref = (
@@ -24,10 +24,10 @@ class TestAnimatedTexturePipeline(unittest.TestCase):
 
         # Verify operator property definition
         has_op = (
-            "enable_animated_textures" in getattr(MTK_OT_import_minecraft_save, "__annotations__", {})
-            or hasattr(MTK_OT_import_minecraft_save, "enable_animated_textures")
+            "enable_animated_textures" in getattr(MOZI_OT_import_minecraft_save, "__annotations__", {})
+            or hasattr(MOZI_OT_import_minecraft_save, "enable_animated_textures")
         )
-        self.assertTrue(has_op, "MTK_OT_import_minecraft_save must declare enable_animated_textures")
+        self.assertTrue(has_op, "MOZI_OT_import_minecraft_save must declare enable_animated_textures")
 
     def test_atlas_builder_animated_material_node_structure(self):
         try:

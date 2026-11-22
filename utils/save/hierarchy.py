@@ -27,9 +27,6 @@ from ..world.assembler import (
 
 logger = logging.getLogger("MoziToolKit.Save.Hierarchy")
 
-# Backwards compatibility alias
-_safe_set_custom_prop = safe_set_custom_prop
-
 
 def _stamp_save_mesh_origin(obj: Any) -> None:
     """Stamp a save-imported mesh with the explicit MTK save origin."""
@@ -392,7 +389,6 @@ __all__ = [
     "import_save_to_blender",
     "sanitize_save_privacy",
     "_stamp_save_mesh_origin",
-    "_safe_set_custom_prop",
     "inject_mesh_data",
     "ensure_world_materials",
     "ensure_voxel_child_cloud",

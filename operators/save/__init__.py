@@ -2,7 +2,7 @@
 MoziToolKit Save Operators Subpackage.
 """
 
-from .op_import_save import OPERATOR_CLASSES as IMPORT_CLASSES, MTK_OT_import_minecraft_save
+from .op_import_save import OPERATOR_CLASSES as IMPORT_CLASSES, MOZI_OT_import_minecraft_save
 from .op_refresh_save import OPERATOR_CLASSES as REFRESH_CLASSES, MOZI_OT_refresh_save_mesh
 from .op_relink_save import OPERATOR_CLASSES as RELINK_CLASSES, MOZI_OT_relink_save_folder
 from .op_save_actions import (
@@ -24,7 +24,7 @@ OPERATOR_CLASSES = IMPORT_CLASSES + REFRESH_CLASSES + RELINK_CLASSES + ACTION_CL
 
 __all__ = [
     "OPERATOR_CLASSES",
-    "MTK_OT_import_minecraft_save",
+    "MOZI_OT_import_minecraft_save",
     "MOZI_OT_refresh_save_mesh",
     "MOZI_OT_relink_save_folder",
     "MOZI_OT_save_load_yefira_selection",

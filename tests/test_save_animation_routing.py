@@ -43,7 +43,7 @@ class TestSaveAnimationRouting(unittest.TestCase):
 
     def test_import_save_async_forwards_animation_disabled(self):
         """op_import_save must forward self.enable_animated_textures=False into the AsyncTask kwargs."""
-        from MoziToolKit.operators.save.op_import_save import MTK_OT_import_minecraft_save
+        from MoziToolKit.operators.save.op_import_save import MOZI_OT_import_minecraft_save
         import bpy
 
         class DummyImportOp:
@@ -64,7 +64,7 @@ class TestSaveAnimationRouting(unittest.TestCase):
                 self._runner = None
 
             def execute(self, ctx):
-                return MTK_OT_import_minecraft_save.execute(self, ctx)
+                return MOZI_OT_import_minecraft_save.execute(self, ctx)
 
         op = DummyImportOp()
         ctx = bpy.context

@@ -6,20 +6,20 @@ import pytest
 
 from _assets import save_world
 from MoziToolKit.bridge.save import inspect_minecraft_save, load_and_mesh_minecraft_save
-from MoziToolKit.operators.save.op_import_save import MTK_OT_import_minecraft_save
+from MoziToolKit.operators.save.op_import_save import MOZI_OT_import_minecraft_save
 
 SAMPLE_WORLD_PATH = save_world()
 
 
 def test_operator_definition():
     """Verify operator bl_idname and properties."""
-    assert MTK_OT_import_minecraft_save.bl_idname == "mtk.import_minecraft_save"
-    assert "directory" in MTK_OT_import_minecraft_save.__annotations__
-    assert "min_coord" in MTK_OT_import_minecraft_save.__annotations__
-    assert "max_coord" in MTK_OT_import_minecraft_save.__annotations__
-    assert "dimension" in MTK_OT_import_minecraft_save.__annotations__
-    assert "use_yefira_selection" in MTK_OT_import_minecraft_save.__annotations__
-    assert "run_async" in MTK_OT_import_minecraft_save.__annotations__
+    assert MOZI_OT_import_minecraft_save.bl_idname == "mozi.import_minecraft_save"
+    assert "directory" in MOZI_OT_import_minecraft_save.__annotations__
+    assert "min_coord" in MOZI_OT_import_minecraft_save.__annotations__
+    assert "max_coord" in MOZI_OT_import_minecraft_save.__annotations__
+    assert "dimension" in MOZI_OT_import_minecraft_save.__annotations__
+    assert "use_yefira_selection" in MOZI_OT_import_minecraft_save.__annotations__
+    assert "run_async" in MOZI_OT_import_minecraft_save.__annotations__
 
 
 def test_operator_apply_yefira_selection(tmp_path):
@@ -46,7 +46,7 @@ def test_operator_apply_yefira_selection(tmp_path):
         max_coord=(64, 320, 64),
         dimension="overworld",
     )
-    applied = MTK_OT_import_minecraft_save.apply_yefira_selection(op)
+    applied = MOZI_OT_import_minecraft_save.apply_yefira_selection(op)
 
     assert applied is True
     assert tuple(op.min_coord) == (50, 64, -50)

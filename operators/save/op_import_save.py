@@ -133,10 +133,10 @@ def _on_use_yefira_selection_update(self, context):
         apply_yefira_selection_to_op(self, context)
 
 
-class MTK_OT_import_minecraft_save(bpy.types.Operator, ImportHelper, CommonMeshingOptionsMixin):
+class MOZI_OT_import_minecraft_save(bpy.types.Operator, ImportHelper, CommonMeshingOptionsMixin):
     """Import Minecraft Java Edition world save folder (.mca / level.dat) within a bounded 3D selection"""
 
-    bl_idname = "mtk.import_minecraft_save"
+    bl_idname = "mozi.import_minecraft_save"
     bl_label = "Import Minecraft World"
     bl_options = {"REGISTER", "UNDO"}
 
@@ -450,5 +450,5 @@ class MTK_OT_import_minecraft_save(bpy.types.Operator, ImportHelper, CommonMeshi
 
 
 OPERATOR_CLASSES = (
-    MTK_OT_import_minecraft_save,
+    MOZI_OT_import_minecraft_save,
 )

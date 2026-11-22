@@ -99,16 +99,16 @@ class TestCtmI18n(unittest.TestCase):
             )
 
             # Test operator RNA property translation
-            from MoziToolKit.operators.save.op_import_save import MTK_OT_import_minecraft_save
+            from MoziToolKit.operators.save.op_import_save import MOZI_OT_import_minecraft_save
             was_registered = False
             try:
-                bpy.utils.register_class(MTK_OT_import_minecraft_save)
+                bpy.utils.register_class(MOZI_OT_import_minecraft_save)
                 was_registered = True
             except ValueError:
                 pass
 
             try:
-                rna_type = bpy.ops.mtk.import_minecraft_save.get_rna_type()
+                rna_type = bpy.ops.mozi.import_minecraft_save.get_rna_type()
                 rna_prop = rna_type.properties["enable_ctm"]
                 trans_name = bpy.app.translations.pgettext_data(rna_prop.name, "Operator")
                 trans_desc = bpy.app.translations.pgettext_tip(rna_prop.description, "Operator")
@@ -118,7 +118,7 @@ class TestCtmI18n(unittest.TestCase):
             finally:
                 if was_registered:
                     try:
-                        bpy.utils.unregister_class(MTK_OT_import_minecraft_save)
+                        bpy.utils.unregister_class(MOZI_OT_import_minecraft_save)
                     except Exception:
                         pass
 

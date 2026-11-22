@@ -183,6 +183,18 @@ def main() -> int:
     else:
         print("::warning::Sample save world unavailable; save-bridge tests will be skipped.")
 
+    mod_archive = work / "mod-samples.tar.gz"
+    if download(f"{base}/mod-samples.tar.gz", mod_archive):
+        try:
+            extract_tar_gz(mod_archive, work)
+            mod_dir = work / "mod-samples"
+            if mod_dir.is_dir():
+                export_vars({"MTK_TEST_MOD_DIR": str(mod_dir)})
+        except Exception as exc:  # noqa: BLE001
+            print(f"::warning::Failed to extract {mod_archive}: {exc}")
+    else:
+        print("::warning::Sample mod archive unavailable; OBJ mod pipeline tests will be skipped.")
+
     return 0
 
 

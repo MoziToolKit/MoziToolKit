@@ -26,6 +26,7 @@ _WORKSPACE_PARENT = Path(__file__).resolve().parents[2]
 
 _ASSET_ENV_VARS = ("MTK_TEST_ASSETS", "MC_ASSETS_DIR", "MC_DIR")
 _JAR_ENV_VARS = ("MTK_TEST_JAR", "MC_JAR")
+_MOD_ENV_VARS = ("MTK_TEST_MOD_DIR", "MTK_MOD_SAMPLES_DIR")
 
 
 def _is_asset_root(path: Path) -> bool:
@@ -192,6 +193,37 @@ def require_assets() -> Path:
     os.environ["MC_ASSETS_DIR"] = str(root)
     os.environ["MTK_TEST_ASSETS"] = str(root)
     return root
+
+
+def mod_samples_dir() -> Optional[Path]:
+    """Directory containing sample mod `.jar` archives (e.g. `mod-samples`)."""
+    def _has_jars(path: Path) -> bool:
+        return path.is_dir() and any(path.glob("*.jar"))
+
+    for key in _MOD_ENV_VARS:
+        value = os.environ.get(key)
+        if value and _has_jars(Path(value)):
+            return Path(value)
+
+    candidates = [
+        _WORKSPACE_PARENT / "mod-samples",
+        Path.home() / "mod-samples",
+    ]
+    for candidate in candidates:
+        if _has_jars(candidate):
+            return candidate.resolve()
+    return None
+
+
+def require_mod_samples() -> Path:
+    """Returns the mod-samples directory or skips the enclosing test."""
+    mod_dir = mod_samples_dir()
+    if mod_dir is None:
+        _skip(
+            "Sample mod JARs unavailable: set MTK_TEST_MOD_DIR or place archives under ../mod-samples"
+        )
+    os.environ["MTK_TEST_MOD_DIR"] = str(mod_dir)
+    return mod_dir
 
 
 def require_jar() -> Path:

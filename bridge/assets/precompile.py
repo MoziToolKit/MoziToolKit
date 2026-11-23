@@ -34,9 +34,8 @@ def precompile_stack(
     """
     Executes end-to-end asset precompilation via libmtk:
     1. Compiles blocks Atlas and saves all chunk PNGs + atlas_mapping.json
-    2. Precompiles Standalone PBR textures + standalone_mapping.json
-    3. Bakes all block models into compact binary models.bin
-    4. Writes cache_manifest.json with resource pack stack fingerprint
+    2. Decodes canonical PBR channels and bakes all block models into models/database
+    3. Writes manifest with resource pack stack fingerprint into .mtkcache
     Returns a summary dictionary of compiled assets.
     """
     mtk = get_libmtk()

@@ -990,7 +990,7 @@ translations_dict = {
         # --- Preferences, Storage, Cache & DNA Acceleration ---
         ('*', 'Vanilla Client JAR'): '原版客户端 JAR',
         ('*', 'Minecraft vanilla client JAR archive containing textures and models (Base foundation)'): '包含纹理与模型的 Minecraft 原版客户端 JAR 归档文件（基底基础）',
-        ('*', "Directory used to store precompiled texture atlases, standalone materials, and model caches. Leave empty to use Blender's default user cache folder"): '用于存放预编译纹理图集、独立材质和模型缓存的目录。留空将使用 Blender 默认用户缓存目录',
+        ('*', "Directory used to store precompiled texture atlases and model caches. Leave empty to use Blender's default user cache folder"): '用于存放预编译纹理图集与模型缓存的目录。留空将使用 Blender 默认用户缓存目录',
         ('*', "Embed imported textures directly into the Blender file. When unchecked and the .blend file is saved, textures will be saved externally to '//textures/block/' in your project directory"): "将导入的纹理直接内嵌打包到 Blender 文件中。取消勾选且保存 .blend 文件时，纹理将保存至项目目录中的 '//textures/block/' 外部文件夹",
         ('*', 'Enable animated texture frame playback for water, lava, and animated blocks'): '为水、岩浆和动态方块启用贴图动画帧播放',
         ('*', 'Enable animated texture frame playback for water, lava, fire, and animated blocks'): '为水、岩浆、火焰和动态方块启用贴图动画帧播放',
@@ -1004,7 +1004,7 @@ translations_dict = {
         ('*', 'Refresh Cache Stats'): '刷新缓存统计',
         ('Operator', 'Refresh Cache Stats'): '刷新缓存统计',
         ('*', 'Cache statistics refreshed.'): '缓存统计已刷新。',
-        ('*', 'Precompile and rebuild the complete Atlas, Standalone, and Model caches via libmtk.'): '通过 libmtk 预编译并重建完整的图集、独立纹理与模型缓存。',
+        ('*', 'Precompile and rebuild the complete Atlas and Model caches via libmtk.'): '通过 libmtk 预编译并重建完整的图集与模型缓存。',
         ('*', 'Open MoziToolKit Add-on Preferences.'): '打开 MoziToolKit 插件偏好设置。',
         ('*', 'Open the directory containing precompiled caches in the system file manager.'): '在系统文件管理器中打开存放预编译缓存的目录。',
         ('*', 'Refresh the calculated cache size and file count statistics.'): '刷新计算出的缓存大小与文件数量统计信息。',

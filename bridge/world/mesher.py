@@ -102,7 +102,6 @@ def mesh_voxel_storage(
     num_threads: Optional[int] = None,
     progress_callback: Optional[Any] = None,
     world_session_key: Optional[str] = None,
-    material_mode: str = "ATLAS",
     force_rebuild: bool = False,
     enable_animated_textures: Optional[bool] = None,
     skin_cache_dir: Optional[str] = None,
@@ -123,7 +122,7 @@ def mesh_voxel_storage(
     mtk = require_libmtk("mesh_voxel_storage")
 
     # Auto-load cached assets if not explicitly passed and caller didn't opt out
-    if resolve_prefs and atlas is not False and material_mode != "STANDALONE":
+    if resolve_prefs and atlas is not False:
         world_mod = _get_world_mod()
         assets_fn = getattr(world_mod, "get_world_pipeline_assets", get_world_pipeline_assets) if world_mod else get_world_pipeline_assets
         colormaps_fn = getattr(world_mod, "get_world_pipeline_colormaps", get_world_pipeline_colormaps) if world_mod else get_world_pipeline_colormaps

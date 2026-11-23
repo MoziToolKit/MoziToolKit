@@ -311,8 +311,6 @@ class ConfigManager:
                             prefs.resource_packs.append(p_data.to_dict())
 
                 # 2. Sync Material Settings
-                if hasattr(prefs, "material_mode"):
-                    prefs.material_mode = data.material_settings.material_mode
                 if hasattr(prefs, "biome_preset"):
                     prefs.biome_preset = data.material_settings.biome_preset
                 if hasattr(prefs, "pack_textures"):
@@ -444,7 +442,6 @@ class ConfigManager:
 
                 # Extract material settings
                 mat_settings = MaterialSettings(
-                    material_mode=getattr(prefs, "material_mode", "ATLAS"),
                     biome_preset=getattr(prefs, "biome_preset", "PLAINS"),
                     pack_textures=getattr(prefs, "pack_textures", True),
                     render_engine=getattr(prefs, "material_render_engine", "AUTO"),

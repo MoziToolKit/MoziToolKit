@@ -17,7 +17,7 @@
 - **[材质解析、匹配与替换管线](materials/material_pipeline.md)**：
   - 三层物理资源包优先级栈（`RESOURCE_PACK` → `MOD_JAR` → `VANILLA`）与通道级独立级联回退。
   - 多导入器（`jmc2obj`, `Mineways`, `Ice-Cube`, `Generic`）自适应匹配。
-  - 双材质构建体系：图集模式（Atlas Mode）与预编译全栈融合独立模式（Standalone Mode）。
+  - 统一图集材质构建体系：基于二维装箱多通道 PBR 图集与共享节点组模板（Atlas Mode）。
   - 图集防溢色数学模型（Padding & Safe Clamp）、逐帧动态动画（MCMETA）驱动及验收矩阵。
   - **面属性来源追踪与材质自愈 (`mozi.restore_materials_from_provenance`)**：基于 `mtk_source_textures` + `mtk_source_texture_idx` 与 `mtk_atlas_chunk_id` 的一键材质原地无损复原。
   - **生物群系高精度染色与 UI 控制面板 (`ui/panel_biome.py`)**：65+ 种原生群系预设库、双线性三角坐标采样、Linear RGBA 转换及 `mtk_biome` 物体覆盖。

@@ -38,15 +38,6 @@ class MOZI_OT_import_scene(bpy.types.Operator, ImportHelper, CommonMeshingOption
         default=False,
     )
 
-    material_mode: EnumProperty(  # type: ignore
-        name="Material Mode",
-        description="Shader material assembly mode for imported scene geometry",
-        items=[
-            ("ATLAS", "PBR Atlas", "Canonical Principled BSDF with self-contained Mini-Atlas"),
-        ],
-        default="ATLAS",
-    )
-
     def draw(self, context):
         from ...i18n import tr
         layout = self.layout

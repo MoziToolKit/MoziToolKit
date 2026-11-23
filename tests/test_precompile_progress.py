@@ -1,6 +1,6 @@
 """
 Unit and integration tests for asset precompilation physical progress reporting.
-Validates stages (biome, atlas, standalone, models, manifest) emitted across Rust -> Python bridge -> Modal Operator.
+Validates stages (biome, atlas, models, manifest) emitted across Rust -> Python bridge -> Modal Operator.
 """
 
 import json

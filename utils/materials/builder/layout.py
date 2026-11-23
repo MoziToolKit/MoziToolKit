@@ -2,7 +2,7 @@
 Automatic Shader Node Layout Engine for MoziToolKit.
 
 Provides:
-1. Column-based semantic stage layout for MTK PBR Atlas and Standalone materials.
+1. Column-based semantic stage layout for MTK PBR Atlas materials.
 2. Dynamic vertical packing (Y-stacking) eliminating gaps from missing texture channels.
 3. Topological DAG auto-layout for generic node trees.
 4. Clean visual hierarchy and non-overlapping node placement.

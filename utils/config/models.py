@@ -82,7 +82,6 @@ class PackEntry:
 class MaterialSettings:
     """Global material generation and replacement options."""
 
-    material_mode: str = "ATLAS"  # ATLAS
     biome_preset: str = "PLAINS"
     pack_textures: bool = True
     render_engine: str = "AUTO"  # AUTO | CYCLES | EEVEE
@@ -92,7 +91,6 @@ class MaterialSettings:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            "material_mode": self.material_mode,
             "biome_preset": self.biome_preset,
             "pack_textures": self.pack_textures,
             "render_engine": self.render_engine,
@@ -105,7 +103,6 @@ class MaterialSettings:
     def from_dict(cls, data: Dict[str, Any]) -> MaterialSettings:
         if not isinstance(data, dict):
             return cls()
-        mode = "ATLAS"
         r_engine = data.get("render_engine", "AUTO")
         if r_engine not in {"AUTO", "CYCLES", "EEVEE"}:
             r_engine = "AUTO"
@@ -114,7 +111,6 @@ class MaterialSettings:
             sss_method = "BURLEY"
 
         return cls(
-            material_mode=mode,
             biome_preset=str(data.get("biome_preset", "PLAINS")),
             pack_textures=bool(data.get("pack_textures", True)),
             render_engine=r_engine,

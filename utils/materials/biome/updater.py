@@ -1,5 +1,5 @@
 """
-Instant Biome Updater for Atlas and Standalone Material Modes.
+Instant Biome Updater for Atlas Material Mode.
 Updates mesh face attributes or material shader nodes in < 1ms without rerunning the texture replacement pipeline.
 """
 
@@ -127,7 +127,7 @@ def update_object_biome(
 ) -> bool:
     """
     Instantly update an object's biome colors and colormap UVs without rerunning the texture replacement pipeline.
-    Supports both Atlas mode (mesh face attributes) and Standalone mode (material shader node trees).
+    Operates via mesh face attributes for Atlas mode.
     """
     if not is_mtk_object(obj):
         return False

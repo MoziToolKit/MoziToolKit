@@ -280,11 +280,10 @@ class TestWorldBridgePipeline:
                 storage=storage,
                 name="TestWorld",
                 atlas=None,
-                material_mode="ATLAS",
             )
 
             assert mock_ensure_atlas.called, "ensure_world_materials must be called for ATLAS mode even if atlas is None"
-            assert not mock_standalone.called, "restore_materials_from_provenance must NOT be called when material_mode is ATLAS"
+            assert not mock_standalone.called, "restore_materials_from_provenance must NOT be called during world mesh injection"
 
     def test_debug_world_gate_rejection_without_assets(self, monkeypatch):
         from MoziToolKit.bridge.debug import (

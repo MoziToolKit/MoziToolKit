@@ -46,9 +46,7 @@ MoziToolKit 并非单一孤立插件，而是由三大核心工程紧密协作�
 - **外部网格消重清洗 (`MeshSanitizer`)**：消除外部导入几何中的重叠面、共面自交与微观冗余几何。
 
 ### 4. 材质、图集与着色器管线 (Material & Shader Pipeline)
-- **双材质构建体系**：
-  - **图集分块模式 (Atlas Chunk)**：采用二维装箱算法动态拼合，应用安全 Padding 与 UV Clamp 防溢色算法，通过面级属性（`mtk_atlas_chunk_id` + `mtk_source_textures`/`mtk_source_texture_idx` 调色板来源）驱动共享材质槽位。
-  - **独立材质模式 (Standalone PBR)**：预编译通道全栈融合，支持独立纹理展开。
+- **统一图集着色体系 (Atlas Chunk)**：采用二维装箱算法动态拼合，应用安全 Padding 与 UV Clamp 防溢色算法，通过面级属性（`mtk_atlas_chunk_id` + `mtk_source_textures`/`mtk_source_texture_idx` 调色板来源）驱动共享材质槽位。
 - **PBR 与实时渲染引擎适配**：
   - 预编译期将 LabPBR `_n`/`_s` 解码为标准通道（`_n` 法线+高度、`_orm`、`_aux`）；Blender 材质只使用标准 Principled，不再运行时解码。
   - 玻璃/水/自发光等逐面游戏语义已移除；后续由内部 fallback PBR 贴图与 `aux.A` transmission 通道补齐。

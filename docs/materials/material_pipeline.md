@@ -92,8 +92,8 @@ assets/<namespace>/textures/block/diamond_ore_s.png  -> Specular / LabPBR
 这正是 Minecraft 原版资源覆盖的模型：上层只有在**实际提供同一资源路径的文件**时才覆盖下层；缺少该文件等价于“不覆盖”，而不是透明、删除或创建占位资源。PBR 只是将这一原则扩展到额外的伴生资源路径。
 
 - **资源路径与大小写**：命名空间和常规资源路径遵循 Minecraft 的小写规范。仅 PBR 伴生后缀 `_n/_N`、`_s/_S` 按大小写不敏感识别；实现不得把其它大小写差异悄然当作同一资源，除非另有明确的兼容性规则与测试。
-- **Albedo 是可渲染条目的前提**：只要任何层提供了 Albedo，才创建该纹理的 Atlas tile 或 Standalone material；Normal/Specular 可独立来自更高或更低层。
-- **全栈均无 Albedo**：如果某路径仅存在 `_n`、`_s` 或其 `.mcmeta`，但所有层都不存在对应 Albedo，必须完全跳过该条目：不创建图集 tile、不创建独立材质、不创建透明/黑色占位图。
+- **Albedo 是可渲染条目的前提**：只要任何层提供了 Albedo，才创建该纹理的 Atlas tile；Normal/Specular 可独立来自更高或更低层。
+- **全栈均无 Albedo**：如果某路径仅存在 `_n`、`_s` 或其 `.mcmeta`，但所有层都不存在对应 Albedo，必须完全跳过该条目：不创建图集 tile，不创建透明/黑色占位图。
 - **PBR 缺失不是图像缺失**：若已解析 Albedo 而 Normal/Specular 缺失，材质必须正常渲染。默认平坦法线、无发光/标准参数只能作为 shader 输入默认值存在，绝不能作为一张全尺寸 PBR 占位图写入磁盘或载入 Blender。
 
 ### 1.6 缓存身份、完整性与原子发布 (Cache Validity & Atomic Publication)
@@ -116,21 +116,17 @@ assets/<namespace>/textures/block/diamond_ore_s.png  -> Specular / LabPBR
 
 ---
 
-## 3. 双材质构建体系 (Atlas Mode vs Standalone Mode)
+## 3. 统一图集材质构建体系 (Atlas Mode)
 
 ```mermaid
 graph LR
-    Input[待替换材质网格] --> ModeCheck{材质构建模式}
-    ModeCheck -- ATLAS 图集模式 --> PrecompCheck{预编译缓存命中?}
-    PrecompCheck -- 未命中/栈变动 --> AtlasBuild[Pillow 2D 矩形装箱/网格烘焙]
-    AtlasBuild --> CacheSave[保存至 baked_stack/ 缓存]
+    Input[待替换材质网格] --> PrecompCheck{预编译缓存命中?}
+    PrecompCheck -- 未命中/栈变动 --> AtlasBuild[Rust 2D 矩形装箱 / PBR 预解码]
+    AtlasBuild --> CacheSave[保存至 .mtkcache 缓存]
     PrecompCheck -- 命中缓存 --> CacheLoad[直接读取缓存元数据]
-    CacheSave --> AtlasShader[构建单一 Atlas PBR 材质]
+    CacheSave --> AtlasShader[构建共享 Atlas Chunk PBR 材质]
     CacheLoad --> AtlasShader
     AtlasShader --> RemapUV[重写网格 UV 至图集瓦片]
-    
-    ModeCheck -- STANDALONE 独立模式 --> MatGen[为各方块生成独立 BSDF 材质]
-    MatGen --> AlignUV[局部 UV 自动对齐重构]
 ```
 
 > **v2.1 PBR 变更**：PBR 伴生图在 Rust 预编译期解码为 `MtkPackedV1`（`_n` = OpenGL 法线 + 高度，`_orm` = AO/粗糙度/金属度/发光，`_aux` = IOR/孔隙度/SSS/透射），运行时 `LabPBR 1.3 Decoder` 已从材质图移除。详见 [PBR 通道规范](pbr_channel_spec.md)。
@@ -153,60 +149,14 @@ MoziToolKit 将庞大的材质解析、通道融合与图像装箱计算全部�
    - 图集以 `Chunk` 为单位进行空间划分。只有当某一个 Chunk 内所包含的方块中至少有一个方块具有 `_n` 或 `_s` 伴生贴图时，系统才会为该 Chunk 分配并保存解码后的 `_n` / `_orm` / `_aux` 伴生大图；
    - 对于纯原版方块构成的无 PBR Chunk，**严禁生成无意义的全尺寸法线/高光空白大图**，从而大幅节省显存占用与磁盘缓存空间。
 
-### 3.3 独立模式：全栈融合单方块资产库 (Standalone Mode: Stack-Synthesized Asset Library)
-- **本节是目标实现契约**：Standalone Mode 必须最终达到本节定义的预编译资产库语义。若当前实现仍在“替换材质”阶段读取原始包文件、重新采样图片或调用通道对齐逻辑，则该实现属于未完成状态，不得通过本规范的验收。
-- **核心设计定位**：
-  - 独立模式并非在视口材质替换时临时去零散材质包中现场提取、动态重构；
-  - 它的本质是**将多层材质栈（`User Resource Packs` + `Mod JARs` + `Vanilla JAR`）预先融合成一套虚拟/物理的“全量单方块独立资产库”**。
-  - 每个方块在 Blender 中分配独立的 Principled BSDF 材质节点树，为艺术家保留最高自由度的着色器编辑能力（例如为单一方块添加 Cycles 真实置换、连接自定义噪波或着色器分支）。
-
-- **多层覆盖与资产库合成机制 (Multi-Layer Direct Override & Synthesis)**：
-  预编译独立资产库时，系统严格执行自顶向下的覆盖契约：
-  1. **基底初始化**：以底层原版客户端 JAR（Bottom Layer）作为全量基底，初始化所有标准方块/物品的基础 Albedo 贴图与模型定义。
-  2. **顶层直接覆盖（Top-Layer Direct Overwrite）**：
-     - 若顶层包（如 Layer 0 局部矿物包）修改了某些方块的漫反射（Albedo），在合成资产库中直接以顶层贴图物理替换该方块的 Albedo 贴图；
-     - 若顶层包（如 Layer 0 发光矿石包）仅提供了 `_s` 发光通道，中层包（Layer 1）提供了 `_n` 法线通道，则两者的 PBR 伴生文件与底层原版的 Albedo 贴图直接汇聚并列在资产库该方块的专属条目中；
-     - 未被顶层包修改的方块（如石头、泥土、木板等），完整保留底层原版贴图。
-  3. **输出标准化资产库结构**：
-     预编译完成后，持久化缓存目录（`DATAFILES/MoziToolKit/cache/baked_stack/<stack_hash>/standalone/textures/`）中将包含一套**已完全融合覆盖、各通道物理就绪且对齐好的标准方块贴图库**。
-
-- **预编译阶段全量就绪 (Precompilation Readiness)**：
-  为了实现与图集模式相同的秒级响应，所有耗时的数据准备工作均在**预编译烘焙阶段（Precompilation Phase）**提前就绪：
-  1. **全量解包与索引构建**：完成所有 ZIP/JAR 材质包的安全解压，并完成通道级覆盖与多命名空间全局索引建立。
-  2. **多帧动画通道对齐与帧同步预烘焙（Animated Channel Alignment Pre-Bake）**：
-     - 在多材质包叠加场景下，可能底层方块漫反射（Albedo）是多帧动态长条图（如 32 帧海晶灯、岩浆），而顶层发光包提供的 `_s` 发光通道是单帧静态图，或两者的帧率/帧序列不一致。
-     - 预编译引擎调用 Rust `mtk-texture` 动画通道对齐（`mtk-texture/src/atlas/builder/anim_atlas.rs`），在预编译期将静态或短帧通道按纵向对齐平铺拓展至基准动画的相同尺寸与总帧数，并统一 `.mcmeta` 动画元数据，输出通道高度与帧序列严格同步的伴生条带图。
-  3. **UV 对齐元数据与第一帧几何重构（UV Scaling & Frame Alignment Metadata）**：
-     - 针对多帧动态方块（高宽比 $H > W$），预编译阶段预先计算各方块在单帧展示下的 UV 缩放因子 $S_v = \frac{\text{FrameHeight}}{\text{TotalHeight}}$ 与初始帧偏移，固化为独立材质元数据映射表（`standalone_mapping.json`）。
-  4. **独立材质预编译缓存持久化（Standalone Baked Cache）**：
-     - 融合覆盖后的独立方块贴图与伴生 PBR 贴图统一归档于持久化缓存目录（`DATAFILES/MoziToolKit/cache/baked_stack/<stack_hash>/standalone/`）。
-
-- **视口替换阶段秒级赋予（Instant Viewport Replacement）**：
-  - 当用户在视口中点击“替换材质（独立模式）”时：
-    1. 算子直接从预编译缓存中检索对应方块已完成覆盖融合的独立贴图与元数据；
-    2. 为各个方块创建独立材质（或复用已有材质），配置 Principled BSDF 节点树（挂载融合后的 Albedo、Normal、Specular 贴图）与原生时间轴帧驱动节点组；
-    3. 根据预编译元数据直接对网格面 Loop UV 进行局部对齐与首帧归一化；
-    4. **全过程零磁盘解包、零动态通道平铺、零图像重采样**，实现极致视口性能。
-
-### 3.4 双模式核心特性与选型对照
-
-| 维度 | 图集模式 (Atlas Mode) | 独立模式 (Standalone Mode) |
-| :--- | :--- | :--- |
-| **材质球数量** | 极少（1 ~ 少量 Chunk 材质） | 每个方块独立（1 方块 = 1 材质） |
-| **Draw Call 开销** | 极致优化，适合大规模地形与海量实例 | 较高，视口材质槽位多 |
-| **可编辑性** | 统一图集 Shader，不建议手动微调单一贴图 | 极高，每个方块节点树可随意断开/串联/加置换 |
-| **UV 组织形式** | 全局重映射至图集瓦片坐标 $(U_{min}, V_{min}, U_{size}, V_{size})$ | 局部 UV 保留 `[0, 1]` 空间，多帧方块按帧高缩放 |
-| **动画驱动机制** | 图集 UV Decoder 节点组计算 V 轴偏移 | 独立材质节点树计算 V 轴帧偏移 |
-| **预编译机制** | 预编译输出 Atlas Chunks 与 `atlas_mapping.json` | 预编译输出融合贴图库、对齐伴生图与 `standalone_mapping.json` |
-
-### 3.5 面级身份契约与节点树自愈恢复 (Mesh Face Provenance & Auto-Recovery)
+### 3.3 面级身份契约与节点树自愈恢复 (Mesh Face Provenance & Auto-Recovery)
 - **核心契约（`mtk_source_textures` + `mtk_source_texture_idx` & `mtk_atlas_chunk_id`）**：
   无论是静态模型导入、材质替换管线还是实时同步 Direct Mesh 生成，系统均向网格写入紧凑的调色板来源（Mesh 域字符串列表 `mtk_source_textures` + Face 域整数 `mtk_source_texture_idx`）与整数属性 `mtk_atlas_chunk_id`。逐面 `mtk_source_texture_key` 字符串层已退役，不再由任何路径写入。
 - **节点树删除无损自愈算子 (`mozi.restore_materials_from_provenance`)**：
   当用户或脚本将物体的材质槽完全清空、或者在 Shader Editor 中误删了全部节点时，系统通过 [`pipeline.py`](../../utils/materials/pipeline.py) 中的 `restore_materials_from_provenance` 核心算法：
   1. 扫描网格面属性，由 `mtk_source_textures` + `mtk_source_texture_idx` 还原每面来源键，并提取 Chunk ID 映射表；
-  2. 根据图集映射表或独立材质库，瞬间重新分配所有材质槽并对齐多边形面的 `material_index`；
-  3. 自动重新生成 Principled BSDF / 图集着色器节点树并绑定贴图；
+  2. 根据图集映射表重新分配所有材质槽并对齐多边形面的 `material_index`；
+  3. 自动重新生成图集着色器节点树并绑定贴图；
   4. 实现 100% 离线、零数据损失的原地自愈。
 
 ---
@@ -272,24 +222,22 @@ MoziToolKit 提供了从底层色彩插值到交互式 UI 的全套生物群系�
 > 5. **伴生贴图非遮蔽不变量 (PBR Companion Non-Masking Invariant)**：带 `_n`/`_N`、`_s`/`_S` 后缀的文件必须严格绑定至对应基底方块的伴生层，严禁作为独立的漫反射实体建立条目，防止遮蔽下层真实的 Albedo 贴图。
 > 6. **图集零透明占位不变量 (Zero-Placeholder Atlas Invariant)**：图集装箱必须基于合成后的 Composite Map 紧凑排布，严禁为局部材质包未修改的方块分配透明占位图块。
 > 7. **预编译与替换解耦不变量 (Decoupled Precompilation & Instant Binding)**：所有昂贵的多包解析与图像装箱操作必须在预编译阶段完成并持久化，材质替换算子执行期间严禁进行重复的磁盘扫描与图像合成。
-> 8. **独立模式预编译就绪与帧同步不变量 (Standalone Precompilation & Frame Sync Invariant)**：独立模式的通道对齐（静态通道纵向平铺至动画总帧数）、UV 缩放元数据计算与全栈贴图融合必须在预编译阶段固化至缓存目录，视口替换时严禁现场执行图像动态拓展与对齐重构。
-> 9. **Albedo 存在性不变量 (Renderable-Albedo Invariant)**：仅有 `_n`、`_s` 或其元数据、却不存在任何层 Albedo 的资源路径必须被忽略；它们绝不能成为透明 Atlas tile、空白独立材质或可匹配的普通方块条目。
-> 10. **PBR 按 Chunk 按通道分配不变量 (Per-Chunk PBR Allocation Invariant)**：Chunk 中没有真实 Normal 时不得输出 Normal 文件；没有真实 Specular 时不得输出 Specular 文件。另一个 Chunk 的 PBR 使用情况不得迫使本 Chunk 产生默认占位图。
-> 11. **缓存原子发布不变量 (Atomic Cache Publication Invariant)**：不完整图集不得被标记为可用或覆盖上一份完整图集；缓存绑定前必须执行格式、mapping 与文件存在性的完整性校验。
+> 8. **Albedo 存在性不变量 (Renderable-Albedo Invariant)**：仅有 `_n`、`_s` 或其元数据、却不存在任何层 Albedo 的资源路径必须被忽略；它们绝不能成为透明 Atlas tile 或可匹配的普通方块条目。
+> 9. **PBR 按 Chunk 按通道分配不变量 (Per-Chunk PBR Allocation Invariant)**：Chunk 中没有真实 Normal 时不得输出 Normal 文件；没有真实 Specular 时不得输出 Specular 文件。另一个 Chunk 的 PBR 使用情况不得迫使本 Chunk 产生默认占位图。
+> 10. **缓存原子发布不变量 (Atomic Cache Publication Invariant)**：不完整图集不得被标记为可用或覆盖上一份完整图集；缓存绑定前必须执行格式、mapping 与文件存在性的完整性校验。
 
 ### 7.1 材质堆栈验收矩阵 (Required Acceptance Matrix)
-下列案例必须作为自动化测试长期保留。任何重构资源包索引、堆栈解析、图集生成、缓存或 Standalone 逻辑的变更，均必须全部通过。
+下列案例必须作为自动化测试长期保留。任何重构资源包索引、堆栈解析、图集生成或缓存的变更，均必须全部通过。
 
 | 场景 | 输入栈（从高到低） | 必须得到的结果 |
 | :--- | :--- | :--- |
 | Uppercase PBR 覆盖 | 顶层 `ore_N.png`；中层 `ore.png`；底层 `ore.png` | 使用中层 Albedo 与顶层 Normal；顶层 `_N` 不得成为 Albedo 条目。 |
 | 三通道跨层组合 | 顶层 `ore_s.png`；中层 `ore.png` + `ore_n.png`；底层 `ore.png` | Albedo/Normal 来自中层，Specular 来自顶层。 |
-| 无 Albedo 的孤立伴生图 | 任意层仅有 `ore_n.png`/`ore_s.png`，所有层无 `ore.png` | 不生成 tile、独立材质、透明图或黑色图。 |
+| 无 Albedo 的孤立伴生图 | 任意层仅有 `ore_n.png`/`ore_s.png`，所有层无 `ore.png` | 不生成 tile、透明图或黑色图。 |
 | 无 PBR Chunk | 一个 Chunk 含 PBR，另一个 Chunk 仅含 Albedo | 仅 PBR Chunk 写出实际存在的 Normal/Specular 文件；纯 Albedo Chunk 的 `files` 仅含 `albedo`（及确有需要的 overlay）。 |
 | 有序栈失效 | 交换任意两个包、修改任一包内容或影响布局的编译参数 | 不得复用旧缓存，必须产生并验证新的缓存身份。 |
 | 构建中断 | 图集写入过程中取消/抛错/模拟不完整输出 | 上一份完整缓存仍可读取；不完整新缓存不得绑定。 |
 | 配置主文件损坏 | 主 JSON 截断或无法解析，`.bak` 有效 | 自动从 `.bak` 恢复；资源包顺序与启用状态不丢失。 |
-| Standalone 预编译 | 含动画 Albedo 与静态 PBR 的栈 | 预编译阶段生成对齐资产；替换阶段不读取原始包、不重新采样或平铺图片。 |
 
 ---
 

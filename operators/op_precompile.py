@@ -24,7 +24,7 @@ from ..utils.progress import BlenderProgressReporter, blender_progress_scope
 
 
 class MOZI_OT_precompile_cache(bpy.types.Operator):
-    """Precompile and rebuild the complete Atlas, Standalone, and Model caches via libmtk."""
+    """Precompile and rebuild the complete Atlas and Model caches via libmtk."""
 
     bl_idname = "mozi.precompile_cache"
     bl_label = "Precompile Stack Caches"

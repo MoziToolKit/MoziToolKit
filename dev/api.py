@@ -276,8 +276,8 @@ def precompile_material_cache(
     progress_callback=None,
 ) -> Dict[str, Any]:
     """
-    Precompiles and rebuilds complete material atlas, standalone textures,
-    and model caches via bridge. Automatically prepares asset context and refreshes stats.
+    Precompiles and rebuilds complete material atlas and model caches via bridge.
+    Automatically prepares asset context and refreshes stats.
     """
     if prefs is None:
         try:

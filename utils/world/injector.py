@@ -2,7 +2,7 @@
 MoziToolKit Utils: Voxel World Scene Injector & Importer Pipeline.
 
 Orchestrates the conversion of VoxelStorage and MeshData into Blender Mesh Objects,
-binding Atlas PBR materials or Standalone shaders, configuring child VoxelPointCloud,
+binding Atlas PBR materials, configuring child VoxelPointCloud,
 and setting up collection hierarchy.
 """
 
@@ -37,7 +37,6 @@ def apply_voxel_mesh_to_blender(
     atlas: Optional[Any] = None,
     origin_centered: bool = True,
     reuse_existing: bool = True,
-    material_mode: str = "ATLAS",
     inject_mesh_func=None,
     ensure_materials_func=None,
     ensure_cloud_func=None,
@@ -46,8 +45,8 @@ def apply_voxel_mesh_to_blender(
 ) -> Tuple[Any, Dict[str, Any]]:
     """
     Main-thread Blender scene injector for pre-meshed voxel world geometry.
-    Instantiates or updates target Blender Mesh object, binds Atlas PBR chunk shaders
-    or Standalone Principled/LabPBR materials, and synchronizes companion unculled VoxelPointCloud.
+    Instantiates or updates target Blender Mesh object, binds Atlas PBR chunk shaders,
+    and synchronizes companion unculled VoxelPointCloud.
     """
 
     if context is None:
@@ -88,18 +87,16 @@ def apply_voxel_mesh_to_blender(
 
     # 3. Bind only used Atlas chunk materials & shaders
     t0_mat = time.perf_counter()
-    used_chunk_ids = None
-    if material_mode != "STANDALONE":
-        used_chunk_ids = mesh_data.used_materials()
-        _ensure_mat = ensure_materials_func or ensure_world_materials
-        _ensure_mat(
-            obj,
-            prefs=prefs,
-            atlas=atlas,
-            used_chunk_ids=used_chunk_ids,
-            dynamic_entity_atlases=dynamic_entity_atlases,
-            material_indices_are_slots=getattr(mesh_data, "materials_are_slots", False),
-        )
+    used_chunk_ids = mesh_data.used_materials()
+    _ensure_mat = ensure_materials_func or ensure_world_materials
+    _ensure_mat(
+        obj,
+        prefs=prefs,
+        atlas=atlas,
+        used_chunk_ids=used_chunk_ids,
+        dynamic_entity_atlases=dynamic_entity_atlases,
+        material_indices_are_slots=getattr(mesh_data, "materials_are_slots", False),
+    )
     mat_ms = (time.perf_counter() - t0_mat) * 1000.0
 
     # Voxel meshes always bake true 3D biomes; tag them so the biome panel's
@@ -164,7 +161,6 @@ def ingest_voxel_world(
     atlas: Optional[Any] = None,
     biome_resolver: Optional[Any] = None,
     ctm_solver: Optional[Any] = None,
-    material_mode: str = "ATLAS",
     enable_ao: bool = True,
     mesh_fluids: bool = True,
     weld_vertices: bool = True,
@@ -174,9 +170,9 @@ def ingest_voxel_world(
 ) -> Tuple[Any, Dict[str, Any]]:
     """
     Complete synchronous end-to-end Voxel World Ingestion Pipeline:
-    1. Meshes VoxelStorage using cached Model Database, Atlas/Standalone, CTM Solver, and Biome Resolver
+    1. Meshes VoxelStorage using cached Model Database, Atlas, CTM Solver, and Biome Resolver
     2. Injects high-throughput geometry into a Blender Mesh object
-    3. Builds and binds full Atlas Chunk PBR Materials or Standalone BSDF Materials
+    3. Builds and binds full Atlas Chunk PBR Materials
     Returns (bpy_object, stats_dict).
     """
     from ...bridge.world import mesh_voxel_storage
@@ -193,7 +189,6 @@ def ingest_voxel_world(
         weld_vertices=weld_vertices,
         origin_centered=origin_centered,
         progress_callback=progress_callback,
-        material_mode=material_mode,
     )
 
     return apply_voxel_mesh_to_blender(
@@ -206,7 +201,6 @@ def ingest_voxel_world(
         atlas=atlas,
         origin_centered=origin_centered,
         reuse_existing=reuse_existing,
-        material_mode=material_mode,
     )
 
 

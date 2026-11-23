@@ -195,16 +195,6 @@ class MOZI_AddonPreferences(bpy.types.AddonPreferences):
         options={'HIDDEN'},
     )
 
-    material_mode: EnumProperty(
-        name="Material Mode",
-        description="Choose how imported materials are structured and generated",
-        items=[
-            ('ATLAS', "Atlas", "Combine all textures into a single texture atlas material (Default)"),
-        ],
-        default='ATLAS',
-        update=on_material_setting_changed,
-    )
-
     biome_preset: EnumProperty(
         name="Biome Palette",
         description="Choose the Minecraft Biome color palette preset for grass, foliage, and water tinting",
@@ -287,7 +277,7 @@ class MOZI_AddonPreferences(bpy.types.AddonPreferences):
 
     cache_dir: StringProperty(
         name="Cache Directory",
-        description="Directory used to store precompiled texture atlases, standalone materials, and model caches. Leave empty to use Blender's default user cache folder",
+        description="Directory used to store precompiled texture atlases and model caches. Leave empty to use Blender's default user cache folder",
         subtype='DIR_PATH',
         default="",
         update=on_material_setting_changed,

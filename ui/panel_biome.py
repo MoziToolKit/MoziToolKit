@@ -1,7 +1,7 @@
 """
 Minecraft Biome Control Panels for Object Properties and 3D Viewport.
 Allows instantaneous switching of Minecraft Biome palettes (Grass, Foliage, Water)
-for Atlas and Standalone mesh objects without running full material rebuilds.
+for Atlas mesh objects without running full material rebuilds.
 """
 
 from __future__ import annotations

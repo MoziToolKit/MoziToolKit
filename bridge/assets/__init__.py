@@ -1,7 +1,7 @@
 """
 Bridge: Asset Precompilation & Resource Stack Management Subsystem.
 Transfers resource pack configuration from Blender to libmtk (Rust) for
-headless Atlas stitching, Standalone material generation, and Model baking.
+headless Atlas stitching, canonical PBR decoding, and Model baking.
 Zero-computation on the Python side: all parsing, packing, image decoding,
 and geometric meshing are handled entirely within libmtk.
 """

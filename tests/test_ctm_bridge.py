@@ -2,8 +2,8 @@
 Tests for Connected Textures Mod (CTM) integration:
 - Modrinth API fetcher bridge
 - CTM solver loading from resource packs
-- Voxel world meshing in Atlas and Standalone modes with CTM
-- Standalone material resolution and scene mesh loading in Blender
+- Headless voxel world meshing without an atlas map and Atlas mode with CTM
+- CTM provenance attribute injection and scene mesh loading in Blender
 """
 
 from __future__ import annotations
@@ -167,8 +167,8 @@ class TestCtmBridge(unittest.TestCase):
             self.assertIsNotNone(cfg_solver)
             mock_stack.assert_not_called()
 
-    def test_ctm_meshing_standalone_mode(self):
-        """Verify voxel storage meshing in Standalone mode resolves CTM face texture keys."""
+    def test_ctm_meshing_without_atlas(self):
+        """Verify headless voxel storage meshing without an atlas resolves CTM face texture keys."""
         if self.mtk is None or not hasattr(self.mtk, "VoxelStorage"):
             self.skipTest("libmtk_py VoxelStorage not available")
 
@@ -181,12 +181,12 @@ class TestCtmBridge(unittest.TestCase):
         storage.set_block(0, 0, 0, "minecraft:glass")
         storage.set_block(1, 0, 0, "minecraft:glass")
 
-        # Mesh in Standalone mode (atlas=None)
+        # Headless meshing without an atlas map
         mesh_data, elapsed_ms = mesh_voxel_storage(
             storage=storage,
-            atlas=None,
+            atlas=False,
             ctm_solver=solver,
-            material_mode="STANDALONE",
+            resolve_prefs=False,
             origin_centered=False,
             weld_vertices=False,
         )
@@ -195,7 +195,7 @@ class TestCtmBridge(unittest.TestCase):
         self.assertGreater(mesh_data.vertex_count, 0)
         self.assertGreater(mesh_data.quad_count, 0)
 
-        # Standalone mode must emit palette + per-face indices (never per-face strings)
+        # Emits palette + per-face indices (never per-face strings)
         self.assertNotIn("mtk_source_texture_key", mesh_data.attribute_names())
         palette = mesh_data.get_string_attribute("mtk_source_textures") or []
         mv = mesh_data.attribute_memoryview("mtk_source_texture_idx")
@@ -236,9 +236,9 @@ class TestCtmBridge(unittest.TestCase):
 
         mesh_data, _ = mesh_voxel_storage(
             storage=storage,
-            atlas=None,
+            atlas=False,
             ctm_solver=solver,
-            material_mode="STANDALONE",
+            resolve_prefs=False,
             origin_centered=False,
         )
 
@@ -253,8 +253,8 @@ class TestCtmBridge(unittest.TestCase):
         ctm_keys = [k for k in keys if "optifine/ctm" in k]
         self.assertGreater(len(ctm_keys), 0, f"Expected CTM sub-tiles in keys: {set(keys)}")
 
-    def test_scene_loading_standalone_materials(self):
-        """Verify apply_voxel_mesh_to_blender assigns standalone materials and slots."""
+    def test_scene_loading_ctm_provenance(self):
+        """Verify apply_voxel_mesh_to_blender preserves CTM provenance attributes without an atlas."""
         if self.mtk is None or not hasattr(self.mtk, "VoxelStorage"):
             self.skipTest("libmtk_py VoxelStorage not available")
 
@@ -268,9 +268,9 @@ class TestCtmBridge(unittest.TestCase):
 
         mesh_data, elapsed_ms = mesh_voxel_storage(
             storage=storage,
-            atlas=None,
+            atlas=False,
             ctm_solver=solver,
-            material_mode="STANDALONE",
+            resolve_prefs=False,
         )
 
         # Inject into Blender scene
@@ -280,7 +280,7 @@ class TestCtmBridge(unittest.TestCase):
             elapsed_ms=elapsed_ms,
             name="Test_CTM_World",
             atlas=None,
-            material_mode="STANDALONE",
+            ensure_materials_func=lambda *a, **kw: None,
             reuse_existing=False,
         )
 
@@ -351,7 +351,7 @@ class TestCtmBridge(unittest.TestCase):
         storage_x = self.mtk.VoxelStorage()
         storage_x.set_block(0, 0, 0, "minecraft:white_stained_glass")
         storage_x.set_block(1, 0, 0, "minecraft:white_stained_glass")
-        mesh_x, _ = mesh_voxel_storage(storage=storage_x, atlas=None, ctm_solver=solver, material_mode="STANDALONE")
+        mesh_x, _ = mesh_voxel_storage(storage=storage_x, atlas=False, ctm_solver=solver, resolve_prefs=False)
 
         # North face (dir 5): looking +Z
         # Block (0,0,0) has neighbor at (1,0,0) (East = left) -> Tile 3
@@ -368,7 +368,7 @@ class TestCtmBridge(unittest.TestCase):
         storage_z = self.mtk.VoxelStorage()
         storage_z.set_block(0, 0, 0, "minecraft:white_stained_glass")
         storage_z.set_block(0, 0, 1, "minecraft:white_stained_glass")
-        mesh_z, _ = mesh_voxel_storage(storage=storage_z, atlas=None, ctm_solver=solver, material_mode="STANDALONE")
+        mesh_z, _ = mesh_voxel_storage(storage=storage_z, atlas=False, ctm_solver=solver, resolve_prefs=False)
 
         # East face (dir 0): looking -X
         # Block (0,0,0) has neighbor at (0,0,1) (South = left of East face) -> Tile 3
@@ -385,7 +385,7 @@ class TestCtmBridge(unittest.TestCase):
         storage_y = self.mtk.VoxelStorage()
         storage_y.set_block(0, 0, 0, "minecraft:white_stained_glass")
         storage_y.set_block(0, 1, 0, "minecraft:white_stained_glass")
-        mesh_y, _ = mesh_voxel_storage(storage=storage_y, atlas=None, ctm_solver=solver, material_mode="STANDALONE")
+        mesh_y, _ = mesh_voxel_storage(storage=storage_y, atlas=False, ctm_solver=solver, resolve_prefs=False)
 
         # North face (dir 5):
         # Block (0,0,0) has neighbor at (0,1,0) (Up = top of North face) -> Tile 36

@@ -65,7 +65,7 @@ class TestSceneOptionsSSOTAndI18n(unittest.TestCase):
         scene_rna = bpy.ops.mozi.import_scene.get_rna_type()
         self.assertIn("allow_host_fallback", scene_rna.properties)
         self.assertEqual(scene_rna.properties["allow_host_fallback"].default, False)
-        self.assertIn("material_mode", scene_rna.properties)
+        self.assertNotIn("material_mode", scene_rna.properties)
 
     def test_04_export_scene_hides_ctm_option(self):
         """Verifies that MOZI_OT_export_scene does not draw enable_ctm in the sidebar."""

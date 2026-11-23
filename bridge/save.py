@@ -62,7 +62,6 @@ def load_and_mesh_minecraft_save(
     origin_centered: bool = True,
     num_threads: Optional[int] = None,
     progress_callback: Optional[Any] = None,
-    material_mode: str = "ATLAS",
     enable_ctm: bool = True,
     enable_animated_textures: Optional[bool] = None,
     ctm_solver: Optional[Any] = None,

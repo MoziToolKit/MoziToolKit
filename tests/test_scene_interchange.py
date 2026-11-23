@@ -278,7 +278,7 @@ class TestSceneInterchangeEndToEnd(unittest.TestCase):
         )
 
         self.assertEqual(meta["voxel_count"], 2)
-        self.assertEqual(meta["format_version"], 6)  # CTM rule payload matches asset-cache v14 (v6)
+        self.assertEqual(meta["format_version"], 7)  # BakedObjFace payload matches asset-cache v15 (v7)
         self.assertEqual(meta["bounds"], [0, 0, 0, 2, 1, 1])
         self.assertEqual(meta["unique_states_count"], 2)
         self.assertTrue(os.path.exists(scene_path))

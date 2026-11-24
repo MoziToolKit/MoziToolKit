@@ -33,8 +33,102 @@ permissions:
   contents: write
 
 jobs:
+  pre-release-tests:
+    name: Pre-Release Blender ${{ matrix.blender-version }} Suite
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        blender-version: ["4.2.23", "4.5.16", "5.2.1"]
+    env:
+      MOZI_CACHE_DIR: ${{ github.workspace }}/.ci-cache
+      MTK_TEST_CACHE: ${{ github.workspace }}/.ci-cache
+      MOZI_CONFIG_DIR: ${{ github.workspace }}/.ci-config
+
+    steps:
+      - name: Checkout MoziToolKit
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            curl \
+            xz-utils \
+            libgl1 \
+            libegl1 \
+            libxi6 \
+            libxxf86vm1 \
+            libxfixes3 \
+            libxrender1 \
+            libxkbcommon0 \
+            libsm6 \
+            libxext6 \
+            unzip
+
+      - name: Download & Install Blender ${{ matrix.blender-version }}
+        run: |
+          set -euo pipefail
+          ver="${{ matrix.blender-version }}"
+          major_minor="${ver%.*}"
+          tar_name="blender-${ver}-linux-x64.tar.xz"
+          if ! curl -fL --retry 3 -o "$tar_name" "$MTK_CI_ASSETS_BASE/$tar_name"; then
+            echo "::warning::Blender mirror unavailable; falling back to download.blender.org"
+            curl -fL --retry 3 -o "$tar_name" \
+              "https://download.blender.org/release/Blender${major_minor}/$tar_name"
+          fi
+          mkdir -p /opt/blender
+          tar -xJf "$tar_name" -C /opt/blender --strip-components=1
+          rm -f "$tar_name"
+          echo "/opt/blender" >> "$GITHUB_PATH"
+          /opt/blender/blender --version
+
+      - name: Fetch precompiled Linux wheels from libmozitoolkit release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          MANIFEST_VERSION="$(python3 -c 'import tomllib; print(tomllib.load(open("blender_manifest.toml", "rb"))["version"])')"
+          RELEASE_REF="${{ inputs.libmtk_release }}"
+          if [ -z "$RELEASE_REF" ]; then
+            RELEASE_REF="v${MANIFEST_VERSION}"
+          fi
+          echo "Fetching linux-x64 wheels from pinned libmozitoolkit release: $RELEASE_REF (no-fallback)"
+          python3 tools/fetch_wheels.py --release "$RELEASE_REF" --no-fallback --platform linux-x64 --clean --out wheels/
+
+      - name: Prepare Linux test environment
+        run: |
+          set -euo pipefail
+          python3 -m venv .venv-test
+          .venv-test/bin/pip install --upgrade pip pytest
+          .venv-test/bin/pip install --no-index --find-links wheels libmtk_py libmtk_blender_dna
+          echo "SITE_PACKAGES=$(.venv-test/bin/python -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')" >> "$GITHUB_ENV"
+
+      - name: Run architectural guardrails & API surface checks
+        run: |
+          .venv-test/bin/python tools/check_legacy_symbols.py
+          .venv-test/bin/python tools/ci_guardrails.py
+          .venv-test/bin/python tools/b0_native_snapshot.py
+
+      - name: Download real Minecraft assets
+        run: .venv-test/bin/python .github/scripts/fetch_test_assets.py
+
+      - name: Precompile asset cache
+        run: .venv-test/bin/python .github/scripts/precompile_cache.py
+
+      - name: Run Test Suite (Blender ${{ matrix.blender-version }})
+        run: |
+          MTK_TEST_SITE_PACKAGES="$SITE_PACKAGES" \
+            /opt/blender/blender -b --python tests/run_tests.py -- -q -rs
+
   build-and-release:
     name: Build Multi-Platform Packages & Release
+    needs: [pre-release-tests]
     runs-on: ubuntu-latest
 
     steps:
@@ -99,27 +193,6 @@ jobs:
           # build.py validates that every declared platform has its native wheel
           # and verifies the produced zips afterwards.
           python3 build.py --blender /opt/blender/blender
-
-      - name: Prepare Linux test environment
-        run: |
-          set -euo pipefail
-          python3 -m venv .venv-test
-          .venv-test/bin/pip install --upgrade pip pytest
-          linux_wheel="$(ls wheels/libmtk_py-*manylinux*x86_64*.whl 2>/dev/null | head -n 1 || true)"
-          if [ -z "$linux_wheel" ]; then
-            echo "::error::No Linux x86_64 libmtk_py wheel found in wheels/"
-            exit 1
-          fi
-          .venv-test/bin/pip install "$linux_wheel"
-          echo "SITE_PACKAGES=$(.venv-test/bin/python -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')" >> "$GITHUB_ENV"
-
-      - name: Download real Minecraft assets
-        run: python .github/scripts/fetch_test_assets.py
-
-      - name: Run Test Suite
-        run: |
-          MTK_TEST_SITE_PACKAGES="$SITE_PACKAGES" \
-            /opt/blender/blender -b --python tests/run_tests.py -- -q
 
       - name: Determine Release Tag & Status
         id: release_meta

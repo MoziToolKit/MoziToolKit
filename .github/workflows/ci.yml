@@ -31,8 +31,12 @@ env:
 
 jobs:
   blender:
-    name: Blender headless suite (bpy integration)
+    name: Blender ${{ matrix.blender-version }} headless suite (Linux)
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        blender-version: ["4.2.23", "4.5.16", "5.2.1"]
     env:
       MOZI_CACHE_DIR: ${{ github.workspace }}/.ci-cache
       MTK_TEST_CACHE: ${{ github.workspace }}/.ci-cache
@@ -74,12 +78,14 @@ jobs:
         run: |
           set -euo pipefail
           work="$RUNNER_TEMP/blender"
-          tar_name="blender-${{ env.BLENDER_VERSION }}-linux-x64.tar.xz"
+          ver="${{ matrix.blender-version }}"
+          major_minor="${ver%.*}"
+          tar_name="blender-${ver}-linux-x64.tar.xz"
           mkdir -p "$work"
           if ! curl -fL --retry 3 -o "$work/$tar_name" "$MTK_CI_ASSETS_BASE/$tar_name"; then
             echo "::warning::Blender mirror unavailable; falling back to download.blender.org"
             curl -fL --retry 3 -o "$work/$tar_name" \
-              "https://download.blender.org/release/Blender5.2/$tar_name"
+              "https://download.blender.org/release/Blender${major_minor}/$tar_name"
           fi
           mkdir -p "$work/opt"
           tar -xJf "$work/$tar_name" -C "$work/opt" --strip-components=1
@@ -100,8 +106,12 @@ jobs:
             blender --background --python tests/run_tests.py -- -q -rs
 
   blender-windows:
-    name: Blender headless suite (Windows)
+    name: Blender ${{ matrix.blender-version }} headless suite (Windows)
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        blender-version: ["4.2.23", "4.5.16", "5.2.1"]
     env:
       MOZI_CACHE_DIR: ${{ github.workspace }}/.ci-cache
       MTK_TEST_CACHE: ${{ github.workspace }}/.ci-cache
@@ -137,16 +147,18 @@ jobs:
           $work = Join-Path $env:RUNNER_TEMP "blender"
           $zip = Join-Path $work "blender.zip"
           New-Item -ItemType Directory -Force -Path $work | Out-Null
-          $name = "blender-${{ env.BLENDER_VERSION }}-windows-x64.zip"
+          $ver = "${{ matrix.blender-version }}"
+          $majorMinor = ($ver.Split('.')[0..1] -join '.')
+          $name = "blender-$ver-windows-x64.zip"
           try {
             Invoke-WebRequest -Uri "$env:MTK_CI_ASSETS_BASE/$name" -OutFile $zip -UseBasicParsing -TimeoutSec 600
           } catch {
             Write-Warning "Blender mirror unavailable; falling back to download.blender.org"
-            Invoke-WebRequest -Uri "https://download.blender.org/release/Blender5.2/$name" -OutFile $zip -UseBasicParsing -TimeoutSec 600
+            Invoke-WebRequest -Uri "https://download.blender.org/release/Blender$majorMinor/$name" -OutFile $zip -UseBasicParsing -TimeoutSec 600
           }
           $opt = Join-Path $work "opt"
           Expand-Archive -Path $zip -DestinationPath $opt -Force
-          $blender_dir = Join-Path $opt "blender-${{ env.BLENDER_VERSION }}-windows-x64"
+          $blender_dir = Join-Path $opt "blender-$ver-windows-x64"
           $exe = Join-Path $blender_dir "blender.exe"
           & $exe --version
           Split-Path $exe | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append

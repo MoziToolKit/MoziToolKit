@@ -96,19 +96,9 @@ def get_cache_dir(prefs=None) -> Path:
     if resolved_pref_dir is not None:
         return resolved_pref_dir
 
-    cache_dir = None
-    try:
-        import bpy
-        if hasattr(bpy, "utils") and hasattr(bpy.utils, "user_resource"):
-            cache_dir = Path(bpy.utils.user_resource("DATAFILES")) / "MoziToolKit" / "cache"
-    except Exception:
-        cache_dir = None
+    from ..prefs import get_extension_user_dir
 
-    if not cache_dir:
-        cache_dir = Path.home() / ".config" / "blender" / "MoziToolKit" / "cache"
-
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    return cache_dir
+    return get_extension_user_dir(subdir="cache", legacy_resource="DATAFILES")
 
 # In-memory session memoization to eliminate redundant disk hashing & package reopening
 _ACTIVE_ASSET_CACHE: Optional[Any] = None

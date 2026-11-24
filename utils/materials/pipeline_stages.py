@@ -67,12 +67,9 @@ logger = logging.getLogger("MoziToolKit.Material.Pipeline.Stages")
 
 
 def _get_pipeline_mod():
-    root = (__package__ or "MoziToolKit").rsplit(".utils.", 1)[0]
-    for mod_name in dict.fromkeys((f"{root}.utils.materials.pipeline", "MoziToolKit.utils.materials.pipeline")):
-        mod = sys.modules.get(mod_name)
-        if mod is not None:
-            return mod
-    return None
+    from ...bridge.prefs import resolve_extension_module
+
+    return resolve_extension_module("utils.materials.pipeline")
 
 
 def animated_textures_enabled(prefs: Optional[Any] = None) -> bool:

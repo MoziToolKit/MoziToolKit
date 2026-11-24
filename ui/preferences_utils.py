@@ -23,13 +23,6 @@ def _safe_get_prefs(self_or_context: Any = None) -> Optional[Any]:
     prefs = get_prefs(bpy.context)
     if prefs:
         return prefs
-
-    try:
-        for addon in bpy.context.preferences.addons.values():
-            if hasattr(addon, "preferences") and hasattr(addon.preferences, "resource_packs"):
-                return addon.preferences
-    except Exception:
-        pass
     return None
 
 

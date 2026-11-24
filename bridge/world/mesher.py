@@ -31,13 +31,9 @@ logger = logging.getLogger("MoziToolKit.Bridge.World.Mesher")
 
 
 def _get_world_mod():
-    import sys
-    root = (__package__ or "MoziToolKit").rsplit(".bridge.", 1)[0]
-    for mod_name in dict.fromkeys((f"{root}.bridge.world", "MoziToolKit.bridge.world")):
-        mod = sys.modules.get(mod_name)
-        if mod is not None:
-            return mod
-    return None
+    from ..prefs import resolve_extension_module
+
+    return resolve_extension_module("bridge.world")
 
 
 def build_mesher_config(

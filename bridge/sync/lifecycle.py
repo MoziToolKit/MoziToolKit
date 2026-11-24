@@ -19,12 +19,9 @@ logger = logging.getLogger("MoziToolKit.Bridge.Sync.Lifecycle")
 
 def _get_sync_mod():
     """Dynamically retrieves the active bridge.sync module to support extension namespaces and test patches."""
-    root = (__package__ or "MoziToolKit").rsplit(".bridge.", 1)[0]
-    for mod_name in dict.fromkeys((f"{root}.bridge.sync", "MoziToolKit.bridge.sync")):
-        mod = sys.modules.get(mod_name)
-        if mod is not None:
-            return mod
-    return None
+    from ..prefs import resolve_extension_module
+
+    return resolve_extension_module("bridge.sync")
 
 
 class SyncLifecycleMixin:

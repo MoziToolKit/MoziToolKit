@@ -47,16 +47,12 @@ class SaveRegistryManager:
         env_dir = os.environ.get("MOZI_CONFIG_DIR")
         if env_dir:
             base_dir = Path(env_dir)
+            base_dir.mkdir(parents=True, exist_ok=True)
         else:
-            try:
-                if bpy and hasattr(bpy, "utils") and hasattr(bpy.utils, "user_resource"):
-                    base_dir = Path(bpy.utils.user_resource("CONFIG")) / "MoziToolKit"
-                else:
-                    base_dir = Path.home() / ".config" / "blender" / "MoziToolKit"
-            except Exception:
-                base_dir = Path.home() / ".config" / "blender" / "MoziToolKit"
+            from ...bridge.prefs import get_extension_user_dir
 
-        base_dir.mkdir(parents=True, exist_ok=True)
+            base_dir = get_extension_user_dir(legacy_resource="CONFIG")
+
         return base_dir / "save_registry.json"
 
     def _atomic_write_json(self, filepath: Path, data: dict) -> None:

@@ -11,19 +11,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-bl_info = {
-    "name": "MoziToolKit",
-    "author": "Mozi Arasaka",
-    "description": "Minecraft asset processing, live world sync, and smart UV tools",
-    "blender": (5, 0, 0),
-    "version": (2, 0, 0),
-    "location": "UV > Scale UV Faces / Select Transparent Faces, Edge > Select Hard & Sharp Edges, Object / Mesh > Set Image Interpolation to Closest / Clear Custom Normals",
-    "warning": "",
-    "category": "3D View",
-}
-
-import sys
-
 # 0. Early development bootstrap: ensure dev/lib (.so) is mounted on sys.path
 try:
     from .dev import loader

@@ -51,13 +51,13 @@ def _guard_host():
 
 
 def _get_probe_delegate(name: str, default: Any) -> Any:
-    root = (__package__ or "MoziToolKit").rsplit(".utils.", 1)[0]
-    for mod_name in dict.fromkeys((f"{root}.ui.preferences_packs", "MoziToolKit.ui.preferences_packs")):
-        mod = sys.modules.get(mod_name)
-        if mod is not None:
-            val = getattr(mod, name, None)
-            if val is not None:
-                return val
+    from ...bridge.prefs import resolve_extension_module
+
+    mod = resolve_extension_module("ui.preferences_packs")
+    if mod is not None:
+        val = getattr(mod, name, None)
+        if val is not None:
+            return val
     return default
 
 

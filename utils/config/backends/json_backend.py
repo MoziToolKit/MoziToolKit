@@ -44,13 +44,12 @@ class JsonConfigBackend(ConfigBackend):
         env_dir = os.environ.get("MOZI_CONFIG_DIR")
         if env_dir:
             config_dir = Path(env_dir)
+            config_dir.mkdir(parents=True, exist_ok=True)
         else:
-            try:
-                config_dir = Path(bpy.utils.user_resource("CONFIG")) / "MoziToolKit"
-            except Exception:
-                config_dir = Path.home() / ".config" / "blender" / "MoziToolKit"
+            from ....bridge.prefs import get_extension_user_dir
 
-        config_dir.mkdir(parents=True, exist_ok=True)
+            config_dir = get_extension_user_dir(legacy_resource="CONFIG")
+
         return config_dir / "config.json"
 
     def _atomic_write_json(self, filepath: Path, data: dict) -> None:

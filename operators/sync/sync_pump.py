@@ -35,36 +35,34 @@ _delayed_close_callback = None
 _pending_cloud_sync_time = None
 
 
-def _connect_mod_names() -> tuple[str, ...]:
-    root = (__package__ or "MoziToolKit").rsplit(".operators.", 1)[0]
-    return tuple(dict.fromkeys((f"{root}.operators.sync.op_sync_connect", "MoziToolKit.operators.sync.op_sync_connect")))
-
-
 def _get_pump_delegate(name: str, default: Any) -> Any:
-    for mod_name in _connect_mod_names():
-        mod = sys.modules.get(mod_name)
-        if mod is not None:
-            val = getattr(mod, name, None)
-            if val is not None:
-                return val
+    from ...bridge.prefs import resolve_extension_module
+
+    mod = resolve_extension_module("operators.sync.op_sync_connect")
+    if mod is not None:
+        val = getattr(mod, name, None)
+        if val is not None:
+            return val
     return default
 
 
 def _get_pending_cloud_sync_time() -> Optional[float]:
-    for mod_name in _connect_mod_names():
-        mod = sys.modules.get(mod_name)
-        if mod is not None and hasattr(mod, "_pending_cloud_sync_time"):
-            return getattr(mod, "_pending_cloud_sync_time")
+    from ...bridge.prefs import resolve_extension_module
+
+    mod = resolve_extension_module("operators.sync.op_sync_connect")
+    if mod is not None and hasattr(mod, "_pending_cloud_sync_time"):
+        return getattr(mod, "_pending_cloud_sync_time")
     return _pending_cloud_sync_time
 
 
 def _set_pending_cloud_sync_time(val: Optional[float]) -> None:
     global _pending_cloud_sync_time
     _pending_cloud_sync_time = val
-    for mod_name in _connect_mod_names():
-        mod = sys.modules.get(mod_name)
-        if mod is not None:
-            setattr(mod, "_pending_cloud_sync_time", val)
+    from ...bridge.prefs import resolve_extension_module
+
+    mod = resolve_extension_module("operators.sync.op_sync_connect")
+    if mod is not None:
+        setattr(mod, "_pending_cloud_sync_time", val)
 
 
 def is_sync_timer_running() -> bool:

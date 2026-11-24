@@ -131,19 +131,11 @@ def save_prefs_to_json(prefs):
     get_config_manager().sync_from_preferences(prefs)
 
 
-def _detect_addon_idname():
-    pkg = __package__ or ""
-    if pkg.startswith("bl_ext."):
-        parts = pkg.split(".")
-        if len(parts) >= 3:
-            return ".".join(parts[:3])
-    elif "MoziToolKit" in pkg:
-        return "MoziToolKit"
-    return "MoziToolKit"
+from ..bridge.prefs import get_root_package
 
 
 class MOZI_AddonPreferences(bpy.types.AddonPreferences):
-    bl_idname = _detect_addon_idname()
+    bl_idname = get_root_package()
 
     category_tab: EnumProperty(
         name="Category",

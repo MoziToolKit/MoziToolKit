@@ -49,8 +49,8 @@ platforms = [
 
 # Resources required by the extension (files permissions)
 [permissions]
-files = "Read Minecraft packs and write texture atlas files"
-network = "Connect to Live Sync WebSocket & fetch player head skins"
+files = "Read Minecraft packs/saves and write atlas & cache files"
+network = "Connect to local Live Sync WebSocket and fetch player skins"
 
 # Build settings for `blender --command extension build`
 [build]
@@ -67,15 +67,25 @@ paths_exclude_pattern = [
   ".DS_Store",
   ".vscode/",
   ".venv/",
+  ".venv-test/",
   ".VSCodeCounter/",
-  "docs/",
-  "build.py",
-  ".gitignore",
-  ".github/",
   ".pytest_cache/",
+  ".ruff_cache/",
+  ".mypy_cache/",
   ".blender-test-config/",
   ".ci-cache/",
   ".ci-config/",
+  ".github/",
+  ".gitignore",
+  ".gitattributes",
+  ".env",
+  "*.swp",
+  "docs/",
+  "build.py",
   "tools/",
-  "*.md",
+  "README.zh.md",
+  "CHANGELOG.md",
+  "GEMINI.md",
+  "NOTICE.md",
+  "TODO.md",
 ]

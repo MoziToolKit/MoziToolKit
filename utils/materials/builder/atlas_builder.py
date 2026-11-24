@@ -21,15 +21,18 @@ from typing import Any, Dict, Optional
 
 import bpy
 
+from ...compat import (
+    ensure_material_node_tree,
+    set_material_alpha_mode,
+    set_material_displacement_method,
+)
 from .stage_builders import (
     build_atlas_uv_pipeline,
     build_biome_tint_pipeline,
 )
 from .image_utils import (
-    ensure_material_node_tree,
     get_or_create_image,
     _create_frame,
-    set_material_displacement_method,
 )
 from .layout import auto_layout_material
 from .pbr_graph import build_pbr_shading
@@ -332,32 +335,13 @@ def build_atlas_chunk_material(
         sampled.albedo_node.select = True
 
     # Alpha / transparency settings (no transmission in v1).
-    if hasattr(mat, "surface_render_method"):
-        try:
-            mat.surface_render_method = "DITHERED"
-        except Exception:
-            pass
-    elif hasattr(mat, "blend_method"):
-        try:
-            mat.blend_method = "HASHED"
-        except Exception:
-            pass
-
-    if hasattr(mat, "use_transparency_overlap"):
-        try:
-            mat.use_transparency_overlap = True
-        except Exception:
-            pass
-    if hasattr(mat, "use_raytrace_refraction"):
-        try:
-            mat.use_raytrace_refraction = False
-        except Exception:
-            pass
-    if hasattr(mat, "use_screen_refraction"):
-        try:
-            mat.use_screen_refraction = False
-        except Exception:
-            pass
+    set_material_alpha_mode(
+        mat,
+        dithered=True,
+        transparency_overlap=True,
+        raytrace_refraction=False,
+        screen_refraction=False,
+    )
 
     register_archetype_material(mat, template_key)
     return mat

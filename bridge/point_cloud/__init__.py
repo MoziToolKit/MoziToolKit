@@ -63,7 +63,7 @@ def inject_voxel_point_cloud(
     else:
         obj = None
         target_data = cloud_obj_or_mesh
-        if hasattr(target_data, "points") and hasattr(target_data, "resize"):
+        if hasattr(target_data, "points") and not hasattr(target_data, "vertices"):
             is_pc = True
 
     pt_count = len(cloud_data)
@@ -72,6 +72,11 @@ def inject_voxel_point_cloud(
             target_data.clear_geometry()
         elif hasattr(target_data, "resize"):
             target_data.resize(0)
+        elif is_pc and len(getattr(target_data, "points", [])) > 0:
+            logger.warning(
+                "Native PointCloud.resize() requires Blender 5.1+; use a Mesh datablock on this Blender version."
+            )
+            return False
         return True
 
     # 1. Allocate or reuse points
@@ -84,6 +89,11 @@ def inject_voxel_point_cloud(
 
     if is_pc or hasattr(target_data, "resize"):
         if current_count != pt_count:
+            if not hasattr(target_data, "resize"):
+                logger.warning(
+                    "Native PointCloud.resize() requires Blender 5.1+; use a Mesh datablock on this Blender version."
+                )
+                return False
             target_data.resize(pt_count)
             reallocated = True
     elif hasattr(target_data, "clear_geometry") and hasattr(target_data.vertices, "add"):
@@ -120,7 +130,17 @@ def inject_voxel_point_cloud(
             injected = False
 
     # 4. Standard Python API Fallback
+    # Re-resolve attribute handles after all attributes.new()/remove() calls:
+    # in Blender 4.2/4.5, CustomData layer reallocation invalidates earlier Attribute RNA refs.
     if not injected:
+        if hasattr(target_data, "attributes") and hasattr(target_data.attributes, "get"):
+            attrs = target_data.attributes
+            attr_x = attrs.get(ATTR_BLOCK_X)
+            attr_y = attrs.get(ATTR_BLOCK_Y)
+            attr_z = attrs.get(ATTR_BLOCK_Z)
+            attr_state_idx = attrs.get(ATTR_BLOCK_STATE_IDX)
+            attr_biome_idx = attrs.get(ATTR_BIOME_IDX)
+            attr_entity_idx = attrs.get(ATTR_BLOCK_ENTITY_IDX) if has_entities else None
         inject_point_cloud_standard(
             target_data,
             cloud_data,

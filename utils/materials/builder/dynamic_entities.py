@@ -12,10 +12,8 @@ logger = logging.getLogger("MoziToolKit.Materials.DynamicEntities")
 
 import bpy
 
-from .image_utils import (
-    ensure_material_node_tree,
-    get_or_create_image_from_rgba,
-)
+from ...compat import ensure_material_node_tree, set_material_alpha_mode
+from .image_utils import get_or_create_image_from_rgba
 
 DEFAULT_DYNAMIC_ENTITIES_CHUNK_ID = 0xFFF0  # 65520
 DYNAMIC_CHUNK_START = 0xFFF0
@@ -109,16 +107,7 @@ def build_dynamic_entities_material(
     mat["mtk_pbr_layout"] = "mtk_dynamic_entities_v1"
 
     # Forward-compatible transparency handling (Blender 4.2+ / 5.x)
-    if hasattr(mat, "surface_render_method"):
-        try:
-            mat.surface_render_method = "DITHERED"
-        except Exception:
-            pass
-    elif hasattr(mat, "blend_method"):
-        try:
-            mat.blend_method = "HASHED"
-        except Exception:
-            pass
+    set_material_alpha_mode(mat, dithered=True)
 
     tree = ensure_material_node_tree(mat)
     if tree is None:

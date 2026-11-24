@@ -194,19 +194,18 @@ class TestDnaReadWriteConsistency(unittest.TestCase):
             pos = np.linspace(-10.0, 10.0, pt_count * 3, dtype=np.float32)
             mesh.vertices.foreach_set("co", pos)
 
-            # Attributes
+            # Attributes (write immediately or re-fetch after creation: Blender 4.2/4.5 reallocates CustomData layers)
             ax = mesh.attributes.new(name="mtk_block_x", type="INT", domain="POINT")
-            ay = mesh.attributes.new(name="mtk_block_y", type="INT", domain="POINT")
-            az = mesh.attributes.new(name="mtk_block_z", type="INT", domain="POINT")
-            ast = mesh.attributes.new(name="mtk_state_idx", type="INT", domain="POINT")
-            abm = mesh.attributes.new(name="mtk_biome_idx", type="INT", domain="POINT")
-            aent = mesh.attributes.new(name="mtk_entity_idx", type="INT", domain="POINT")
-
             ax.data.foreach_set("value", np.arange(pt_count, dtype=np.int32))
+            ay = mesh.attributes.new(name="mtk_block_y", type="INT", domain="POINT")
             ay.data.foreach_set("value", np.arange(pt_count, dtype=np.int32) * 2)
+            az = mesh.attributes.new(name="mtk_block_z", type="INT", domain="POINT")
             az.data.foreach_set("value", np.arange(pt_count, dtype=np.int32) * 3)
+            ast = mesh.attributes.new(name="mtk_state_idx", type="INT", domain="POINT")
             ast.data.foreach_set("value", np.arange(pt_count, dtype=np.int32) % 3)
+            abm = mesh.attributes.new(name="mtk_biome_idx", type="INT", domain="POINT")
             abm.data.foreach_set("value", np.arange(pt_count, dtype=np.int32) % 2)
+            aent = mesh.attributes.new(name="mtk_entity_idx", type="INT", domain="POINT")
             aent.data.foreach_set("value", np.full(pt_count, -1, dtype=np.int32))
 
             mesh["mtk_palette"] = ["minecraft:stone", "minecraft:dirt", "minecraft:glass"]

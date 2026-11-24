@@ -12,7 +12,8 @@ from typing import Any, Optional
 
 import bpy
 
-from .image_utils import get_or_create_image, set_material_displacement_method
+from ...compat import set_material_alpha_mode, set_material_displacement_method
+from .image_utils import get_or_create_image
 
 PBR_LAYOUT_VERSION = "mtk_packed_v1"
 
@@ -331,32 +332,13 @@ def clone_atlas_chunk_material(
             albedo_node.select = True
 
         # Render method & transparency properties
-        if hasattr(cloned, "surface_render_method"):
-            try:
-                cloned.surface_render_method = "DITHERED"
-            except Exception:
-                pass
-        elif hasattr(cloned, "blend_method"):
-            try:
-                cloned.blend_method = "HASHED"
-            except Exception:
-                pass
-
-        if hasattr(cloned, "use_transparency_overlap"):
-            try:
-                cloned.use_transparency_overlap = True
-            except Exception:
-                pass
-        if hasattr(cloned, "use_raytrace_refraction"):
-            try:
-                cloned.use_raytrace_refraction = False
-            except Exception:
-                pass
-        if hasattr(cloned, "use_screen_refraction"):
-            try:
-                cloned.use_screen_refraction = False
-            except Exception:
-                pass
+        set_material_alpha_mode(
+            cloned,
+            dithered=True,
+            transparency_overlap=True,
+            raytrace_refraction=False,
+            screen_refraction=False,
+        )
 
         return cloned
     except Exception:

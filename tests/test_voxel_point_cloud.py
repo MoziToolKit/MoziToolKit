@@ -483,8 +483,10 @@ class TestVoxelPointCloudBridge:
         finally:
             bpy.data.meshes.remove(b_mesh, do_unlink=True)
 
-        # 2. Native PointCloud target (injection + DNA & standard extraction roundtrip)
-        if hasattr(bpy.data, "pointclouds"):
+        # 2. Native PointCloud target (injection + DNA & standard extraction roundtrip; PointCloud.resize requires 5.1+)
+        from MoziToolKit.utils.compat import supports_pointcloud_resize
+
+        if hasattr(bpy.data, "pointclouds") and supports_pointcloud_resize():
             import numpy as np
             from MoziToolKit.bridge.dna import is_dna_enabled
             from MoziToolKit.bridge.point_cloud import (
@@ -534,6 +536,15 @@ class TestVoxelPointCloudBridge:
                 extracted_pc = extract_voxel_point_cloud(pc_obj)
                 assert extracted_pc is not None
                 assert len(extracted_pc) == 2
+            finally:
+                bpy.data.objects.remove(pc_obj, do_unlink=True)
+                bpy.data.pointclouds.remove(b_pc, do_unlink=True)
+        elif hasattr(bpy.data, "pointclouds"):
+            # On Blender 4.2-5.0 without PointCloud.resize(), injecting into a PointCloud fails gracefully
+            b_pc = bpy.data.pointclouds.new("Test_DirectPtr_PC_Unsupported")
+            pc_obj = bpy.data.objects.new("Test_DirectPtr_PCObj_Unsupported", b_pc)
+            try:
+                assert inject_voxel_point_cloud(pc_obj, cloud) is False
             finally:
                 bpy.data.objects.remove(pc_obj, do_unlink=True)
                 bpy.data.pointclouds.remove(b_pc, do_unlink=True)

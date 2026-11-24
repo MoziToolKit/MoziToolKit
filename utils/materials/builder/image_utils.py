@@ -14,30 +14,10 @@ import bpy
 import numpy as np
 
 
-def set_material_displacement_method(mat: Any, method: str = "BOTH") -> None:
-    """Configure material displacement method for Cycles and EEVEE across Blender versions."""
-    if not mat:
-        return
-    if hasattr(mat, "displacement_method"):
-        try:
-            mat.displacement_method = method
-        except Exception:
-            pass
-    elif hasattr(mat, "cycles") and hasattr(mat.cycles, "displacement_method"):
-        try:
-            mat.cycles.displacement_method = method
-        except Exception:
-            pass
-
-
-def ensure_material_node_tree(mat: Any) -> Any:
-    """
-    Ensure the material has an active node tree across Blender versions
-    without accessing deprecated 'Material.use_nodes' in Blender 5.x/6.0+.
-    """
-    if mat is None:
-        return None
-    return getattr(mat, "node_tree", None)
+from ...compat import (
+    ensure_material_node_tree,
+    set_material_displacement_method,
+)
 
 
 def _is_valid_image(img: Any, expected_w: Optional[int] = None, expected_h: Optional[int] = None) -> bool:

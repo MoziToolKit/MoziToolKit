@@ -44,6 +44,7 @@ def inspect_minecraft_save(path: str | Path) -> Dict[str, Any]:
         "hardcore": meta.hardcore,
         "game_type": meta.game_type,
         "dimensions": meta.dimensions,
+        "is_pre_flattening": meta.is_pre_flattening,
     }
 
 
@@ -191,6 +192,7 @@ def load_and_mesh_minecraft_save(
         "hardcore": level_meta.hardcore,
         "game_type": level_meta.game_type,
         "dimensions": level_meta.dimensions,
+        "is_pre_flattening": level_meta.is_pre_flattening,
     }
 
     return mesh_data, meta_dict, storage, elapsed_ms

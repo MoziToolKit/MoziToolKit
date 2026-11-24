@@ -275,6 +275,7 @@ def apply_imported_save_to_blender(
         "level_name": meta["level_name"],
         "version_name": meta["version_name"],
         "data_version": meta["data_version"],
+        "is_pre_flattening": bool(meta.get("is_pre_flattening", int(meta.get("data_version", 0)) < 1451)),
         "vertex_count": len(b_mesh.vertices) if b_mesh and hasattr(b_mesh, "vertices") else 0,
         "polygon_count": len(b_mesh.polygons) if b_mesh and hasattr(b_mesh, "polygons") else 0,
         "voxel_count": cloud_count,

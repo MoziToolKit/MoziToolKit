@@ -274,6 +274,7 @@ def test_save_bridge_skin_cache_dir_propagation(tmp_path, monkeypatch):
         hardcore=False,
         game_type=0,
         dimensions=["overworld"],
+        is_pre_flattening=False,
     )
 
     def fake_load(*args, **kwargs):

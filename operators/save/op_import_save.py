@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional, Tuple
 
 import bpy
 from bpy.props import BoolProperty, EnumProperty, IntVectorProperty, StringProperty
@@ -133,6 +133,49 @@ def _on_use_yefira_selection_update(self, context):
         apply_yefira_selection_to_op(self, context)
 
 
+_SAVE_INSPECT_CACHE: Optional[Tuple[str, int, Dict[str, Any]]] = None
+
+
+def _inspect_save_cached(world_dir: Path) -> Optional[Dict[str, Any]]:
+    """Inspects level.dat metadata with mtime caching so Operator.draw() never re-reads disk per redraw."""
+    global _SAVE_INSPECT_CACHE
+    level_dat = world_dir / "level.dat"
+    if not level_dat.is_file():
+        return None
+    try:
+        mtime_ns = level_dat.stat().st_mtime_ns
+        key_path = str(world_dir)
+        if (
+            _SAVE_INSPECT_CACHE is not None
+            and _SAVE_INSPECT_CACHE[0] == key_path
+            and _SAVE_INSPECT_CACHE[1] == mtime_ns
+        ):
+            return _SAVE_INSPECT_CACHE[2]
+        meta = inspect_minecraft_save(world_dir)
+        _SAVE_INSPECT_CACHE = (key_path, mtime_ns, meta)
+        return meta
+    except Exception:
+        return None
+
+
+def _report_import_result(op, dimension: str, stats: Dict[str, Any]) -> None:
+    from ...i18n import tr
+
+    msg = (
+        f"Imported '{stats['level_name']}' ({dimension}): "
+        f"{stats['polygon_count']:,} faces, {stats['voxel_count']:,} voxels "
+        f"in {format_timing_parts(stats.get('elapsed_ms', 0.0), stats.get('host_ms', 0.0))}"
+    )
+    if stats.get("is_pre_flattening"):
+        warn_text = tr(
+            "Pre-1.13 save: please upgrade once in a newer Minecraft client (1.13+), otherwise some connected blocks may look incomplete."
+        )
+        logger.warning("%s | %s", msg, warn_text)
+        op.report({"WARNING"}, f"{msg} | {warn_text}")
+    else:
+        op.report({"INFO"}, msg)
+
+
 class MOZI_OT_import_minecraft_save(bpy.types.Operator, ImportHelper, CommonMeshingOptionsMixin):
     """Import Minecraft Java Edition world save folder (.mca / level.dat) within a bounded 3D selection"""
 
@@ -217,6 +260,23 @@ class MOZI_OT_import_minecraft_save(bpy.types.Operator, ImportHelper, CommonMesh
         from ...i18n import tr
         layout = self.layout
 
+        world_dir = resolve_operator_world_dir(self, context)
+        save_meta = _inspect_save_cached(world_dir) if world_dir else None
+        if save_meta and save_meta.get("is_pre_flattening"):
+            box_warn = layout.box()
+            box_warn.alert = True
+            ver = save_meta.get("version_name") or "Unknown"
+            box_warn.label(
+                text=f"{tr('Pre-1.13 Save Detected')} ({ver})",
+                icon="ERROR",
+            )
+            box_warn.label(
+                text=tr("Upgrade once in Minecraft 1.13+ client for best results"),
+            )
+            box_warn.label(
+                text=tr("Otherwise double chests, stair corners, and fences may disconnect"),
+            )
+
         # 1. Dimension selection
         box_dim = layout.box()
         box_dim.label(text=tr("Dimension"), icon="WORLD")
@@ -230,7 +290,6 @@ class MOZI_OT_import_minecraft_save(bpy.types.Operator, ImportHelper, CommonMesh
         box_coords.prop(self, "use_yefira_selection", text=tr("Auto-fill from Yefira Selection"))
 
         if self.use_yefira_selection:
-            world_dir = resolve_operator_world_dir(self, context)
             selection = load_yefira_selection(world_dir) if world_dir else None
             if selection is not None:
                 box_coords.label(
@@ -348,12 +407,7 @@ class MOZI_OT_import_minecraft_save(bpy.types.Operator, ImportHelper, CommonMesh
                         progress_callback=reporter.on_progress,
                     )
 
-                self.report(
-                    {"INFO"},
-                    f"Imported '{stats['level_name']}' ({self.dimension}): "
-                    f"{stats['polygon_count']:,} faces, {stats['voxel_count']:,} voxels "
-                    f"in {format_timing_parts(stats.get('elapsed_ms', 0.0), stats.get('host_ms', 0.0))}",
-                )
+                _report_import_result(self, self.dimension, stats)
                 return {"FINISHED"}
             except Exception as e:
                 logger.exception("Failed importing Minecraft world save")
@@ -425,12 +479,7 @@ class MOZI_OT_import_minecraft_save(bpy.types.Operator, ImportHelper, CommonMesh
                 atlas=mesh_context.get("atlas"),
                 models=mesh_context.get("model_db"),
             )
-            self.report(
-                {"INFO"},
-                f"Imported '{stats['level_name']}' ({self.dimension}): "
-                f"{stats['polygon_count']:,} faces, {stats['voxel_count']:,} voxels "
-                f"in {format_timing_parts(stats.get('elapsed_ms', 0.0), stats.get('host_ms', 0.0))}",
-            )
+            _report_import_result(self, self.dimension, stats)
 
         reporter = BlenderProgressReporter(context=context, total=100, title=f"Import {self.dimension}")
         self._runner = ModalTaskRunner(

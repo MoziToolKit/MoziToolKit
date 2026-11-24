@@ -17,10 +17,10 @@ on:
         required: false
         default: ''
       libmtk_release:
-        description: 'libmozitoolkit release to fetch wheels from (latest stable, tag e.g. v0.1.0, or ci-latest). "latest" falls back to ci-latest with a warning while no stable release exists.'
+        description: 'Pinned libmozitoolkit release tag (defaults to v<blender_manifest.toml version>, e.g. v2.0.0). Never falls back to ci-latest.'
         type: string
         required: false
-        default: 'latest'
+        default: ''
 
 env:
   # Force UTF-8 for all Python processes (Windows-safe if packaging ever moves).
@@ -85,11 +85,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          RELEASE_REF="${{ inputs.libmtk_release || 'latest' }}"
-          echo "Fetching 6 platform wheels from libmozitoolkit release: $RELEASE_REF"
-          # `latest` falls back to `ci-latest` with a warning while libmozitoolkit
-          # has no stable release yet (see tools/fetch_wheels.py --no-fallback).
-          python3 tools/fetch_wheels.py --release "$RELEASE_REF" --all --clean --out wheels/
+          MANIFEST_VERSION="$(python3 -c 'import tomllib; print(tomllib.load(open("blender_manifest.toml", "rb"))["version"])')"
+          RELEASE_REF="${{ inputs.libmtk_release }}"
+          if [ -z "$RELEASE_REF" ]; then
+            RELEASE_REF="v${MANIFEST_VERSION}"
+          fi
+          echo "Fetching 6 platform wheels from pinned libmozitoolkit release: $RELEASE_REF (no-fallback)"
+          python3 tools/fetch_wheels.py --release "$RELEASE_REF" --no-fallback --all --clean --out wheels/
 
       - name: Build & Package Extension (6 platforms)
         run: |

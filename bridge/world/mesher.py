@@ -14,6 +14,11 @@ from ..assets import (
     get_cache_timestamp,
     get_configured_ctm_solver,
 )
+from ..config_validation import (
+    sanitize_bool_property,
+    sanitize_unknown_block_strategy,
+    sanitize_weld_mode,
+)
 from ..engine import require_libmtk
 from .assets import (
     get_shared_face_culler,
@@ -58,18 +63,27 @@ def build_mesher_config(
     """Build a native MesherConfig from canonical meshing parameters."""
     from ..network import is_online_access_allowed
 
-    net_allowed = is_online_access_allowed() if allow_network is None else bool(allow_network)
+    net_allowed = (
+        is_online_access_allowed()
+        if allow_network is None
+        else sanitize_bool_property("allow_network", allow_network, True, log=logger)
+    )
+    safe_weld_mode = sanitize_weld_mode(weld_mode, log=logger)
     config_kwargs: Dict[str, Any] = {
-        "enable_ao": enable_ao,
-        "mesh_fluids": mesh_fluids,
-        "z_up_coordinates": z_up,
-        "origin_centered": origin_centered,
-        "weld_mode": weld_mode,
+        "enable_ao": sanitize_bool_property("enable_ao", enable_ao, True, log=logger),
+        "mesh_fluids": sanitize_bool_property("mesh_fluids", mesh_fluids, True, log=logger),
+        "z_up_coordinates": sanitize_bool_property("z_up_coordinates", z_up, True, log=logger),
+        "origin_centered": sanitize_bool_property("origin_centered", origin_centered, True, log=logger),
+        "weld_mode": safe_weld_mode,
         "num_threads": num_threads,
         "atlas": atlas,
         "biome_resolver": biome_resolver,
-        "enable_animated_textures": enable_animated_textures,
-        "smooth_biome_blend": smooth_biome_blend,
+        "enable_animated_textures": sanitize_bool_property(
+            "enable_animated_textures", enable_animated_textures, True, log=logger
+        ),
+        "smooth_biome_blend": sanitize_bool_property(
+            "smooth_biome_blend", smooth_biome_blend, True, log=logger
+        ),
         "allow_network": net_allowed,
     }
     if ctm_solver is not None:
@@ -79,7 +93,9 @@ def build_mesher_config(
     if custom_aliases is not None:
         config_kwargs["custom_aliases"] = custom_aliases
     if unknown_block_strategy is not None:
-        config_kwargs["unknown_block_strategy"] = unknown_block_strategy
+        config_kwargs["unknown_block_strategy"] = sanitize_unknown_block_strategy(
+            unknown_block_strategy, log=logger
+        )
     return mtk.MesherConfig(**config_kwargs)
 
 
@@ -152,19 +168,25 @@ def mesh_voxel_storage(
     anim_tex_enabled = enable_animated_textures
     if anim_tex_enabled is None:
         raw_val = getattr(prefs, "enable_animated_textures", True) if (resolve_prefs and prefs) else True
-        anim_tex_enabled = raw_val if isinstance(raw_val, bool) else True
+        anim_tex_enabled = sanitize_bool_property("enable_animated_textures", raw_val, True, log=logger)
     else:
-        anim_tex_enabled = bool(anim_tex_enabled)
+        anim_tex_enabled = sanitize_bool_property(
+            "enable_animated_textures", anim_tex_enabled, True, log=logger
+        )
 
     smooth_blend = smooth_biome_blend
     if smooth_blend is None:
         raw_val = getattr(prefs, "smooth_biome_blend", True) if (resolve_prefs and prefs) else True
-        smooth_blend = raw_val if isinstance(raw_val, bool) else True
+        smooth_blend = sanitize_bool_property("smooth_biome_blend", raw_val, True, log=logger)
     else:
-        smooth_blend = bool(smooth_blend)
+        smooth_blend = sanitize_bool_property("smooth_biome_blend", smooth_blend, True, log=logger)
 
     if unknown_block_strategy is None and resolve_prefs and prefs is not None:
         unknown_block_strategy = getattr(prefs, "unknown_block_strategy", "FALLBACK_CUBE")
+    if unknown_block_strategy is not None:
+        unknown_block_strategy = sanitize_unknown_block_strategy(
+            unknown_block_strategy, log=logger
+        )
 
     if config is None:
         config = build_mesher_config(

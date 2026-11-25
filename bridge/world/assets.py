@@ -18,6 +18,10 @@ from ..assets import (
     load_biome_resolver_from_cache,
     load_colormaps_from_cache,
 )
+from ..config_validation import (
+    sanitize_bool_property,
+    sanitize_unknown_block_strategy,
+)
 from ..engine import get_libmtk
 
 logger = logging.getLogger("MoziToolKit.Bridge.World.Assets")
@@ -162,9 +166,11 @@ def prepare_world_mesh_context(prefs=None, enable_animated_textures: Optional[bo
     num_threads = raw_threads if isinstance(raw_threads, int) and not isinstance(raw_threads, bool) and raw_threads > 0 else None
     if enable_animated_textures is None:
         raw_anim = getattr(prefs, "enable_animated_textures", True) if prefs is not None else True
-        anim_enabled = raw_anim if isinstance(raw_anim, bool) else True
+        anim_enabled = sanitize_bool_property("enable_animated_textures", raw_anim, True, log=logger)
     else:
-        anim_enabled = bool(enable_animated_textures)
+        anim_enabled = sanitize_bool_property(
+            "enable_animated_textures", enable_animated_textures, True, log=logger
+        )
     skin_cache_dir = None
     try:
         from ..assets import get_cache_dir
@@ -173,10 +179,11 @@ def prepare_world_mesh_context(prefs=None, enable_animated_textures: Optional[bo
         skin_cache_dir = str(sc)
     except Exception as e:
         logger.debug("Failed configuring skin cache dir in prepare_world_mesh_context: %s", e)
-    unknown_block_strategy = (
+    unknown_block_strategy = sanitize_unknown_block_strategy(
         getattr(prefs, "unknown_block_strategy", "FALLBACK_CUBE")
         if prefs is not None
-        else "FALLBACK_CUBE"
+        else "FALLBACK_CUBE",
+        log=logger,
     )
     return {
         "model_db": model_db,

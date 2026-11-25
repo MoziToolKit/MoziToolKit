@@ -15,6 +15,7 @@ from ...utils.assets import (
     ensure_pipeline_assets_ready_sync,
     prepare_asset_context,
 )
+from ...bridge.config_validation import sanitize_bool_property, sanitize_weld_mode
 from ...bridge.world import prepare_world_mesh_context, scan_unknown_blocks
 from ...utils.materials.builder.atlas_refresh import reload_atlas_images
 
@@ -28,59 +29,71 @@ def resolve_rebuild_flags(
     prefs: Any,
 ) -> Dict[str, Any]:
     """Resolves operational flags from operator properties, container custom props, or user preferences."""
-    def _bool_opt(val: Any) -> bool:
-        if hasattr(val, "default"):
-            val = val.default
-        return bool(val) if isinstance(val, bool) else True
-
-    enable_ao = _bool_opt(getattr(operator, "enable_ao", True))
-    mesh_fluids = _bool_opt(getattr(operator, "mesh_fluids", True))
-    raw_weld = getattr(operator, "weld_mode", "manifold")
-    if hasattr(raw_weld, "default"):
-        raw_weld = raw_weld.default
-    weld_mode = (
-        raw_weld
-        if isinstance(raw_weld, str) and raw_weld in ("manifold", "per_vertex", "none")
-        else "manifold"
-    )
+    enable_ao = sanitize_bool_property("enable_ao", getattr(operator, "enable_ao", True), True, log=logger)
+    mesh_fluids = sanitize_bool_property("mesh_fluids", getattr(operator, "mesh_fluids", True), True, log=logger)
+    weld_mode = sanitize_weld_mode(getattr(operator, "weld_mode", "manifold"), name="weld_mode", log=logger)
     weld_explicitly_set = bool(
         hasattr(operator, "properties")
         and hasattr(operator.properties, "is_property_set")
         and operator.properties.is_property_set("weld_mode")
     )
-    origin_centered = _bool_opt(getattr(operator, "origin_centered", True))
+    origin_centered = sanitize_bool_property(
+        "origin_centered", getattr(operator, "origin_centered", True), True, log=logger
+    )
 
     if root_container is not None and hasattr(root_container, "get"):
         if root_container.get("mtk_enable_ao") is not None:
-            enable_ao = bool(root_container.get("mtk_enable_ao"))
+            enable_ao = sanitize_bool_property(
+                "mtk_enable_ao", root_container.get("mtk_enable_ao"), True, log=logger
+            )
         if root_container.get("mtk_mesh_fluids") is not None:
-            mesh_fluids = bool(root_container.get("mtk_mesh_fluids"))
+            mesh_fluids = sanitize_bool_property(
+                "mtk_mesh_fluids", root_container.get("mtk_mesh_fluids"), True, log=logger
+            )
         if not weld_explicitly_set and root_container.get("mtk_weld_mode") is not None:
-            cand = str(root_container.get("mtk_weld_mode")).strip().lower()
-            if cand in ("manifold", "per_vertex", "none"):
-                weld_mode = cand
+            weld_mode = sanitize_weld_mode(
+                root_container.get("mtk_weld_mode"), name="mtk_weld_mode", log=logger
+            )
         if root_container.get("mtk_origin_centered") is not None:
-            origin_centered = bool(root_container.get("mtk_origin_centered"))
+            origin_centered = sanitize_bool_property(
+                "mtk_origin_centered", root_container.get("mtk_origin_centered"), True, log=logger
+            )
         elif root_container.get("mtk:origin_centered") is not None:
-            origin_centered = bool(root_container.get("mtk:origin_centered"))
+            origin_centered = sanitize_bool_property(
+                "mtk:origin_centered", root_container.get("mtk:origin_centered"), True, log=logger
+            )
 
     anim_tex_enabled = None
     if root_container is not None:
         props = getattr(root_container, "mozi_save", None)
         if props and hasattr(props, "enable_animated_textures"):
-            anim_tex_enabled = bool(props.enable_animated_textures)
+            anim_tex_enabled = sanitize_bool_property(
+                "enable_animated_textures", props.enable_animated_textures, True, log=logger
+            )
         elif hasattr(root_container, "get") and root_container.get("mtk_enable_animated_textures") is not None:
-            anim_tex_enabled = bool(root_container.get("mtk_enable_animated_textures"))
+            anim_tex_enabled = sanitize_bool_property(
+                "mtk_enable_animated_textures",
+                root_container.get("mtk_enable_animated_textures"),
+                True,
+                log=logger,
+            )
     if anim_tex_enabled is None and world_mesh_obj is not None:
         props = getattr(world_mesh_obj, "mozi_save", None)
         if props and hasattr(props, "enable_animated_textures"):
-            anim_tex_enabled = bool(props.enable_animated_textures)
+            anim_tex_enabled = sanitize_bool_property(
+                "enable_animated_textures", props.enable_animated_textures, True, log=logger
+            )
         elif hasattr(world_mesh_obj, "get") and world_mesh_obj.get("mtk_enable_animated_textures") is not None:
-            anim_tex_enabled = bool(world_mesh_obj.get("mtk_enable_animated_textures"))
+            anim_tex_enabled = sanitize_bool_property(
+                "mtk_enable_animated_textures",
+                world_mesh_obj.get("mtk_enable_animated_textures"),
+                True,
+                log=logger,
+            )
 
     if anim_tex_enabled is None:
         raw_anim = getattr(prefs, "enable_animated_textures", True) if prefs is not None else True
-        anim_tex_enabled = raw_anim if isinstance(raw_anim, bool) else True
+        anim_tex_enabled = sanitize_bool_property("enable_animated_textures", raw_anim, True, log=logger)
 
     return {
         "enable_ao": enable_ao,

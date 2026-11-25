@@ -118,25 +118,62 @@ class MOZI_OT_refresh_save_mesh(bpy.types.Operator):
 
         props = get_save_properties(target)
         if props:
-            dimension = str(props.dimension)
-            min_block = tuple(props.min_coord)
-            max_block = tuple(props.max_coord)
-            enable_ao = bool(props.enable_ao)
-            mesh_fluids = bool(props.mesh_fluids)
-            weld_mode = str(props.weld_mode)
-            origin_centered = bool(props.origin_centered)
-            enable_ctm = bool(props.enable_ctm)
-            enable_animated_textures = bool(props.enable_animated_textures)
+            from ...bridge.config_validation import (
+                sanitize_bool_property,
+                sanitize_dimension,
+                sanitize_int_vec3_property,
+                sanitize_weld_mode,
+            )
+
+            dimension = sanitize_dimension(props.dimension, name="dimension", log=logger)
+            min_block = sanitize_int_vec3_property("min_coord", props.min_coord, (-64, -64, -64), log=logger)
+            max_block = sanitize_int_vec3_property("max_coord", props.max_coord, (64, 320, 64), log=logger)
+            enable_ao = sanitize_bool_property("enable_ao", props.enable_ao, True, log=logger)
+            mesh_fluids = sanitize_bool_property("mesh_fluids", props.mesh_fluids, True, log=logger)
+            weld_mode = sanitize_weld_mode(props.weld_mode, name="weld_mode", log=logger)
+            origin_centered = sanitize_bool_property("origin_centered", props.origin_centered, True, log=logger)
+            enable_ctm = sanitize_bool_property("enable_ctm", props.enable_ctm, True, log=logger)
+            enable_animated_textures = sanitize_bool_property(
+                "enable_animated_textures", props.enable_animated_textures, True, log=logger
+            )
         else:
-            dimension = str(target.get("mtk_dimension", "overworld"))
-            min_block = tuple(target.get("mtk_min_coord", (-64, -64, -64)))
-            max_block = tuple(target.get("mtk_max_coord", (64, 320, 64)))
-            enable_ao = bool(target.get("mtk_enable_ao", True))
-            mesh_fluids = bool(target.get("mtk_mesh_fluids", True))
-            weld_mode = str(target.get("mtk_weld_mode", "manifold"))
-            origin_centered = bool(target.get("mtk_origin_centered", True))
-            enable_ctm = bool(target.get("mtk_enable_ctm", True))
-            enable_animated_textures = bool(target.get("mtk_enable_animated_textures", True))
+            from ...bridge.config_validation import (
+                sanitize_bool_property,
+                sanitize_dimension,
+                sanitize_int_vec3_property,
+                sanitize_weld_mode,
+            )
+
+            dimension = sanitize_dimension(
+                target.get("mtk_dimension", "overworld"), name="mtk_dimension", log=logger
+            )
+            min_block = sanitize_int_vec3_property(
+                "mtk_min_coord", target.get("mtk_min_coord", (-64, -64, -64)), (-64, -64, -64), log=logger
+            )
+            max_block = sanitize_int_vec3_property(
+                "mtk_max_coord", target.get("mtk_max_coord", (64, 320, 64)), (64, 320, 64), log=logger
+            )
+            enable_ao = sanitize_bool_property(
+                "mtk_enable_ao", target.get("mtk_enable_ao", True), True, log=logger
+            )
+            mesh_fluids = sanitize_bool_property(
+                "mtk_mesh_fluids", target.get("mtk_mesh_fluids", True), True, log=logger
+            )
+            weld_mode = sanitize_weld_mode(
+                target.get("mtk_weld_mode", "manifold"), name="mtk_weld_mode", log=logger
+            )
+            origin_centered = sanitize_bool_property(
+                "mtk_origin_centered", target.get("mtk_origin_centered", True), True, log=logger
+            )
+            enable_ctm = sanitize_bool_property(
+                "mtk_enable_ctm", target.get("mtk_enable_ctm", True), True, log=logger
+            )
+            enable_animated_textures = sanitize_bool_property(
+                "mtk_enable_animated_textures",
+                target.get("mtk_enable_animated_textures", True),
+                True,
+                log=logger,
+            )
         level_name = str(target.get("mtk_world_name", "Minecraft World"))
 
         # Asset readiness gate. All bpy-touching work stays on this main thread;

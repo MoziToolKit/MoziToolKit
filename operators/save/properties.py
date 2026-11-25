@@ -17,6 +17,12 @@ from bpy.props import (
     PointerProperty,
 )
 
+from ...bridge.config_validation import (
+    sanitize_bool_property,
+    sanitize_dimension,
+    sanitize_int_vec3_property,
+    sanitize_weld_mode,
+)
 from .utils import resolve_save_container
 
 logger = logging.getLogger("MoziToolKit.Save.Properties")
@@ -154,38 +160,48 @@ def sync_save_properties_from_object(props: Any, obj: Any) -> None:
     props.suppress_dirty = True
     try:
         dim = obj.get("mtk_dimension")
-        if dim:
-            dim_str = str(dim).strip().lower()
-            if dim_str in ("overworld", "the_nether", "the_end"):
-                props.dimension = dim_str
-            elif "nether" in dim_str:
-                props.dimension = "the_nether"
-            elif "end" in dim_str:
-                props.dimension = "the_end"
-            else:
-                props.dimension = "overworld"
+        if dim is not None:
+            props.dimension = sanitize_dimension(dim, name="mtk_dimension", log=logger)
 
         min_c = obj.get("mtk_min_coord")
-        if min_c is not None and len(min_c) == 3:
-            props.min_coord = tuple(int(x) for x in min_c)
+        if min_c is not None:
+            props.min_coord = sanitize_int_vec3_property(
+                "mtk_min_coord", min_c, (-64, -64, -64), log=logger
+            )
 
         max_c = obj.get("mtk_max_coord")
-        if max_c is not None and len(max_c) == 3:
-            props.max_coord = tuple(int(x) for x in max_c)
+        if max_c is not None:
+            props.max_coord = sanitize_int_vec3_property(
+                "mtk_max_coord", max_c, (64, 320, 64), log=logger
+            )
 
         if obj.get("mtk_enable_ao") is not None:
-            props.enable_ao = bool(obj.get("mtk_enable_ao"))
+            props.enable_ao = sanitize_bool_property(
+                "mtk_enable_ao", obj.get("mtk_enable_ao"), True, log=logger
+            )
         if obj.get("mtk_mesh_fluids") is not None:
-            props.mesh_fluids = bool(obj.get("mtk_mesh_fluids"))
+            props.mesh_fluids = sanitize_bool_property(
+                "mtk_mesh_fluids", obj.get("mtk_mesh_fluids"), True, log=logger
+            )
         if obj.get("mtk_weld_mode") is not None:
-            wm = str(obj.get("mtk_weld_mode")).strip().lower()
-            props.weld_mode = wm if wm in ("manifold", "per_vertex", "none") else "manifold"
+            props.weld_mode = sanitize_weld_mode(
+                obj.get("mtk_weld_mode"), name="mtk_weld_mode", log=logger
+            )
         if obj.get("mtk_origin_centered") is not None:
-            props.origin_centered = bool(obj.get("mtk_origin_centered"))
+            props.origin_centered = sanitize_bool_property(
+                "mtk_origin_centered", obj.get("mtk_origin_centered"), True, log=logger
+            )
         if obj.get("mtk_enable_ctm") is not None:
-            props.enable_ctm = bool(obj.get("mtk_enable_ctm"))
+            props.enable_ctm = sanitize_bool_property(
+                "mtk_enable_ctm", obj.get("mtk_enable_ctm"), True, log=logger
+            )
         if obj.get("mtk_enable_animated_textures") is not None:
-            props.enable_animated_textures = bool(obj.get("mtk_enable_animated_textures"))
+            props.enable_animated_textures = sanitize_bool_property(
+                "mtk_enable_animated_textures",
+                obj.get("mtk_enable_animated_textures"),
+                True,
+                log=logger,
+            )
     except Exception as exc:
         logger.debug("Failed syncing save properties from object custom properties: %s", exc)
     finally:

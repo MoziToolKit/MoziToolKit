@@ -50,12 +50,14 @@ def _draw_save_container_ui(layout: bpy.types.UILayout, context: bpy.types.Conte
         layout.label(text=tr("No Minecraft Save container found"), icon='INFO')
         return
 
+    from ..bridge.config_validation import sanitize_dimension, sanitize_int_vec3_property
+
     save_uuid = str(target.get("mozi_save_uuid") or target.get("mtk:container_id") or "")
     world_name = str(target.get("mtk_world_name", "Minecraft World"))
     mc_version = str(target.get("mtk_mc_version", "Unknown"))
-    dimension = str(target.get("mtk_dimension", "overworld"))
-    min_coord = list(target.get("mtk_min_coord", [-64, -64, -64]))
-    max_coord = list(target.get("mtk_max_coord", [64, 320, 64]))
+    dimension = sanitize_dimension(target.get("mtk_dimension", "overworld"), name="mtk_dimension")
+    min_coord = list(sanitize_int_vec3_property("mtk_min_coord", target.get("mtk_min_coord", (-64, -64, -64)), (-64, -64, -64)))
+    max_coord = list(sanitize_int_vec3_property("mtk_max_coord", target.get("mtk_max_coord", (64, 320, 64)), (64, 320, 64)))
     last_refreshed_ts = target.get("mtk_last_refreshed")
     props = get_save_properties(target)
 

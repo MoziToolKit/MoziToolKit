@@ -29,7 +29,8 @@ _dna_api_error: Optional[str] = None
 #     validation, and standardized on `set_thread_count` / `threading_info` /
 #     `newest_cache_package` / `MeshData.materials_are_slots`.
 # v4: added `MesherConfig.allow_network` to gate outbound HTTP skin requests.
-REQUIRED_API_VERSION = 4
+# v5: replaced `MesherConfig.weld_vertices` with `weld_mode` ("manifold" | "per_vertex" | "none").
+REQUIRED_API_VERSION = 5
 # v2: added direct read functions and zero-copy memoryviews (read_f32, as_memoryview_f32, etc.)
 REQUIRED_DNA_API_VERSION = 2
 

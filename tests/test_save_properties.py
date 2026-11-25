@@ -147,6 +147,55 @@ class TestSaveProperties(unittest.TestCase):
         props_child = get_save_properties(self.mesh)
         self.assertEqual(props_child, props)
 
+    def test_invalid_custom_properties_warn_and_fallback_to_defaults(self):
+        """Malformed or legacy custom properties must log warnings (before -> default) and never crash."""
+        from MoziToolKit.bridge.engine import require_libmtk
+        from MoziToolKit.bridge.world import build_mesher_config
+        from MoziToolKit.operators.save.properties import sync_save_properties_from_object
+
+        self.root["mtk_dimension"] = "nether_typo"
+        self.root["mtk_weld_mode"] = True  # legacy/wrong type boolean
+        self.root["mtk_enable_ao"] = "not_a_bool"
+        self.root["mtk_min_coord"] = [1, 2]  # wrong length
+
+        props = get_save_properties(self.root, ensure_synced=False)
+        with self.assertLogs("MoziToolKit.Save.Properties", level="WARNING") as cm:
+            sync_save_properties_from_object(props, self.root)
+
+        log_blob = "\n".join(cm.output)
+        self.assertIn("mtk_dimension", log_blob)
+        self.assertIn("'nether_typo'", log_blob)
+        self.assertIn("'overworld'", log_blob)
+        self.assertIn("mtk_weld_mode", log_blob)
+        self.assertIn("True", log_blob)
+        self.assertIn("'manifold'", log_blob)
+        self.assertIn("mtk_enable_ao", log_blob)
+        self.assertIn("'not_a_bool'", log_blob)
+        self.assertIn("mtk_min_coord", log_blob)
+
+        self.assertEqual(props.dimension, "overworld")
+        self.assertEqual(props.weld_mode, "manifold")
+        self.assertTrue(props.enable_ao)
+        self.assertEqual(tuple(props.min_coord), (-64, -64, -64))
+
+        mtk = require_libmtk("test_invalid_mesher_config")
+        with self.assertLogs("MoziToolKit.Bridge.World.Mesher", level="WARNING") as cm2:
+            cfg = build_mesher_config(
+                mtk,
+                weld_mode="bad_mode",
+                unknown_block_strategy="bad_strategy",
+                enable_ao="bad_bool",
+            )
+        log_blob2 = "\n".join(cm2.output)
+        self.assertIn("'bad_mode'", log_blob2)
+        self.assertIn("'manifold'", log_blob2)
+        self.assertIn("'bad_strategy'", log_blob2)
+        self.assertIn("'FALLBACK_CUBE'", log_blob2)
+        self.assertIn("'bad_bool'", log_blob2)
+        self.assertEqual(cfg.weld_mode, "manifold")
+        self.assertEqual(cfg.unknown_block_strategy, "FALLBACK_CUBE")
+        self.assertTrue(cfg.enable_ao)
+
     def test_sync_save_properties_to_custom_props(self):
         """Verifies syncing MoziSaveProperties back into container custom properties."""
         props = get_save_properties(self.root)

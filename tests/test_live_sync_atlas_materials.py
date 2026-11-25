@@ -545,7 +545,7 @@ class TestLiveSyncAtlasMaterials(unittest.TestCase):
                 mesh_fluids=True,
                 z_up_coordinates=True,
                 origin_centered=True,
-                weld_vertices=True,
+                weld_mode="manifold",
                 atlas=atlas,
             )
             world = mtk_py.VoxelWorld.from_storage(storage, config=cfg, model_db=model_db)
@@ -611,7 +611,7 @@ class TestLiveSyncAtlasMaterials(unittest.TestCase):
             mesh_fluids=True,
             z_up_coordinates=True,
             origin_centered=True,
-            weld_vertices=True,
+            weld_mode="manifold",
             atlas=atlas,
         )
         session = mtk_py.LiveSyncSession(config=cfg, culler=mtk_py.FaceCuller(), model_db=model_db)

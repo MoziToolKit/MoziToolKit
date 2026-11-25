@@ -100,10 +100,27 @@ class MoziSaveProperties(bpy.types.PropertyGroup):
         update=_on_save_property_changed,
     )  # type: ignore
 
-    weld_vertices: BoolProperty(
-        name="Weld Vertices",
-        description="Weld adjacent shared coplanar vertices into seamless manifold topology",
-        default=True,
+    weld_mode: EnumProperty(
+        name="Weld Mode",
+        description="Vertex welding strategy for DCC manifold topology or Web/glTF per-face normals",
+        items=[
+            (
+                "manifold",
+                "Manifold (Blender)",
+                "Weld co-located corners into watertight manifold topology for Blender SSS and modifiers",
+            ),
+            (
+                "per_vertex",
+                "Per-Vertex (Web / glTF)",
+                "Preserve per-face normals while welding shared coplanar corners for WebGPU, Three.js, and glTF export",
+            ),
+            (
+                "none",
+                "None",
+                "Keep every polygon corner unshared without vertex welding",
+            ),
+        ],
+        default="manifold",
         update=_on_save_property_changed,
     )  # type: ignore
 
@@ -160,8 +177,9 @@ def sync_save_properties_from_object(props: Any, obj: Any) -> None:
             props.enable_ao = bool(obj.get("mtk_enable_ao"))
         if obj.get("mtk_mesh_fluids") is not None:
             props.mesh_fluids = bool(obj.get("mtk_mesh_fluids"))
-        if obj.get("mtk_weld_vertices") is not None:
-            props.weld_vertices = bool(obj.get("mtk_weld_vertices"))
+        if obj.get("mtk_weld_mode") is not None:
+            wm = str(obj.get("mtk_weld_mode")).strip().lower()
+            props.weld_mode = wm if wm in ("manifold", "per_vertex", "none") else "manifold"
         if obj.get("mtk_origin_centered") is not None:
             props.origin_centered = bool(obj.get("mtk_origin_centered"))
         if obj.get("mtk_enable_ctm") is not None:
@@ -193,7 +211,7 @@ def sync_save_properties_to_custom_props(props: Any, root_obj: Any, mesh_obj: Op
             target["mtk_max_coord"] = max_list
             target["mtk_enable_ao"] = bool(props.enable_ao)
             target["mtk_mesh_fluids"] = bool(props.mesh_fluids)
-            target["mtk_weld_vertices"] = bool(props.weld_vertices)
+            target["mtk_weld_mode"] = str(props.weld_mode)
             target["mtk_origin_centered"] = bool(props.origin_centered)
             target["mtk_enable_ctm"] = bool(props.enable_ctm)
             target["mtk_enable_animated_textures"] = bool(props.enable_animated_textures)

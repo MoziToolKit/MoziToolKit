@@ -100,7 +100,7 @@ class MOZI_OT_import_scene(bpy.types.Operator, ImportHelper, CommonMeshingOption
                 prefs=prefs,
                 enable_ao=getattr(self, "enable_ao", True),
                 mesh_fluids=getattr(self, "mesh_fluids", True),
-                weld_vertices=getattr(self, "weld_vertices", True),
+                weld_mode=getattr(self, "weld_mode", "manifold"),
                 origin_centered=getattr(self, "origin_centered", True),
                 enable_animated_textures=enable_anim,
                 allow_host_fallback=allow_fallback,

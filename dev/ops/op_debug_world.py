@@ -30,10 +30,15 @@ class MOZI_OT_dev_load_debug_world(bpy.types.Operator):
         default=True,
     )
 
-    weld_vertices: bpy.props.BoolProperty(
-        name="Weld Vertices",
-        description="Weld adjacent coplanar vertices into manifold topology",
-        default=True,
+    weld_mode: bpy.props.EnumProperty(
+        name="Weld Mode",
+        description="Vertex welding strategy for DCC manifold topology or Web/glTF per-face normals",
+        items=[
+            ("manifold", "Manifold (Blender)", "Weld co-located corners into watertight manifold topology for Blender SSS and modifiers"),
+            ("per_vertex", "Per-Vertex (Web / glTF)", "Preserve per-face normals while welding shared coplanar corners for WebGPU, Three.js, and glTF export"),
+            ("none", "None", "Keep every polygon corner unshared without vertex welding"),
+        ],
+        default="manifold",
     )
 
     origin_centered: bpy.props.BoolProperty(
@@ -118,7 +123,7 @@ class MOZI_OT_dev_load_debug_world(bpy.types.Operator):
                     prefs=prefs,
                     enable_ao=self.enable_ao,
                     mesh_fluids=self.mesh_fluids,
-                    weld_vertices=self.weld_vertices,
+                    weld_mode=self.weld_mode,
                     origin_centered=self.origin_centered,
                 )
                 poly_count = stats.get("polygon_count", stats.get("quad_count", 0))
@@ -143,7 +148,7 @@ class MOZI_OT_dev_load_debug_world(bpy.types.Operator):
                 "prefs": prefs,
                 "enable_ao": self.enable_ao,
                 "mesh_fluids": self.mesh_fluids,
-                "weld_vertices": self.weld_vertices,
+                "weld_mode": self.weld_mode,
                 "origin_centered": self.origin_centered,
             },
         )

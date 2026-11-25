@@ -95,7 +95,7 @@ class TestSaveContainerAndRebuildMesh(unittest.TestCase):
                 context=context,
                 enable_ao=True,
                 mesh_fluids=False,
-                weld_vertices=True,
+                weld_mode="manifold",
                 origin_centered=True,
             )
             self._created_objects.append(root1)
@@ -264,7 +264,7 @@ class TestSaveContainerAndRebuildMesh(unittest.TestCase):
                 self.run_async = False
                 self.enable_ao = True
                 self.mesh_fluids = True
-                self.weld_vertices = True
+                self.weld_mode = "manifold"
                 self.origin_centered = True
                 self._runner = None
 
@@ -330,7 +330,7 @@ class TestSaveContainerAndRebuildMesh(unittest.TestCase):
                 self.run_async = False
                 self.enable_ao = True
                 self.mesh_fluids = True
-                self.weld_vertices = True
+                self.weld_mode = "manifold"
                 self.origin_centered = True
                 self._runner = None
 
@@ -381,7 +381,7 @@ class TestSaveContainerAndRebuildMesh(unittest.TestCase):
                 self.run_async = True
                 self.enable_ao = True
                 self.mesh_fluids = True
-                self.weld_vertices = True
+                self.weld_mode = "manifold"
                 self.origin_centered = True
                 self._runner = None
 

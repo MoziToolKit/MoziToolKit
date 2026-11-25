@@ -179,9 +179,21 @@ def _handle_cloud_success(
     mat_ms = (time.perf_counter() - t0_mat) * 1000.0
 
     anim_tex = flags["anim_tex_enabled"]
+    weld_mode = flags["weld_mode"]
     _safe_set_custom_prop(world_mesh_obj, "mtk_enable_animated_textures", bool(anim_tex))
+    _safe_set_custom_prop(world_mesh_obj, "mtk_weld_mode", str(weld_mode))
     if root_container is not None:
         _safe_set_custom_prop(root_container, "mtk_enable_animated_textures", bool(anim_tex))
+        _safe_set_custom_prop(root_container, "mtk_weld_mode", str(weld_mode))
+        props = getattr(root_container, "mozi_save", None)
+        if props is not None and hasattr(props, "weld_mode"):
+            try:
+                props.suppress_dirty = True
+                props.weld_mode = str(weld_mode)
+            except Exception:
+                pass
+            finally:
+                props.suppress_dirty = False
 
     try:
         from ...bridge.diagnostics import append_stage_to_last_profile
@@ -232,7 +244,7 @@ def _launch_cloud_rebuild(
             prefs=prefs,
             enable_ao=flags["enable_ao"],
             mesh_fluids=flags["mesh_fluids"],
-            weld_vertices=flags["weld_vertices"],
+            weld_mode=flags["weld_mode"],
             origin_centered=flags["origin_centered"],
             num_threads=ctx_data["num_threads"],
             progress_callback=progress_callback,
@@ -316,10 +328,27 @@ class MOZI_OT_rebuild_mesh(bpy.types.Operator):
         default=True,
     )
 
-    weld_vertices: bpy.props.BoolProperty(
-        name="Weld Vertices",
-        description="Weld adjacent coplanar vertices into manifold topology",
-        default=True,
+    weld_mode: bpy.props.EnumProperty(
+        name="Weld Mode",
+        description="Vertex welding strategy for DCC manifold topology or Web/glTF per-face normals",
+        items=[
+            (
+                "manifold",
+                "Manifold (Blender)",
+                "Weld co-located corners into watertight manifold topology for Blender SSS and modifiers",
+            ),
+            (
+                "per_vertex",
+                "Per-Vertex (Web / glTF)",
+                "Preserve per-face normals while welding shared coplanar corners for WebGPU, Three.js, and glTF export",
+            ),
+            (
+                "none",
+                "None",
+                "Keep every polygon corner unshared without vertex welding",
+            ),
+        ],
+        default="manifold",
     )
 
     origin_centered: bpy.props.BoolProperty(

@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Any
 
 import bpy
-from bpy.props import BoolProperty
+from bpy.props import BoolProperty, EnumProperty
 
 
 class CommonMeshingOptionsMixin:
@@ -28,10 +28,27 @@ class CommonMeshingOptionsMixin:
         default=True,
     )
 
-    weld_vertices: BoolProperty(  # type: ignore
-        name="Weld Vertices",
-        description="Weld adjacent shared coplanar vertices into seamless manifold topology",
-        default=True,
+    weld_mode: EnumProperty(  # type: ignore
+        name="Weld Mode",
+        description="Vertex welding strategy for DCC manifold topology or Web/glTF per-face normals",
+        items=[
+            (
+                "manifold",
+                "Manifold (Blender)",
+                "Weld co-located corners into watertight manifold topology for Blender SSS and modifiers",
+            ),
+            (
+                "per_vertex",
+                "Per-Vertex (Web / glTF)",
+                "Preserve per-face normals while welding shared coplanar corners for WebGPU, Three.js, and glTF export",
+            ),
+            (
+                "none",
+                "None",
+                "Keep every polygon corner unshared without vertex welding",
+            ),
+        ],
+        default="manifold",
     )
 
     origin_centered: BoolProperty(  # type: ignore
@@ -107,7 +124,7 @@ def draw_meshing_options(
     box_mesh.label(text=tr("Meshing & Shaders"), icon="MATERIAL")
     box_mesh.prop(target, "enable_ao", text=tr("Ambient Occlusion"))
     box_mesh.prop(target, "mesh_fluids", text=tr("Mesh Fluids"))
-    box_mesh.prop(target, "weld_vertices", text=tr("Weld Vertices"))
+    box_mesh.prop(target, "weld_mode", text=tr("Weld Mode"))
     box_mesh.prop(target, "origin_centered", text=tr("Origin Centered"))
     if show_ctm and hasattr(target, "enable_ctm"):
         box_mesh.prop(target, "enable_ctm", text=tr("Connected Textures (CTM)"))

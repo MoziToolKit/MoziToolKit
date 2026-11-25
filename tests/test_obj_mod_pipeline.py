@@ -194,7 +194,7 @@ class TestObjModPipeline(unittest.TestCase):
                     storage=storage,
                     model_db=model_db,
                     atlas=atlas,
-                    weld_vertices=True,
+                    weld_mode="manifold",
                 )
 
             b_mesh = bpy.data.meshes.new("MTK_TestSyntheticObj")
@@ -258,7 +258,7 @@ class TestObjModPipeline(unittest.TestCase):
                     storage=storage,
                     model_db=model_db,
                     atlas=atlas,
-                    weld_vertices=True,
+                    weld_mode="manifold",
                 )
                 obj, stats = apply_voxel_mesh_to_blender(
                     mesh_data=mesh_data,

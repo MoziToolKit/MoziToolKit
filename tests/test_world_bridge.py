@@ -47,7 +47,7 @@ class TestWorldBridgePipeline:
             storage=storage,
             enable_ao=True,
             mesh_fluids=True,
-            weld_vertices=True,
+            weld_mode="manifold",
             origin_centered=True,
         )
 

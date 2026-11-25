@@ -171,7 +171,7 @@ def _draw_save_container_ui(layout: bpy.types.UILayout, context: bpy.types.Conte
             r1.prop(props, "mesh_fluids", text=tr("Mesh Fluids"))
 
             r2 = col_mesh_opts.row(align=True)
-            r2.prop(props, "weld_vertices", text=tr("Weld Vertices"))
+            r2.prop(props, "weld_mode", text=tr("Weld Mode"))
             r2.prop(props, "origin_centered", text=tr("Origin Centered"))
 
             r3 = col_mesh_opts.row(align=True)

@@ -104,7 +104,7 @@ class TestSaveProperties(unittest.TestCase):
         self.root["mtk_max_coord"] = [32, 128, 32]
         self.root["mtk_enable_ao"] = True
         self.root["mtk_mesh_fluids"] = True
-        self.root["mtk_weld_vertices"] = True
+        self.root["mtk_weld_mode"] = "manifold"
         self.root["mtk_origin_centered"] = True
         self.root["mtk_enable_ctm"] = True
         self.root["mtk_enable_animated_textures"] = True
@@ -137,7 +137,7 @@ class TestSaveProperties(unittest.TestCase):
         self.assertEqual(tuple(props.max_coord), (32, 128, 32))
         self.assertTrue(props.enable_ao)
         self.assertTrue(props.mesh_fluids)
-        self.assertTrue(props.weld_vertices)
+        self.assertEqual(props.weld_mode, "manifold")
         self.assertTrue(props.origin_centered)
         self.assertTrue(props.enable_ctm)
         self.assertTrue(props.enable_animated_textures)
@@ -319,7 +319,7 @@ class TestSaveProperties(unittest.TestCase):
         self.assertIn("max_coord", prop_names2)
         self.assertIn("enable_ao", prop_names2)
         self.assertIn("mesh_fluids", prop_names2)
-        self.assertIn("weld_vertices", prop_names2)
+        self.assertIn("weld_mode", prop_names2)
         self.assertIn("origin_centered", prop_names2)
         self.assertIn("enable_ctm", prop_names2)
         self.assertIn("enable_animated_textures", prop_names2)

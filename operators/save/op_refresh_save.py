@@ -123,7 +123,7 @@ class MOZI_OT_refresh_save_mesh(bpy.types.Operator):
             max_block = tuple(props.max_coord)
             enable_ao = bool(props.enable_ao)
             mesh_fluids = bool(props.mesh_fluids)
-            weld_vertices = bool(props.weld_vertices)
+            weld_mode = str(props.weld_mode)
             origin_centered = bool(props.origin_centered)
             enable_ctm = bool(props.enable_ctm)
             enable_animated_textures = bool(props.enable_animated_textures)
@@ -133,7 +133,7 @@ class MOZI_OT_refresh_save_mesh(bpy.types.Operator):
             max_block = tuple(target.get("mtk_max_coord", (64, 320, 64)))
             enable_ao = bool(target.get("mtk_enable_ao", True))
             mesh_fluids = bool(target.get("mtk_mesh_fluids", True))
-            weld_vertices = bool(target.get("mtk_weld_vertices", True))
+            weld_mode = str(target.get("mtk_weld_mode", "manifold"))
             origin_centered = bool(target.get("mtk_origin_centered", True))
             enable_ctm = bool(target.get("mtk_enable_ctm", True))
             enable_animated_textures = bool(target.get("mtk_enable_animated_textures", True))
@@ -172,7 +172,7 @@ class MOZI_OT_refresh_save_mesh(bpy.types.Operator):
                         prefs=prefs,
                         enable_ao=enable_ao,
                         mesh_fluids=mesh_fluids,
-                        weld_vertices=weld_vertices,
+                        weld_mode=weld_mode,
                         origin_centered=origin_centered,
                         enable_ctm=enable_ctm,
                         enable_animated_textures=enable_animated_textures,
@@ -196,7 +196,7 @@ class MOZI_OT_refresh_save_mesh(bpy.types.Operator):
                         reuse_existing=True,
                         enable_ao=enable_ao,
                         mesh_fluids=mesh_fluids,
-                        weld_vertices=weld_vertices,
+                        weld_mode=weld_mode,
                         enable_ctm=enable_ctm,
                         enable_animated_textures=enable_animated_textures,
                         atlas=mesh_context.get("atlas"),
@@ -234,7 +234,7 @@ class MOZI_OT_refresh_save_mesh(bpy.types.Operator):
                     "prefs": prefs,
                     "enable_ao": enable_ao,
                     "mesh_fluids": mesh_fluids,
-                    "weld_vertices": weld_vertices,
+                    "weld_mode": weld_mode,
                     "origin_centered": origin_centered,
                     "enable_ctm": enable_ctm,
                     "enable_animated_textures": enable_animated_textures,
@@ -278,7 +278,7 @@ class MOZI_OT_refresh_save_mesh(bpy.types.Operator):
                 reuse_existing=True,
                 enable_ao=enable_ao,
                 mesh_fluids=mesh_fluids,
-                weld_vertices=weld_vertices,
+                weld_mode=weld_mode,
                 enable_ctm=enable_ctm,
                 enable_animated_textures=enable_animated_textures,
                 atlas=mesh_context.get("atlas"),

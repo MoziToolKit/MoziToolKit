@@ -54,7 +54,7 @@ class TestUvOrientationSync(unittest.TestCase):
             mesh_fluids=False,
             z_up_coordinates=True,
             origin_centered=False,
-            weld_vertices=False,
+            weld_mode="none",
         )
         mesh_no_atlas = mesh_world(storage, config_no_atlas, None, None)
         quad_indices = ma.quad_indices(mesh_no_atlas)
@@ -97,7 +97,7 @@ class TestUvOrientationSync(unittest.TestCase):
             mesh_fluids=False,
             z_up_coordinates=True,
             origin_centered=False,
-            weld_vertices=False,
+            weld_mode="none",
             atlas=self.atlas,
         )
         mesh = mesh_world(storage, config, None, self.model_db)

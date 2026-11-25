@@ -35,7 +35,19 @@ def resolve_rebuild_flags(
 
     enable_ao = _bool_opt(getattr(operator, "enable_ao", True))
     mesh_fluids = _bool_opt(getattr(operator, "mesh_fluids", True))
-    weld_vertices = _bool_opt(getattr(operator, "weld_vertices", True))
+    raw_weld = getattr(operator, "weld_mode", "manifold")
+    if hasattr(raw_weld, "default"):
+        raw_weld = raw_weld.default
+    weld_mode = (
+        raw_weld
+        if isinstance(raw_weld, str) and raw_weld in ("manifold", "per_vertex", "none")
+        else "manifold"
+    )
+    weld_explicitly_set = bool(
+        hasattr(operator, "properties")
+        and hasattr(operator.properties, "is_property_set")
+        and operator.properties.is_property_set("weld_mode")
+    )
     origin_centered = _bool_opt(getattr(operator, "origin_centered", True))
 
     if root_container is not None and hasattr(root_container, "get"):
@@ -43,8 +55,10 @@ def resolve_rebuild_flags(
             enable_ao = bool(root_container.get("mtk_enable_ao"))
         if root_container.get("mtk_mesh_fluids") is not None:
             mesh_fluids = bool(root_container.get("mtk_mesh_fluids"))
-        if root_container.get("mtk_weld_vertices") is not None:
-            weld_vertices = bool(root_container.get("mtk_weld_vertices"))
+        if not weld_explicitly_set and root_container.get("mtk_weld_mode") is not None:
+            cand = str(root_container.get("mtk_weld_mode")).strip().lower()
+            if cand in ("manifold", "per_vertex", "none"):
+                weld_mode = cand
         if root_container.get("mtk_origin_centered") is not None:
             origin_centered = bool(root_container.get("mtk_origin_centered"))
         elif root_container.get("mtk:origin_centered") is not None:
@@ -71,7 +85,7 @@ def resolve_rebuild_flags(
     return {
         "enable_ao": enable_ao,
         "mesh_fluids": mesh_fluids,
-        "weld_vertices": weld_vertices,
+        "weld_mode": weld_mode,
         "origin_centered": origin_centered,
         "anim_tex_enabled": anim_tex_enabled,
     }

@@ -259,7 +259,7 @@ class TestUnknownBlocksAndSceneRebuild(unittest.TestCase):
         mock_op = types.SimpleNamespace(
             enable_ao=True,
             mesh_fluids=True,
-            weld_vertices=True,
+            weld_mode="manifold",
             origin_centered=True,
             run_async=False,
             force=False,
@@ -317,7 +317,7 @@ class TestUnknownBlocksAndSceneRebuild(unittest.TestCase):
         mock_op_no_force = types.SimpleNamespace(
             enable_ao=True,
             mesh_fluids=True,
-            weld_vertices=True,
+            weld_mode="manifold",
             origin_centered=True,
             run_async=False,
             force=False,
@@ -333,7 +333,7 @@ class TestUnknownBlocksAndSceneRebuild(unittest.TestCase):
         mock_op_force = types.SimpleNamespace(
             enable_ao=True,
             mesh_fluids=True,
-            weld_vertices=True,
+            weld_mode="manifold",
             origin_centered=True,
             run_async=False,
             force=True,

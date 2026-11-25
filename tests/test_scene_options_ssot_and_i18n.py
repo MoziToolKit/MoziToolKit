@@ -39,7 +39,7 @@ class TestSceneOptionsSSOTAndI18n(unittest.TestCase):
         canonical_props = [
             ("enable_ao", True, "Ambient Occlusion"),
             ("mesh_fluids", True, "Mesh Fluids"),
-            ("weld_vertices", True, "Weld Vertices"),
+            ("weld_mode", "manifold", "Weld Mode"),
             ("origin_centered", True, "Origin Centered"),
             ("enable_ctm", True, "Connected Textures (CTM)"),
             ("enable_animated_textures", True, "Animated Textures"),

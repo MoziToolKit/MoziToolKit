@@ -188,7 +188,7 @@ class TestCtmBridge(unittest.TestCase):
             ctm_solver=solver,
             resolve_prefs=False,
             origin_centered=False,
-            weld_vertices=False,
+            weld_mode="none",
         )
 
         self.assertIsNotNone(mesh_data)

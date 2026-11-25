@@ -54,7 +54,7 @@ class TestSaveAnimationRouting(unittest.TestCase):
                 self.use_yefira_selection = False
                 self.enable_ao = True
                 self.mesh_fluids = True
-                self.weld_vertices = True
+                self.weld_mode = "manifold"
                 self.origin_centered = True
                 self.enable_ctm = False
                 self.enable_animated_textures = False  # User unchecked it!
@@ -125,7 +125,7 @@ class TestSaveAnimationRouting(unittest.TestCase):
         save_root["mtk_max_coord"] = (10, 50, 10)
         save_root["mtk_enable_ao"] = True
         save_root["mtk_mesh_fluids"] = True
-        save_root["mtk_weld_vertices"] = True
+        save_root["mtk_weld_mode"] = "manifold"
         save_root["mtk_origin_centered"] = True
         save_root["mtk_enable_ctm"] = True
         save_root["mtk_enable_animated_textures"] = False  # Save was imported with False

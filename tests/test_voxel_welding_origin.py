@@ -29,15 +29,15 @@ class TestVoxelWeldingAndOrigin(unittest.TestCase):
             self.skipTest("libmtk_py not available")
 
     def test_single_cube_welding(self):
-        """A single solid cube should have 8 vertices when welded, and 24 when unwelded."""
+        """A single solid cube should have 8 vertices in manifold mode, and 24 in per_vertex / none."""
         storage = mtk_py.VoxelStorage()
         storage.set_bounds(0, 0, 0, 1, 1, 1)
         storage.set_block(0, 0, 0, "minecraft:stone")
 
-        # Welded
+        # Manifold (Blender SSS)
         cfg_welded = mtk_py.MesherConfig(
             origin_centered=True,
-            weld_vertices=True,
+            weld_mode="manifold",
             z_up_coordinates=True,
         )
         mesh_welded = mesh_world(storage, cfg_welded)
@@ -48,10 +48,20 @@ class TestVoxelWeldingAndOrigin(unittest.TestCase):
         # 6 quads * 4 loop corners = 24 loop UVs
         self.assertEqual(len(ma.loop_uvs(mesh_welded)), 48)
 
-        # Unwelded
+        # Per-Vertex (Web / glTF)
+        cfg_per_vertex = mtk_py.MesherConfig(
+            origin_centered=True,
+            weld_mode="per_vertex",
+            z_up_coordinates=True,
+        )
+        mesh_per_vertex = mesh_world(storage, cfg_per_vertex)
+        self.assertEqual(mesh_per_vertex.vertex_count, 24)
+        self.assertEqual(mesh_per_vertex.face_count, 6)
+
+        # None (unwelded)
         cfg_unwelded = mtk_py.MesherConfig(
             origin_centered=True,
-            weld_vertices=False,
+            weld_mode="none",
             z_up_coordinates=True,
         )
         mesh_unwelded = mesh_world(storage, cfg_unwelded)
@@ -59,7 +69,7 @@ class TestVoxelWeldingAndOrigin(unittest.TestCase):
         self.assertEqual(mesh_unwelded.face_count, 6)
 
     def test_two_joined_cubes_welding(self):
-        """Two adjacent solid cubes should cull their shared face (leaving 10 faces) and weld to 12 vertices."""
+        """Two adjacent solid cubes should cull their shared face (leaving 10 faces) and weld by mode."""
         storage = mtk_py.VoxelStorage()
         storage.set_bounds(0, 0, 0, 2, 1, 1)
         storage.set_block(0, 0, 0, "minecraft:stone")
@@ -67,7 +77,7 @@ class TestVoxelWeldingAndOrigin(unittest.TestCase):
 
         cfg_welded = mtk_py.MesherConfig(
             origin_centered=True,
-            weld_vertices=True,
+            weld_mode="manifold",
             z_up_coordinates=True,
         )
         mesh_welded = mesh_world(storage, cfg_welded)
@@ -76,10 +86,20 @@ class TestVoxelWeldingAndOrigin(unittest.TestCase):
         self.assertEqual(mesh_welded.quad_count, 10)
         self.assertEqual(mesh_welded.triangle_count, 20)
 
+        # Per-Vertex: 8 corners welded by (pos, normal) -> 32 vertices
+        cfg_per_vertex = mtk_py.MesherConfig(
+            origin_centered=True,
+            weld_mode="per_vertex",
+            z_up_coordinates=True,
+        )
+        mesh_per_vertex = mesh_world(storage, cfg_per_vertex)
+        self.assertEqual(mesh_per_vertex.vertex_count, 32)
+        self.assertEqual(mesh_per_vertex.face_count, 10)
+
         # Unwelded: 10 visible faces * 4 vertices = 40 vertices
         cfg_unwelded = mtk_py.MesherConfig(
             origin_centered=True,
-            weld_vertices=False,
+            weld_mode="none",
             z_up_coordinates=True,
         )
         mesh_unwelded = mesh_world(storage, cfg_unwelded)
@@ -100,7 +120,7 @@ class TestVoxelWeldingAndOrigin(unittest.TestCase):
 
         cfg = mtk_py.MesherConfig(
             origin_centered=True,
-            weld_vertices=True,
+            weld_mode="manifold",
             z_up_coordinates=True,
         )
         world = mtk_py.VoxelWorld.from_storage(storage, cfg, None, None)
@@ -146,7 +166,7 @@ class TestVoxelWeldingAndOrigin(unittest.TestCase):
 
         cfg = mtk_py.MesherConfig(
             origin_centered=True,
-            weld_vertices=True,
+            weld_mode="manifold",
             z_up_coordinates=True,
         )
         mesh = mesh_world(storage, cfg)

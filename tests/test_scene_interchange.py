@@ -346,7 +346,7 @@ class TestSceneInterchangeEndToEnd(unittest.TestCase):
             prefs=self.mock_prefs,
             enable_ao=True,
             mesh_fluids=False,
-            weld_vertices=True,
+            weld_mode="manifold",
             origin_centered=True,
         )
 
@@ -417,7 +417,7 @@ class TestSceneInterchangeEndToEnd(unittest.TestCase):
             enable_animated_textures=True,
             enable_ao=True,
             mesh_fluids=True,
-            weld_vertices=True,
+            weld_mode="manifold",
             origin_centered=True,
             report=lambda *args, **kwargs: None,
         )

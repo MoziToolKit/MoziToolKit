@@ -31,6 +31,7 @@ class TestPrecompileSceneIsolation(unittest.TestCase):
             pack_count=1,
             atlas_chunks=1,
             baked_models=10,
+            warnings=["Skipped animated texture 'minecraft:item/giant_anim' from pack 'Demo': using static Frame 0."],
         )
 
         import inspect
@@ -50,6 +51,7 @@ class TestPrecompileSceneIsolation(unittest.TestCase):
         with patch("MoziToolKit.bridge.assets.precompile.get_libmtk", return_value=mock_mtk):
             res = precompile_stack(stack=mock_stack, cache_dir="/tmp/dummy_cache")
             self.assertTrue(res.get("success"))
+            self.assertEqual(res.get("warnings"), mock_res.warnings)
 
         current_pixels = list(img.pixels)
         for i in range(len(original_pixels)):

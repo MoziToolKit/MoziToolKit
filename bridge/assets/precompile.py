@@ -94,6 +94,10 @@ def precompile_stack(
         pass
     duration = time.time() - start_time
 
+    warnings = list(getattr(res, "warnings", []) or [])
+    for warning in warnings:
+        logger.warning("%s", warning)
+
     return {
         "success": getattr(res, "success", True),
         "pack_count": getattr(res, "pack_count", 0),
@@ -104,6 +108,7 @@ def precompile_stack(
         "fingerprint": getattr(res, "fingerprint", ""),
         "package_path": package_path,
         "cache_dir": getattr(res, "cache_dir", str(base_cache.resolve())),
+        "warnings": warnings,
     }
 
 

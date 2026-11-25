@@ -263,7 +263,9 @@ def ensure_pipeline_assets_ready_sync(
     if status in ("MISSING", "STALE"):
         logger.info("Asset cache status is '%s'. Triggering automated precompilation...", status)
         try:
-            _precompile_stack(prefs, progress_callback=progress_callback)
+            res = _precompile_stack(prefs, progress_callback=progress_callback)
+            for warning in (res.get("warnings") or []) if isinstance(res, dict) else []:
+                logger.warning("Asset precompile warning: %s", warning)
             _invalidate_asset_cache_memory()
             return True, status
         except Exception as e:
@@ -323,7 +325,7 @@ def run_task_with_asset_guard(
                 )
                 progress_callback(stage_report)
 
-        _precompile_stack(
+        res = _precompile_stack(
             prefs,
             num_threads=asset_context.get("num_threads") if asset_context else None,
             progress_callback=stage1_cb,
@@ -331,6 +333,8 @@ def run_task_with_asset_guard(
             cache_dir=asset_context.get("cache_dir") if asset_context else None,
             resolve_prefs=asset_context is None,
         )
+        for warning in (res.get("warnings") or []) if isinstance(res, dict) else []:
+            logger.warning("Asset precompile warning: %s", warning)
         _invalidate_asset_cache_memory()
 
     def stage2_cb(report: Any):

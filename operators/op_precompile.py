@@ -23,6 +23,25 @@ from ..utils.async_task import AsyncTask, ModalTaskRunner
 from ..utils.progress import BlenderProgressReporter, blender_progress_scope
 
 
+def _report_precompile_result(operator, res) -> None:
+    models_cnt = res.get("models", res.get("baked_models", 0))
+    duration = res.get("duration_seconds", 0.0)
+    warnings = res.get("warnings") or []
+    summary_msg = (
+        f"Compiled {res.get('pack_count', 0)} packs: "
+        f"{res.get('atlas_chunks', 0)} atlas chunks, "
+        f"{models_cnt} models in {duration:.2f}s"
+    )
+    operator.report({'INFO'}, summary_msg)
+    if warnings:
+        preview = "; ".join(warnings[:3])
+        more = f" (+{len(warnings) - 3} more; see console log)" if len(warnings) > 3 else ""
+        operator.report(
+            {'WARNING'},
+            f"{len(warnings)} oversized animated texture(s) fell back to static: {preview}{more}",
+        )
+
+
 class MOZI_OT_precompile_cache(bpy.types.Operator):
     """Precompile and rebuild the complete Atlas and Model caches via libmtk."""
 
@@ -84,14 +103,7 @@ class MOZI_OT_precompile_cache(bpy.types.Operator):
                         cache_dir=asset_context["cache_dir"],
                     )
 
-                models_cnt = res.get("models", res.get("baked_models", 0))
-                duration = res.get("duration_seconds", 0.0)
-                summary_msg = (
-                    f"Compiled {res.get('pack_count', 0)} packs: "
-                    f"{res.get('atlas_chunks', 0)} atlas chunks, "
-                    f"{models_cnt} models in {duration:.2f}s"
-                )
-                self.report({'INFO'}, summary_msg)
+                _report_precompile_result(self, res)
                 return {'FINISHED'}
             except Exception as e:
                 self.report({'ERROR'}, f"Failed to precompile asset caches: {e}")
@@ -115,14 +127,7 @@ class MOZI_OT_precompile_cache(bpy.types.Operator):
                 get_cache_stats(prefs, force_refresh=True)
             except Exception:
                 pass
-            models_cnt = res.get("models", res.get("baked_models", 0))
-            duration = res.get("duration_seconds", 0.0)
-            summary_msg = (
-                f"Compiled {res.get('pack_count', 0)} packs: "
-                f"{res.get('atlas_chunks', 0)} atlas chunks, "
-                f"{models_cnt} models in {duration:.2f}s"
-            )
-            self.report({'INFO'}, summary_msg)
+            _report_precompile_result(self, res)
 
         reporter = BlenderProgressReporter(context=context, total=100, title=title)
         self._runner = ModalTaskRunner(

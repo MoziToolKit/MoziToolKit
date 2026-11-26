@@ -13,7 +13,9 @@ from ...i18n import tr
 from ...utils.assets import (
     can_execute_asset_pipeline,
     ensure_pipeline_assets_ready_sync,
+    get_cache_dir,
     prepare_asset_context,
+    snapshot_pack_config,
 )
 from ...bridge.config_validation import sanitize_bool_property, sanitize_weld_mode
 from ...bridge.world import prepare_world_mesh_context, scan_unknown_blocks
@@ -112,9 +114,12 @@ def prepare_rebuild_asset_context(
     anim_tex_enabled: bool,
     origin_centered: bool,
     report_fn: Any,
+    allow_defer_precompile: bool = False,
 ) -> Optional[Tuple[Dict[str, Any], bool]]:
     """
     Prepares model database, atlas, biome resolver, and CTM solver for remeshing.
+    When `allow_defer_precompile=True` and cache is MISSING/STALE, defers precompilation
+    to the background `run_task_with_asset_guard` worker instead of blocking the main thread.
     Returns (context_dict, did_precompile) or None if preparation failed with report.
     """
     package_reader = None
@@ -152,6 +157,7 @@ def prepare_rebuild_asset_context(
                 "anim_tex_enabled": anim_tex_enabled,
                 "cache_fingerprint": None,
                 "cache_timestamp": None,
+                "deferred_precompile": False,
             }, False
 
         can_run, reason = can_execute_asset_pipeline(prefs)
@@ -160,6 +166,36 @@ def prepare_rebuild_asset_context(
             return None
 
     if status in ("MISSING", "STALE"):
+        if allow_defer_precompile:
+            asset_context = prepare_asset_context(prefs)
+            prefs_snapshot = snapshot_pack_config(prefs)
+            skin_cache_dir = None
+            try:
+                sc = get_cache_dir(prefs) / "skins"
+                sc.mkdir(parents=True, exist_ok=True)
+                skin_cache_dir = str(sc)
+            except Exception:
+                pass
+            return {
+                "model_db": None,
+                "atlas": None,
+                "biome_resolver": None,
+                "colormaps": None,
+                "ctm_solver": None,
+                "package_reader": package_reader,
+                "asset_context": asset_context,
+                "mesh_context": {
+                    "skin_cache_dir": skin_cache_dir,
+                    "enable_animated_textures": anim_tex_enabled,
+                },
+                "num_threads": asset_context.get("num_threads"),
+                "anim_tex_enabled": anim_tex_enabled,
+                "cache_fingerprint": None,
+                "cache_timestamp": None,
+                "prefs_snapshot": prefs_snapshot,
+                "deferred_precompile": True,
+            }, False
+
         try:
             ensure_pipeline_assets_ready_sync(prefs)
         except Exception as e:
@@ -183,6 +219,7 @@ def prepare_rebuild_asset_context(
         "anim_tex_enabled": mesh_context["enable_animated_textures"],
         "cache_fingerprint": mesh_context["cache_fingerprint"],
         "cache_timestamp": mesh_context["cache_timestamp"],
+        "deferred_precompile": False,
     }, did_precompile
 
 

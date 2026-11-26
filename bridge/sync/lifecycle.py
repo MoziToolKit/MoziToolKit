@@ -402,6 +402,17 @@ class SyncLifecycleMixin:
         new_biome_resolver = load_biome_resolver(prefs)
         new_colormaps = load_colormaps(prefs)
 
+        if self._session is not None and (
+            current_fp is None or new_model_db is None or new_atlas is None
+        ):
+            logger.warning(
+                "Aborting hot-reload for active LiveSyncSession: on-disk asset cache is missing or incomplete (fp=%s, model_db=%s, atlas=%s).",
+                current_fp,
+                new_model_db is not None,
+                new_atlas is not None,
+            )
+            return False
+
         self._model_db = new_model_db
         self._atlas = new_atlas
         self._biome_resolver = new_biome_resolver

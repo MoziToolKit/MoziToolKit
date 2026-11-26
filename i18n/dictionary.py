@@ -281,7 +281,6 @@ translations_dict = {
         ('*', 'Foliage'): '树叶花草着色',
         ('*', 'Foliage Color'): '树叶颜色',
         ('*', 'Force Repair Slopes'): '强制修复斜面',
-        ('*', 'Force re-meshing the entire synchronized world from voxel storage'): '从体素存储强制对整个同步世界重新生成多边形网格',
         ('*', 'Force swap top UV heights on slanted faces even if not strictly detected as inverted'): '对倾斜面强制交换顶部 UV 高度（即使未严格检测为反转）',
         ('*', 'Filtered'): '已过滤',
         ('*', 'Frequency scale for 3D continuous noise'): '三维空间连续噪波的频率尺度',
@@ -521,7 +520,6 @@ translations_dict = {
         ('*', 'Run Mesher Benchmark'): '运行网格化性能压测',
         ('*', 'Run calculation in non-blocking background thread with live status bar progress'): '在非阻塞后台线程中异步运行计算，并在状态栏实时显示进度条',
         ('*', 'Run raw meshing speed benchmark on the embedded 32k-block debug world'): '针对内嵌的 3.2 万方块调试世界运行原生网格化生成速度基准测试',
-        ('*', 'Run re-meshing in non-blocking background thread with live status bar progress'): '在非阻塞后台线程中异步运行网格重建，并在状态栏实时显示进度条',
         ('*', 'Scene Capsule Info'): '场景包信息',
         ('*', 'Sample Mode'): '采样模式',
         ('*', 'Sample alpha at the UV geometric center of the face'): '仅采样 UV 面几何中心的 Alpha 值',
@@ -960,7 +958,6 @@ translations_dict = {
         ('*', 'Disabled (Offline Mode)'): '已禁用 (离线模式)',
         ('*', "All network operations (Live Sync & online player head skin downloads) strictly follow Blender's Online Access setting."): '所有网络操作（实时同步与在线玩家头颅皮肤下载）均严格受 Blender 在线访问权限控制。',
         ('*', 'Delta history cleared.'): '增量历史已清除。',
-        ('*', 'Live Sync session is not active.'): '实时同步会话未处于活动状态。',
         ('*', 'Failed to precompile assets before connection.'): '连接前预编译资产失败。',
 
         # --- Voxel Point Cloud & Carve Mode ---

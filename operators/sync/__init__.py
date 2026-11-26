@@ -10,7 +10,6 @@ from .properties import (
     unregister as unregister_properties,
 )
 from .op_sync_connect import OPERATOR_CLASSES as CONNECT_CLASSES
-from .op_sync_rebuild import OPERATOR_CLASSES as REBUILD_CLASSES
 from .op_sync_clear_history import OPERATOR_CLASSES as CLEAR_CLASSES
 from .op_sync_create_world import OPERATOR_CLASSES as CREATE_CLASSES
 from .watcher import (
@@ -20,7 +19,6 @@ from .watcher import (
 
 OPERATOR_CLASSES = (
     CONNECT_CLASSES
-    + REBUILD_CLASSES
     + CLEAR_CLASSES
     + CREATE_CLASSES
 )

@@ -99,7 +99,7 @@ sequenceDiagram
 | 维度 | **刷新数据 (Refresh Data)** | **重建网格 (Rebuild Mesh)** |
 | :--- | :--- | :--- |
 | **所属层级** | **网络与数据源层 (Network & Data Source)** | **本地渲染与几何层 (Local Mesh & Shading)** |
-| **对应操作符** | `mozi.sync_refresh` | `mozi.sync_rebuild_world` |
+| **对应操作符** | `mozi.sync_refresh` | `mozi.rebuild_mesh` |
 | **网络行为** | **发起网络通信**：向服务器重新请求完整快照或重新握手校验。 | **完全离线执行**：不发送任何网络数据包。 |
 | **内存体素处理** | 重新从服务器下载并覆盖内存中的 `VoxelStorage` 体素状态。 | **保留当前内存体素**：仅依据本地已有体素重新计算。 |
 | **网格与材质行为** | 数据更新后根据差量或快照自动触发增量同步。 | 清理 BMesh 缓存与材质管理器，强制重新计算 6 面遮挡剔除、拓扑微距焊接、UV 映射及材质插槽。 |
@@ -171,7 +171,7 @@ graph TD
 - **`mozi.sync_connect`**：建立 WebSocket 连接并执行 Manifest 握手增量校验。
 - **`mozi.sync_disconnect`**：断开当前实时同步会话，重置网络线程。
 - **`mozi.sync_refresh`**：发起全量数据同步请求（`0x80 FULL_SYNC_REQUEST`），重新拉取体素。
-- **`mozi.sync_rebuild_world`**：完全离线重建视口几何、拓扑焊接与材质插槽。
+- **`mozi.rebuild_mesh`**：完全离线重建视口几何、拓扑焊接与材质插槽。
 - **`mozi.sync_clear_history`**：清空增量变更历史记录（Delta History）。
 - **`mozi.add_yefira_world`**：在场景中新建指定的 Yefira 容器根节点。
 - **`mozi.sync_select_root`**：在 3D 视口中快速选定当前活动的世界根节点。

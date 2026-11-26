@@ -350,6 +350,8 @@ def update_world_mesh(
     atlas: Optional[Any] = None,
     session: Optional[Any] = None,
     dynamic_entity_atlases: Optional[Any] = None,
+    prefs: Optional[Any] = None,
+    clean_unused_slots: bool = False,
 ) -> Tuple[int, int]:
     """Injects processed geometry buffer into world mesh and syncs companion point cloud."""
     if not world_obj or getattr(world_obj, "type", "") != "MESH":
@@ -362,14 +364,19 @@ def update_world_mesh(
     if dynamic_entity_atlases is None:
         dynamic_entity_atlases = resolve_dynamic_entity_atlases(mesh_data, session)
 
+    expected_fp = getattr(session, "manifest_fingerprint", None) if session is not None else None
+
     def mat_binder(m_obj: Any) -> Any:
         used_chunk_ids = mesh_data.used_materials() if hasattr(mesh_data, "used_materials") else None
         ensure_world_materials(
             m_obj,
+            prefs=prefs,
             atlas=atlas,
             used_chunk_ids=used_chunk_ids,
             dynamic_entity_atlases=dynamic_entity_atlases,
+            clean_unused_slots=clean_unused_slots,
             material_indices_are_slots=getattr(mesh_data, "materials_are_slots", False),
+            expected_fingerprint=expected_fp,
         )
 
     req = VoxelWorldAssemblyRequest(
@@ -384,12 +391,13 @@ def update_world_mesh(
         reuse_existing=True,
         target_root=root_container,
         target_mesh=world_obj,
+        prefs=prefs,
         geometry_origin=ORIGIN_SYNC_WORLD,
         skip_string_attributes=skip_string_attributes,
         custom_injector=inject_mesh_data,
         custom_material_binder=mat_binder,
         custom_cloud_ensurer=ensure_voxel_child_cloud,
-        clean_unused_material_slots=False,
+        clean_unused_material_slots=clean_unused_slots,
         sync_point_cloud=sync_point_cloud,
         models=getattr(session, "model_db", None),
     )

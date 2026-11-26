@@ -49,9 +49,15 @@ def reload_atlas_images(prefs=None) -> int:
         except Exception:
             continue
 
-    # 2. Reload in-memory packed atlas images from active cache package
+    # 2. Reload in-memory packed atlas images from active cache package (all PBR channels)
     try:
-        from ....bridge.assets.cache import load_baked_atlas_from_cache
+        from ....bridge.assets.cache import (
+            get_cached_texture_f32,
+            get_cached_texture_rgba,
+            load_baked_atlas_from_cache,
+        )
+        from .image_utils import get_or_create_image_from_f32, get_or_create_image_from_rgba
+
         active_atlas = load_baked_atlas_from_cache(prefs)
         if active_atlas is not None and hasattr(active_atlas, "get_all_chunks_info"):
             chunks_info = active_atlas.get_all_chunks_info()
@@ -64,34 +70,59 @@ def reload_atlas_images(prefs=None) -> int:
                 w = int(cm.get("width", 4096))
                 h = int(cm.get("height", 4096))
 
-                cand_names = [f"{stem}.png", stem, f"{cat}_chunk_{c_idx:03}.png"]
-                img = None
-                for nm in cand_names:
-                    img = bpy.data.images.get(nm)
-                    if img is not None:
-                        break
-                f32_tuple = None
-                if active_atlas is not None and hasattr(active_atlas, "get_chunk_albedo_f32"):
-                    try:
-                        albedo_f32 = active_atlas.get_chunk_albedo_f32(cid, flip_v=True)
-                        if albedo_f32 is not None:
-                            f32_tuple = (w, h, albedo_f32)
-                    except Exception:
-                        pass
-                if f32_tuple is None:
-                    from ....bridge.assets.cache import get_cached_texture_f32
-                    f32_tuple = get_cached_texture_f32(f"atlas/textures/{stem}.png", prefs=prefs, flip_y=True)
+                # Albedo channel (prefer BakedAtlas direct f32, fallback to cache package chunk)
+                albedo_names = [f"{stem}.png", stem, f"{cat}_chunk_{c_idx:03}.png"]
+                albedo_img = next((bpy.data.images.get(nm) for nm in albedo_names if bpy.data.images.get(nm) is not None), None)
+                if albedo_img is not None:
+                    f32_tuple = None
+                    if hasattr(active_atlas, "get_chunk_albedo_f32"):
+                        try:
+                            albedo_f32 = active_atlas.get_chunk_albedo_f32(cid, flip_v=True)
+                            if albedo_f32 is not None:
+                                f32_tuple = (w, h, albedo_f32)
+                        except Exception:
+                            pass
+                    if f32_tuple is None:
+                        f32_tuple = get_cached_texture_f32(f"atlas/textures/{stem}.png", prefs=prefs, flip_y=True)
 
-                if img is not None and f32_tuple is not None:
-                    _, _, albedo_f32 = f32_tuple
-                    try:
-                        if img.size[0] != w or img.size[1] != h:
-                            img.scale(w, h)
-                        img.pixels.foreach_set(albedo_f32)
-                        img.update()
-                        reloaded_count += 1
-                    except Exception:
-                        pass
+                    if f32_tuple is not None:
+                        _, _, albedo_f32 = f32_tuple
+                        try:
+                            if albedo_img.size[0] != w or albedo_img.size[1] != h:
+                                albedo_img.scale(w, h)
+                            albedo_img.pixels.foreach_set(albedo_f32)
+                            albedo_img.update()
+                            reloaded_count += 1
+                        except Exception:
+                            pass
+
+                # Auxiliary PBR channels (_overlay, _n, _orm, _aux)
+                channel_specs = (
+                    (f"{stem}_overlay.png", "sRGB"),
+                    (f"{stem}_n.png", "Non-Color"),
+                    (f"{stem}_orm.png", "Non-Color"),
+                    (f"{stem}_aux.png", "Non-Color"),
+                )
+                for file_name, colorspace in channel_specs:
+                    ch_img = bpy.data.images.get(file_name)
+                    if ch_img is None:
+                        continue
+                    chunk_key = f"atlas/textures/{file_name}"
+                    f32_ch = get_cached_texture_f32(chunk_key, prefs=prefs, flip_y=True)
+                    if f32_ch is not None:
+                        cw, ch, buf = f32_ch
+                        if get_or_create_image_from_f32(
+                            file_name, cw, ch, buf, colorspace=colorspace, force_reload=True
+                        ) is not None:
+                            reloaded_count += 1
+                        continue
+                    rgba_ch = get_cached_texture_rgba(chunk_key, prefs=prefs, flip_y=True)
+                    if rgba_ch is not None:
+                        cw, ch, buf = rgba_ch
+                        if get_or_create_image_from_rgba(
+                            file_name, cw, ch, buf, colorspace=colorspace, force_reload=True, flip_y=False
+                        ) is not None:
+                            reloaded_count += 1
     except Exception as e:
         logger.debug("Failed refreshing in-memory atlas images: %s", e)
 

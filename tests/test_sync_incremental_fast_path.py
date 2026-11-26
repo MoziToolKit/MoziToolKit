@@ -159,51 +159,72 @@ class TestSyncIncrementalFastPath(unittest.TestCase):
             bpy.data.objects.remove(test_mesh_obj)
             bpy.data.objects.remove(test_root)
 
-    def test_sync_rebuild_bypasses_check_asset_cache_status_when_session_active(self):
-        """Verify MOZI_OT_sync_rebuild_world bypasses check_asset_cache_status when session is active and clean."""
-        from MoziToolKit.operators.sync.op_sync_rebuild import MOZI_OT_sync_rebuild_world
+    def test_sync_rebuild_bypasses_precompile_when_session_active_and_ready(self):
+        """Verify MOZI_OT_rebuild_mesh does not re-precompile when cache is READY and session is active."""
+        from MoziToolKit.operators.mesh.op_rebuild_mesh import MOZI_OT_rebuild_mesh
 
         mock_atlas = object()
-        mock_mesh = types.SimpleNamespace(vertex_count=50)
+        mock_mesh = types.SimpleNamespace(vertex_count=50, profile=None)
         mock_session = types.SimpleNamespace(
             is_active=True,
             atlas=mock_atlas,
+            manifest_fingerprint="fp_ready",
             check_and_reload_dirty_cache=lambda *args, **kwargs: False,
             get_world_mesh=lambda: mock_mesh,
             get_storage=lambda: object(),
         )
 
+        test_root = bpy.data.objects.new("Yefira_World_Clean", None)
+        test_root["mtk:is_container"] = True
+        test_root["mtk:container_type"] = "SYNC"
+        test_root["mtk:is_yefira_world"] = True
+        bpy.context.scene.collection.objects.link(test_root)
+
         class DummyRebuildOp:
             def __init__(self):
-                self.target_container = ""
+                self.target_container = test_root.name
                 self.run_async = False
+                self.enable_ao = True
+                self.mesh_fluids = True
+                self.weld_mode = "manifold"
+                self.origin_centered = True
+                self.force = False
+                self._runner = None
                 self.reports = []
                 self.report = lambda *args: self.reports.append(args)
 
             def execute(self, ctx):
-                return MOZI_OT_sync_rebuild_world.execute(self, ctx)
+                return MOZI_OT_rebuild_mesh.execute(self, ctx)
 
         op = DummyRebuildOp()
-        mock_context = bpy.context
+        mock_context = types.SimpleNamespace(
+            active_object=test_root,
+            selected_objects=[test_root],
+            mode="OBJECT",
+            collection=bpy.context.scene.collection,
+            scene=types.SimpleNamespace(mozi_active_sync_container_name=test_root.name),
+        )
 
-        check_status_calls = []
+        precompile_calls = []
         update_calls = []
 
-        with patch("MoziToolKit.operators.sync.op_sync_rebuild.get_sync_bridge_session", return_value=mock_session), \
-             patch("MoziToolKit.operators.sync.op_sync_rebuild.can_execute_asset_pipeline", return_value=(True, "")), \
-             patch("MoziToolKit.operators.sync.op_sync_rebuild.check_asset_cache_status", lambda *args, **kwargs: check_status_calls.append(True)), \
-             patch("MoziToolKit.operators.sync.op_sync_rebuild.get_or_create_world_mesh_object"), \
-             patch("MoziToolKit.operators.sync.op_sync_rebuild.update_world_mesh", lambda *args, **kwargs: (update_calls.append((args, kwargs)), (50, 25))[1]):
+        try:
+            with patch("MoziToolKit.operators.mesh.op_rebuild_mesh.get_sync_bridge_session", return_value=mock_session), \
+                 patch("MoziToolKit.operators.mesh.op_rebuild_mesh.can_execute_asset_pipeline", return_value=(True, "")), \
+                 patch("MoziToolKit.operators.mesh.op_rebuild_mesh.check_asset_cache_status", return_value="READY"), \
+                 patch("MoziToolKit.operators.mesh.op_rebuild_mesh.ensure_pipeline_assets_ready_sync", lambda *args, **kwargs: precompile_calls.append(True)), \
+                 patch("MoziToolKit.utils.world.sync_container.get_or_create_world_mesh_object"), \
+                 patch("MoziToolKit.utils.world.sync_container.update_world_mesh", lambda *args, **kwargs: (update_calls.append((args, kwargs)), (50, 25))[1]):
 
-            res = op.execute(mock_context)
-            self.assertEqual(res, {'FINISHED'})
+                res = op.execute(mock_context)
+                self.assertEqual(res, {'FINISHED'})
 
-            # check_asset_cache_status must NOT be called because session is active, has atlas, and is clean!
-            self.assertEqual(len(check_status_calls), 0)
-
-            self.assertEqual(len(update_calls), 1)
-            args, kwargs = update_calls[0]
-            self.assertIs(kwargs.get("atlas"), mock_atlas)
+                self.assertEqual(len(precompile_calls), 0)
+                self.assertEqual(len(update_calls), 1)
+                args, kwargs = update_calls[0]
+                self.assertIs(kwargs.get("atlas"), mock_atlas)
+        finally:
+            bpy.data.objects.remove(test_root, do_unlink=True)
 
     def test_sync_clear_history_operator(self):
         """Verify MOZI_OT_sync_clear_history defines target_container and clears delta history."""

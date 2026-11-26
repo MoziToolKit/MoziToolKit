@@ -91,6 +91,7 @@ def ensure_world_materials(
     clean_unused_slots: bool = False,
     package_reader: Optional[Any] = None,
     material_indices_are_slots: bool = False,
+    expected_fingerprint: Optional[str] = None,
 ) -> None:
     """
     Ensures that the unified world mesh object has corresponding Atlas Chunk materials
@@ -142,6 +143,10 @@ def ensure_world_materials(
         return
 
     # If world_obj already has valid Atlas chunk materials assigned, check if we can fast-path:
+    expected_mat_fp = expected_fingerprint
+    if expected_mat_fp is None and package_reader is None and prefs is not None:
+        expected_mat_fp = get_cache_fingerprint(prefs)
+
     if target_chunk_ids is not None and len(mesh.materials) > 0:
         existing_chunk_to_slot: dict[int, int] = {}
         all_valid = True
@@ -153,6 +158,14 @@ def ensure_world_materials(
             if cid is None:
                 all_valid = False
                 break
+            is_dyn = DYNAMIC_CHUNK_START <= int(cid) <= DYNAMIC_CHUNK_END
+            if not is_dyn:
+                if mat.get("mtk_pbr_layout") != PBR_LAYOUT_VERSION:
+                    all_valid = False
+                    break
+                if expected_mat_fp and mat.get("mtk_stack_fingerprint") != expected_mat_fp:
+                    all_valid = False
+                    break
             if (
                 getattr(mat, "node_tree", None) is None
                 or len(mat.node_tree.nodes) == 0
@@ -284,7 +297,7 @@ def ensure_world_materials(
                         }
 
             if chunk_meta_map:
-                manifest_fp = get_cache_fingerprint(prefs)
+                manifest_fp = expected_mat_fp if expected_mat_fp is not None else get_cache_fingerprint(prefs)
 
                 sorted_chunks = sorted(chunk_meta_map.keys())
                 chunk_to_compact_slot: dict[int, int] = {}

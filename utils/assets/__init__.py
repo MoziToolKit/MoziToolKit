@@ -21,6 +21,7 @@ from .guard import (
     has_valid_vanilla_pack,
     prepare_asset_context,
     run_task_with_asset_guard,
+    snapshot_pack_config,
 )
 
 __all__ = [
@@ -38,4 +39,5 @@ __all__ = [
     "prepare_asset_context",
     "ensure_pipeline_assets_ready_sync",
     "run_task_with_asset_guard",
+    "snapshot_pack_config",
 ]

@@ -455,13 +455,27 @@ def get_cache_manifest(prefs=None) -> Optional[Dict[str, Any]]:
     return None
 
 
+def _has_enabled_pack_entries(prefs=None) -> bool:
+    target = _resolve_prefs(prefs)
+    entries = getattr(target, "resource_packs", None) or []
+    return any(
+        getattr(e, "enabled", True) and bool(str(getattr(e, "path", "") or "").strip())
+        for e in entries
+    )
+
+
 def get_cache_fingerprint(prefs=None) -> Optional[str]:
-    """Returns active stack fingerprint recorded in package manifest or cache object."""
+    """Returns active stack fingerprint recorded in matching package or cache manifest."""
     cache = open_active_asset_cache(prefs)
     if cache is not None:
         fp = cache.fingerprint
         if fp:
             return str(fp)
+    # When packs are configured in prefs but no matching .mtkcache exists on disk,
+    # do NOT fall back to an unrelated package's manifest; returning None ensures
+    # callers recognize the cache as missing/stale for the active stack.
+    if _has_enabled_pack_entries(prefs) and get_configured_stack_fingerprint(prefs):
+        return None
     manifest = get_cache_manifest(prefs)
     if manifest and isinstance(manifest, dict):
         return manifest.get("fingerprint")
@@ -506,6 +520,12 @@ def check_cache_dirty(
     prefs=None,
 ) -> Tuple[bool, Optional[str], float]:
     """Compares cached fingerprint and timestamp with current on-disk asset cache package."""
+    if _has_enabled_pack_entries(prefs):
+        expected_fp = get_configured_stack_fingerprint(prefs)
+        if expected_fp and open_active_asset_cache(prefs) is None:
+            invalidate_asset_cache_memory()
+            return True, None, 0.0
+
     current_fp = get_cache_fingerprint(prefs)
     current_ts = get_cache_timestamp(prefs)
 

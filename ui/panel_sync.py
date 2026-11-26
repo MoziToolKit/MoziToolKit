@@ -241,7 +241,8 @@ def _draw_live_sync_content(layout: bpy.types.UILayout, context: bpy.types.Conte
             col_m.label(text=_format_sync_info(props.last_update_info), icon='INFO')
 
         row_reb = box_geo.row(align=True)
-        op_reb = row_reb.operator("mozi.sync_rebuild_world", text=tr("Rebuild Mesh"), icon='FILE_REFRESH')
+        row_reb.context_pointer_set("active_object", root_obj)
+        op_reb = row_reb.operator("mozi.rebuild_mesh", text=tr("Rebuild Mesh"), icon='FILE_REFRESH')
         op_reb.target_container = root_obj.name
 
     # 5. Delta Update Log

@@ -85,16 +85,34 @@ _KIND_ICONS = {
 }
 
 
+_ENUM_ITEMS_REF: List[Tuple[str, str, str, str, int]] = []
+_ENUM_FALLBACK_SCANNING = [
+    ("SCANNING", "Scanning Local Instances...", "Scanning background directories for installations", "TIME", 0)
+]
+_ENUM_FALLBACK_NONE = [
+    ("NONE", "No Instances Detected", "Click 'Scan Local Instances' to search for game directories", "QUESTION", 0)
+]
+_ENUM_FALLBACK_EMPTY_CATEGORY = [
+    ("NONE", "No Instances in Category", "No instances found for the selected launcher filter", "QUESTION", 0)
+]
+
+
 def get_detected_instances_enum_items(self, context) -> List[Tuple[str, str, str, str, int]]:
-    """Dynamic callback providing the list of discovered Minecraft instances (reads memory cache only, zero disk I/O)."""
-    global _CACHED_DISCOVERED_INSTANCES, _INSTANCE_SCAN_STATE
+    """Dynamic callback providing the list of discovered Minecraft instances (reads memory cache only, zero disk I/O).
+
+    Note: Blender's C EnumProperty implementation retains raw pointers to the returned Python strings,
+    so a module-level reference (`_ENUM_ITEMS_REF`) must be kept alive to prevent GC-induced mojibake/crashes.
+    """
+    global _CACHED_DISCOVERED_INSTANCES, _INSTANCE_SCAN_STATE, _ENUM_ITEMS_REF
 
     if not _CACHED_DISCOVERED_INSTANCES:
         if _INSTANCE_SCAN_STATE == "IDLE":
             schedule_background_instance_scan()
         if _INSTANCE_SCAN_STATE == "SCANNING":
-            return [("SCANNING", "Scanning Local Instances...", "Scanning background directories for installations", "TIME", 0)]
-        return [("NONE", "No Instances Detected", "Click 'Scan Local Instances' to search for game directories", "QUESTION", 0)]
+            _ENUM_ITEMS_REF = _ENUM_FALLBACK_SCANNING
+            return _ENUM_ITEMS_REF
+        _ENUM_ITEMS_REF = _ENUM_FALLBACK_NONE
+        return _ENUM_ITEMS_REF
 
     prefs = self if hasattr(self, "detected_instances_launcher_filter") else _safe_get_prefs(self or context)
     launcher_filter = getattr(prefs, "detected_instances_launcher_filter", "ALL") if prefs else "ALL"
@@ -107,8 +125,10 @@ def get_detected_instances_enum_items(self, context) -> List[Tuple[str, str, str
 
     if not filtered_instances:
         if _INSTANCE_SCAN_STATE == "SCANNING":
-            return [("SCANNING", "Scanning Local Instances...", "Scanning background directories for installations", "TIME", 0)]
-        return [("NONE", "No Instances in Category", "No instances found for the selected launcher filter", "QUESTION", 0)]
+            _ENUM_ITEMS_REF = _ENUM_FALLBACK_SCANNING
+            return _ENUM_ITEMS_REF
+        _ENUM_ITEMS_REF = _ENUM_FALLBACK_EMPTY_CATEGORY
+        return _ENUM_ITEMS_REF
 
     items: List[Tuple[str, str, str, str, int]] = []
     _tr = tr
@@ -145,7 +165,8 @@ def get_detected_instances_enum_items(self, context) -> List[Tuple[str, str, str
         desc = f"{inst.game_dir} • {_tr('Pack Count')}: {num_packs} • {_tr('Mod Count')}: {num_mods}"
         items.append((inst.instance_id, label, desc, icon, idx + 1))
 
-    return items
+    _ENUM_ITEMS_REF = items
+    return _ENUM_ITEMS_REF
 
 
 def on_detected_instances_launcher_filter_changed(self, context) -> None:

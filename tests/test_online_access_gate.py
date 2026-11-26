@@ -15,7 +15,11 @@ from MoziToolKit.bridge.network import (
     is_online_access_allowed,
     require_online_access,
 )
-from MoziToolKit.bridge.sync import SyncBridgeServer, SyncBridgeSession
+from MoziToolKit.bridge.sync import (
+    SyncBridgeServer,
+    SyncBridgeSession,
+    discover_local_sync_instances,
+)
 from MoziToolKit.bridge.world.mesher import build_mesher_config
 from MoziToolKit.i18n import tr
 from MoziToolKit.operators.sync.op_sync_connect import (
@@ -118,41 +122,63 @@ def test_sync_bridge_server_refused_when_offline():
 def test_sync_bridge_session_start_and_cached_start_refused_when_offline():
     session = SyncBridgeSession()
     with _online_access_state(False):
-        assert session.start(url="ws://127.0.0.1:8765") is False
+        assert session.start(url="ws://127.0.0.1:21924") is False
         assert session.last_error == ONLINE_ACCESS_DENIED_MESSAGE
 
-        assert session.start_with_cache(url="ws://127.0.0.1:8765") is False
+        assert session.start_with_cache(url="ws://127.0.0.1:21924") is False
         assert session.last_error == ONLINE_ACCESS_DENIED_MESSAGE
+
+
+def test_local_ipc_sync_allowed_and_discoverable_when_offline():
+    with _online_access_state(False):
+        server = SyncBridgeServer(bind_address=None, enable_ipc=True)
+        try:
+            ipc_url = server.ipc_url
+            assert ipc_url and ipc_url.startswith("ipc://")
+            instances = discover_local_sync_instances()
+            assert any(inst.get("ipc_url") == ipc_url for inst in instances)
+
+            session = SyncBridgeSession()
+            assert session.start(url=ipc_url, auto_reconnect=False) is True
+            session.stop()
+        finally:
+            server.stop()
 
 
 def test_sync_connect_and_refresh_operators_refused_when_offline():
-    with _online_access_state(False):
-        assert MOZI_OT_sync_connect.poll(bpy.context) is False
-        assert MOZI_OT_sync_refresh.poll(bpy.context) is False
+    scene = bpy.context.scene
+    prev_mode = scene.mozi_sync.sync_mode
+    scene.mozi_sync.sync_mode = "REMOTE_WS"
+    try:
+        with _online_access_state(False):
+            assert MOZI_OT_sync_connect.poll(bpy.context) is False
+            assert MOZI_OT_sync_refresh.poll(bpy.context) is False
 
-        connect_reports = []
-        mock_connect_op = types.SimpleNamespace(
-            target_container="",
-            report=lambda level, msg: connect_reports.append((set(level), msg)),
-        )
-        res_connect = MOZI_OT_sync_connect.execute(mock_connect_op, bpy.context)
-        assert res_connect == {"CANCELLED"}
-        assert any(
-            "ERROR" in lvl and tr(ONLINE_ACCESS_DENIED_MESSAGE) in msg
-            for lvl, msg in connect_reports
-        )
+            connect_reports = []
+            mock_connect_op = types.SimpleNamespace(
+                target_container="",
+                report=lambda level, msg: connect_reports.append((set(level), msg)),
+            )
+            res_connect = MOZI_OT_sync_connect.execute(mock_connect_op, bpy.context)
+            assert res_connect == {"CANCELLED"}
+            assert any(
+                "ERROR" in lvl and tr(ONLINE_ACCESS_DENIED_MESSAGE) in msg
+                for lvl, msg in connect_reports
+            )
 
-        refresh_reports = []
-        mock_refresh_op = types.SimpleNamespace(
-            target_container="",
-            report=lambda level, msg: refresh_reports.append((set(level), msg)),
-        )
-        res_refresh = MOZI_OT_sync_refresh.execute(mock_refresh_op, bpy.context)
-        assert res_refresh == {"CANCELLED"}
-        assert any(
-            "ERROR" in lvl and tr(ONLINE_ACCESS_DENIED_MESSAGE) in msg
-            for lvl, msg in refresh_reports
-        )
+            refresh_reports = []
+            mock_refresh_op = types.SimpleNamespace(
+                target_container="",
+                report=lambda level, msg: refresh_reports.append((set(level), msg)),
+            )
+            res_refresh = MOZI_OT_sync_refresh.execute(mock_refresh_op, bpy.context)
+            assert res_refresh == {"CANCELLED"}
+            assert any(
+                "ERROR" in lvl and tr(ONLINE_ACCESS_DENIED_MESSAGE) in msg
+                for lvl, msg in refresh_reports
+            )
+    finally:
+        scene.mozi_sync.sync_mode = prev_mode
 
 
 def test_build_mesher_config_tracks_online_access():
@@ -174,6 +200,7 @@ def test_sync_timer_tick_stops_active_session_when_toggled_offline():
     container = bpy.data.objects.new("test_online_gate_sync", None)
     scene.collection.objects.link(container)
     container["mtk:is_yefira_world"] = True
+    container.mozi_sync.sync_mode = "REMOTE_WS"
     container.mozi_sync.is_connected = True
     container.mozi_sync.is_streaming = True
     container.mozi_sync.connection_status = "CONNECTED"
@@ -183,6 +210,7 @@ def test_sync_timer_tick_stops_active_session_when_toggled_offline():
 
     class _ActiveSessionStub:
         is_active = True
+        current_url = "ws://127.0.0.1:21924"
 
         def stop(self):
             stopped.append(True)

@@ -77,10 +77,12 @@ class MOZI_OT_add_yefira_world(bpy.types.Operator):
         root_obj["mtk:sync_manifest"] = "{}"
         root_obj["mtk:last_name"] = root_obj.name
 
-        # Inherit default server URL
+        # Inherit default server URL and transport mode
         if hasattr(root_obj, "mozi_sync"):
             scene_props = getattr(context.scene, "mozi_sync", None)
-            root_obj.mozi_sync.url = scene_props.url if scene_props and scene_props.url else "ws://127.0.0.1:8765"
+            root_obj.mozi_sync.url = scene_props.url if scene_props and scene_props.url else "ws://127.0.0.1:21924"
+            if scene_props and hasattr(scene_props, "sync_mode"):
+                root_obj.mozi_sync.sync_mode = scene_props.sync_mode
 
         # Place at 3D cursor or world origin
         if hasattr(context.scene, "cursor"):

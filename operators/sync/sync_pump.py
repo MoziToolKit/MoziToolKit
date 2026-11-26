@@ -196,17 +196,24 @@ def _sync_timer_tick() -> Optional[float]:
     get_session_fn = _get_pump_delegate("get_sync_bridge_session", get_sync_bridge_session)
     session = get_session_fn()
 
-    if not is_online_access_allowed():
+    scene = getattr(bpy.context, "scene", None) if bpy.context else None
+    get_active_container_fn = _get_pump_delegate("get_active_sync_container", get_active_sync_container)
+    active_container = get_active_container_fn(scene) if scene is not None else None
+    active_props = getattr(active_container, "mozi_sync", None) if active_container is not None else None
+    curr_url = getattr(session, "current_url", "") or ""
+    is_ipc_session = curr_url.startswith("ipc://") or (
+        not curr_url.startswith(("ws://", "wss://"))
+        and getattr(active_props, "sync_mode", "REMOTE_WS") == "LOCAL_IPC"
+    )
+
+    if not is_ipc_session and not is_online_access_allowed():
         if session is not None and getattr(session, "is_active", False):
             try:
                 session.stop()
             except Exception as e:
                 logger.debug("Failed stopping session when online access disabled: %s", e)
 
-        scene = getattr(bpy.context, "scene", None) if bpy.context else None
-        get_active_container_fn = _get_pump_delegate("get_active_sync_container", get_active_sync_container)
-        active_container = get_active_container_fn(scene) if scene is not None else None
-        props = getattr(active_container, "mozi_sync", None) if active_container is not None else None
+        props = active_props
         scene_props = getattr(scene, "mozi_sync", None) if scene is not None else None
         for target_props in (props, scene_props):
             if target_props is None:

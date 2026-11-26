@@ -651,7 +651,7 @@ class MockLiveSyncServer:
     def __init__(
         self,
         host: str = "127.0.0.1",
-        port: int = 8765,
+        port: int = 21924,
         preset: str = "complex",
         mode: str = "full",
         origin: Tuple[int, int, int] = (0, 64, 0),
@@ -1032,7 +1032,7 @@ class MockLiveSyncServer:
 def parse_args():
     parser = argparse.ArgumentParser(description="MoziToolKit Mock Live Sync WebSocket Server")
     parser.add_argument("--host", default="127.0.0.1", help="WebSocket bind host (default: 127.0.0.1)")
-    parser.add_argument("--port", type=int, default=8765, help="WebSocket bind port (default: 8765)")
+    parser.add_argument("--port", type=int, default=21924, help="WebSocket bind port (default: 21924)")
     parser.add_argument(
         "--preset",
         choices=["flat", "hills", "complex", "fluids", "benchmark", "issues", "regression"],

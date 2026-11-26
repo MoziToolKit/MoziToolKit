@@ -36,7 +36,9 @@ from ...utils.world.sync_container import (
     update_world_mesh,
 )
 from .properties import (
+    NO_IPC_INSTANCE_ID,
     get_active_sync_container,
+    refresh_ipc_instances_cache,
     set_active_sync_container,
 )
 
@@ -55,6 +57,58 @@ logger = logging.getLogger("MoziToolKit.Sync.Connect")
 _pending_cloud_sync_time: Optional[float] = None
 
 
+def _resolve_sync_props(context):
+    active_obj = getattr(context, "active_object", None) or getattr(context, "object", None)
+    root_obj = resolve_world_root_object(active_obj) if active_obj else None
+    if root_obj and hasattr(root_obj, "mozi_sync"):
+        return root_obj.mozi_sync
+    active_cont = get_active_sync_container(getattr(context, "scene", None))
+    if active_cont and hasattr(active_cont, "mozi_sync"):
+        return active_cont.mozi_sync
+    scene = getattr(context, "scene", None)
+    return getattr(scene, "mozi_sync", None) if scene else None
+
+
+def _is_remote_ws_mode(context, target_obj=None) -> bool:
+    if target_obj is not None and hasattr(target_obj, "mozi_sync"):
+        props = target_obj.mozi_sync
+    else:
+        props = _resolve_sync_props(context)
+    if props is None:
+        return False
+    mode = getattr(props, "sync_mode", "LOCAL_IPC")
+    if mode == "REMOTE_WS":
+        return True
+    # Also treat explicit ws:// / wss:// session as remote if already connected.
+    session = get_sync_bridge_session()
+    curr_url = getattr(session, "current_url", "") or ""
+    return curr_url.startswith(("ws://", "wss://"))
+
+
+class MOZI_OT_sync_refresh_instances(bpy.types.Operator):
+    """Refresh the list of running local Minecraft IPC instances."""
+    bl_idname = "mozi.sync_refresh_instances"
+    bl_label = "Refresh Local Instances"
+    bl_description = "Scan for running local Minecraft instances with Yefira IPC enabled"
+    bl_options = {'INTERNAL'}
+
+    def execute(self, context):
+        instances = refresh_ipc_instances_cache(force=True)
+        props = _resolve_sync_props(context)
+        if props is not None and instances:
+            first_url = str(instances[0].get("ipc_url") or "")
+            if first_url and getattr(props, "ipc_instance", NO_IPC_INSTANCE_ID) == NO_IPC_INSTANCE_ID:
+                try:
+                    props.ipc_instance = first_url
+                except Exception:
+                    pass
+        if not instances:
+            self.report({'INFO'}, tr("No running Minecraft instances found."))
+        else:
+            self.report({'INFO'}, f"Found {len(instances)} local Minecraft instance(s).")
+        return {'FINISHED'}
+
+
 class MOZI_OT_sync_connect(bpy.types.Operator):
     """Connect to Minecraft Live Sync streaming server for the active or specified container."""
     bl_idname = "mozi.sync_connect"
@@ -70,7 +124,7 @@ class MOZI_OT_sync_connect(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        if not is_online_access_allowed():
+        if _is_remote_ws_mode(context) and not is_online_access_allowed():
             if hasattr(cls, "poll_message_set"):
                 cls.poll_message_set(tr(ONLINE_ACCESS_DENIED_MESSAGE))
             return False
@@ -112,19 +166,9 @@ class MOZI_OT_sync_connect(bpy.types.Operator):
         return self.execute(context)
 
     def execute(self, context):
-        if not is_online_access_allowed():
-            self.report({'ERROR'}, tr(ONLINE_ACCESS_DENIED_MESSAGE))
-            return {'CANCELLED'}
-
         if not is_sync_available():
             self.report({'ERROR'}, "Native libmtk core is missing or not installed!")
             return {'CANCELLED'}
-
-        try:
-            from ...utils.system.network import sync_system_proxies
-            sync_system_proxies()
-        except Exception:
-            pass
 
         target_obj = None
         if self.target_container and self.target_container in bpy.data.objects:
@@ -135,6 +179,40 @@ class MOZI_OT_sync_connect(bpy.types.Operator):
             if not target_obj:
                 target_obj = get_or_create_world_container(context)
             self.target_container = target_obj.name
+
+        props = getattr(target_obj, "mozi_sync", None) or _get_active_props(context, target_obj)
+        sync_mode = getattr(props, "sync_mode", "LOCAL_IPC") if props else "LOCAL_IPC"
+
+        if sync_mode == "REMOTE_WS":
+            if not is_online_access_allowed():
+                self.report({'ERROR'}, tr(ONLINE_ACCESS_DENIED_MESSAGE))
+                return {'CANCELLED'}
+            try:
+                from ...utils.system.network import sync_system_proxies
+                sync_system_proxies()
+            except Exception:
+                pass
+            url = props.url if props and props.url else "ws://127.0.0.1:21924"
+        else:
+            selected_ipc = getattr(props, "ipc_instance", NO_IPC_INSTANCE_ID) if props else NO_IPC_INSTANCE_ID
+            if not selected_ipc or selected_ipc == NO_IPC_INSTANCE_ID:
+                instances = refresh_ipc_instances_cache(force=True)
+                if instances:
+                    selected_ipc = str(instances[0].get("ipc_url") or "")
+                    if props and selected_ipc:
+                        try:
+                            props.ipc_instance = selected_ipc
+                        except Exception:
+                            pass
+            if not selected_ipc or selected_ipc == NO_IPC_INSTANCE_ID:
+                self.report(
+                    {'WARNING'},
+                    tr("No running local Minecraft instance found. Open a world with Yefira installed and click Refresh."),
+                )
+                return {'CANCELLED'}
+            url = selected_ipc
+            if props:
+                props.url = url
 
         session = get_sync_bridge_session()
         curr_active = get_active_sync_container(context.scene)
@@ -156,9 +234,6 @@ class MOZI_OT_sync_connect(bpy.types.Operator):
         # every WORLD_MESH_READY would be treated as stale and silently discarded
         # (the viewport then never receives voxel data until the file is recreated).
         _safe_set_custom_prop(target_obj, "mtk:client_generation", 0)
-
-        props = getattr(target_obj, "mozi_sync", None) or _get_active_props(context, target_obj)
-        url = props.url if props and props.url else "ws://127.0.0.1:8765"
 
         from ...utils.system import get_prefs
         prefs = get_prefs(context)
@@ -359,22 +434,27 @@ class MOZI_OT_sync_refresh(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        if not is_online_access_allowed():
+        session = get_sync_bridge_session()
+        curr_url = getattr(session, "current_url", "") or ""
+        is_ipc = curr_url.startswith("ipc://") or not _is_remote_ws_mode(context)
+        if not is_ipc and not is_online_access_allowed():
             if hasattr(cls, "poll_message_set"):
                 cls.poll_message_set(tr(ONLINE_ACCESS_DENIED_MESSAGE))
             return False
         return True
 
     def execute(self, context):
-        if not is_online_access_allowed():
+        session = get_sync_bridge_session()
+        curr_url = getattr(session, "current_url", "") or ""
+        is_ipc = curr_url.startswith("ipc://") or (
+            not curr_url.startswith(("ws://", "wss://")) and not _is_remote_ws_mode(context)
+        )
+        if not is_ipc and not is_online_access_allowed():
             stop_sync_timer()
-            session = get_sync_bridge_session()
             if getattr(session, "is_active", False):
                 session.stop()
             self.report({'ERROR'}, tr(ONLINE_ACCESS_DENIED_MESSAGE))
             return {'CANCELLED'}
-
-        session = get_sync_bridge_session()
 
         target_obj = None
         if self.target_container and self.target_container in bpy.data.objects:
@@ -435,6 +515,7 @@ class MOZI_OT_sync_refresh(bpy.types.Operator):
 
 
 OPERATOR_CLASSES = (
+    MOZI_OT_sync_refresh_instances,
     MOZI_OT_sync_connect,
     MOZI_OT_sync_disconnect,
     MOZI_OT_sync_refresh,

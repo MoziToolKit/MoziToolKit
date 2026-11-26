@@ -5,16 +5,106 @@ Properties definition for Live Sync real-time synchronization state.
 from __future__ import annotations
 
 import logging
+import time
+from typing import Any, Dict, List, Optional, Tuple
 import bpy
 from bpy.props import (
     BoolProperty,
     CollectionProperty,
+    EnumProperty,
     IntProperty,
     PointerProperty,
     StringProperty,
 )
 
 logger = logging.getLogger("MoziToolKit.Sync.Properties")
+
+NO_IPC_INSTANCE_ID = "__NONE__"
+_IPC_DISCOVERY_TTL_SECONDS = 0.5
+_IPC_CACHE_TIME: float = 0.0
+_IPC_INSTANCES_CACHE: List[Dict[str, Any]] = []
+_IPC_ENUM_ITEMS_CACHE: List[Tuple[str, str, str]] = [
+    (
+        NO_IPC_INSTANCE_ID,
+        "No Running Minecraft Instance",
+        "Load a world in Minecraft with Yefira installed to appear here",
+    )
+]
+
+
+def refresh_ipc_instances_cache(force: bool = False) -> List[Dict[str, Any]]:
+    """Refreshes the cached list of locally running Minecraft IPC instances."""
+    global _IPC_CACHE_TIME, _IPC_INSTANCES_CACHE, _IPC_ENUM_ITEMS_CACHE
+    now = time.monotonic()
+    if not force and (now - _IPC_CACHE_TIME) < _IPC_DISCOVERY_TTL_SECONDS:
+        return _IPC_INSTANCES_CACHE
+
+    from ...bridge.sync import discover_local_sync_instances
+
+    instances = discover_local_sync_instances()
+    _IPC_INSTANCES_CACHE = list(instances)
+    _IPC_CACHE_TIME = now
+
+    items: List[Tuple[str, str, str]] = []
+    for inst in _IPC_INSTANCES_CACHE:
+        ipc_url = str(inst.get("ipc_url") or "")
+        if not ipc_url:
+            continue
+        world = str(inst.get("world_name") or "").strip() or "Minecraft"
+        dim = str(inst.get("dimension") or "minecraft:overworld")
+        dim_short = dim.split(":", 1)[-1]
+        pid = inst.get("pid", 0)
+        mc_ver = str(inst.get("mc_version") or "").strip()
+        loader = str(inst.get("loader") or "").strip()
+        requires_token = bool(inst.get("requires_token", False))
+
+        meta_parts = [p for p in (loader, mc_ver) if p]
+        meta_str = f" {' '.join(meta_parts)}" if meta_parts else ""
+        token_tag = " [Token]" if requires_token else ""
+        label = f"{world} ({dim_short}) [PID {pid}]{token_tag}"
+        desc = f"{world}{meta_str} — {ipc_url}"
+        items.append((ipc_url, label, desc))
+
+    if not items:
+        items = [
+            (
+                NO_IPC_INSTANCE_ID,
+                "No Running Minecraft Instance",
+                "Load a world in Minecraft with Yefira installed to appear here",
+            )
+        ]
+
+    _IPC_ENUM_ITEMS_CACHE = items
+    return _IPC_INSTANCES_CACHE
+
+
+def get_discovered_ipc_instance(ipc_url: str) -> Optional[Dict[str, Any]]:
+    """Returns cached metadata dict for `ipc_url`, if currently running."""
+    if not ipc_url or ipc_url == NO_IPC_INSTANCE_ID:
+        return None
+    for inst in refresh_ipc_instances_cache(force=False):
+        if inst.get("ipc_url") == ipc_url:
+            return inst
+    return None
+
+
+def _ipc_instance_items(_self, _context):
+    refresh_ipc_instances_cache(force=False)
+    return _IPC_ENUM_ITEMS_CACHE
+
+
+SYNC_MODE_ITEMS = (
+    (
+        "LOCAL_IPC",
+        "Local IPC",
+        "Connect directly to a running local Minecraft instance via IPC (no network port)",
+    ),
+    (
+        "REMOTE_WS",
+        "Remote WebSocket",
+        "Connect to a local or remote Minecraft server over WebSocket",
+    ),
+)
 
 
 class MoziSyncPaletteItem(bpy.types.PropertyGroup):
@@ -38,10 +128,23 @@ class MoziSyncProperties(bpy.types.PropertyGroup):
     """Scene and object level properties for Live Sync state tracking and UI binding."""
     __slots__ = ()
 
+    sync_mode: EnumProperty(
+        name="Sync Mode",
+        description="Choose local direct IPC or remote WebSocket synchronization",
+        items=SYNC_MODE_ITEMS,
+        default="LOCAL_IPC",
+    )
+
+    ipc_instance: EnumProperty(
+        name="Minecraft Instance",
+        description="Running local Minecraft instance with Yefira IPC enabled",
+        items=_ipc_instance_items,
+    )
+
     url: StringProperty(
         name="Server URL",
         description="WebSocket address of the Live Sync streaming server",
-        default="ws://127.0.0.1:8765",
+        default="ws://127.0.0.1:21924",
     )
 
     auth_token: StringProperty(

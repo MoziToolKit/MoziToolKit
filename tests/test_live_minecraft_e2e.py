@@ -65,7 +65,7 @@ def run_suite():
     # -------------------------------------------------------------------------
     print("\n--- TEST 1: Initial Baseline Ingestion & Rebuild ---")
     s1 = LiveSyncSession()
-    s1.start(url="ws://127.0.0.1:8765", auth_token="1234")
+    s1.start(url="ws://127.0.0.1:21924", auth_token="1234")
     
     events = poll_until(
         s1,
@@ -184,7 +184,7 @@ def run_suite():
     s2 = LiveSyncSession()
     print("  Action: Starting new session using start_with_cache()...")
     s2.start_with_cache(
-        url="ws://127.0.0.1:8765",
+        url="ws://127.0.0.1:21924",
         auth_token="1234",
         server_uuid=saved_uuid,
         epoch=saved_epoch,

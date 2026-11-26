@@ -107,7 +107,7 @@ class TestSyncContainerHierarchyAndExclusivity(unittest.TestCase):
         c1 = self._make_obj("Container_A", "EMPTY")
         c1["mtk:is_container"] = True
         c1["mtk:is_yefira_world"] = True
-        c1.mozi_sync.url = "ws://127.0.0.1:8765"
+        c1.mozi_sync.url = "ws://127.0.0.1:21924"
         c1.mozi_sync.is_connected = True
         c1.mozi_sync.connection_status = "CONNECTED"
 
@@ -121,7 +121,7 @@ class TestSyncContainerHierarchyAndExclusivity(unittest.TestCase):
         # 1. Bind Container A as active
         set_active_sync_container(scene, c1)
         self.assertEqual(get_active_sync_container(scene), c1)
-        self.assertEqual(c1.mozi_sync.url, "ws://127.0.0.1:8765")
+        self.assertEqual(c1.mozi_sync.url, "ws://127.0.0.1:21924")
         self.assertEqual(c2.mozi_sync.url, "ws://127.0.0.1:9000")
 
         # 2. Switch to Container B

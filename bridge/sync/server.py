@@ -21,19 +21,31 @@ class SyncBridgeServer:
 
     def __init__(
         self,
-        bind_address: str = "127.0.0.1:8765",
+        bind_address: Optional[str] = "127.0.0.1:21924",
+        enable_ipc: bool = False,
+        ipc_name: Optional[str] = None,
         auth_token: Optional[str] = None,
         allow_loopback: bool = True,
+        require_token_on_ipc: bool = False,
         server_uuid: Optional[str] = None,
     ) -> None:
-        require_online_access("Live Sync server binding")
+        if bind_address is not None:
+            require_online_access("Live Sync server binding")
         mtk = require_libmtk()
         self._server = mtk.LiveSyncServer(
             bind_address=bind_address,
+            enable_ipc=enable_ipc,
+            ipc_name=ipc_name,
             auth_token=auth_token,
             allow_loopback_without_token=allow_loopback,
+            require_token_on_ipc=require_token_on_ipc,
             server_uuid=server_uuid,
         )
+
+    @property
+    def ipc_url(self) -> Optional[str]:
+        """Returns the local IPC URL if IPC is enabled."""
+        return self._server.ipc_url() if self._server is not None else None
 
     def stop(self) -> None:
         """Stops the embedded WebSocket server and shuts down worker threads."""

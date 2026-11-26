@@ -225,6 +225,15 @@ def get_or_create_world_container(
         except Exception:
             pass
 
+    if hasattr(root_obj, "mozi_sync"):
+        scene_obj = getattr(ctx, "scene", None) if ctx else None
+        scene_props = getattr(scene_obj, "mozi_sync", None) if scene_obj else None
+        if scene_props is not None:
+            if hasattr(scene_props, "sync_mode"):
+                root_obj.mozi_sync.sync_mode = scene_props.sync_mode
+            if hasattr(scene_props, "url") and scene_props.url:
+                root_obj.mozi_sync.url = scene_props.url
+
     logger.info("Created root Empty world container: %s", getattr(root_obj, "name", target_name))
     return root_obj
 

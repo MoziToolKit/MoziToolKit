@@ -307,6 +307,7 @@ class TestSyncIncrementalFastPath(unittest.TestCase):
         real_obj = bpy.data.objects.new("Yefira_World", None)
         for k, v in props.items():
             real_obj[k] = v
+        real_obj.mozi_sync.sync_mode = "REMOTE_WS"
         bpy.context.collection.objects.link(real_obj)
 
         mesh = bpy.data.meshes.new("Yefira_World_Mesh")
@@ -316,6 +317,8 @@ class TestSyncIncrementalFastPath(unittest.TestCase):
         real_mesh_obj.parent = real_obj
         bpy.context.collection.objects.link(real_mesh_obj)
 
+        prev_online = bool(bpy.context.preferences.system.use_online_access)
+        bpy.context.preferences.system.use_online_access = True
         try:
             with patch("MoziToolKit.operators.sync.op_sync_connect.get_sync_bridge_session", return_value=mock_session), \
                  patch("MoziToolKit.operators.sync.op_sync_connect.can_execute_asset_pipeline", return_value=(True, "")), \
@@ -332,6 +335,7 @@ class TestSyncIncrementalFastPath(unittest.TestCase):
                 kwargs = start_calls[0]
                 self.assertIn("url", kwargs)
         finally:
+            bpy.context.preferences.system.use_online_access = prev_online
             bpy.data.objects.remove(real_mesh_obj, do_unlink=True)
             bpy.data.objects.remove(real_obj, do_unlink=True)
 

@@ -34,6 +34,22 @@ def is_sync_available() -> bool:
     return mtk is not None
 
 
+def discover_local_sync_instances() -> list[dict]:
+    """Returns running local Minecraft LiveSyncServer IPC instances discovered on this host."""
+    mtk = get_libmtk()
+    if mtk is None:
+        return []
+    discover_fn = getattr(mtk, "discover_local_sync_instances", None)
+    if not callable(discover_fn):
+        return []
+    try:
+        items = discover_fn()
+        return list(items) if items else []
+    except Exception as e:
+        logger.debug("Failed discovering local sync instances: %s", e)
+        return []
+
+
 # Global singleton bridge instance
 _global_sync_session: Optional[SyncBridgeSession] = None
 
@@ -55,6 +71,7 @@ def reset_sync_bridge_session() -> SyncBridgeSession:
 
 __all__ = [
     "is_sync_available",
+    "discover_local_sync_instances",
     "SyncBridgeSession",
     "SyncBridgeServer",
     "get_sync_bridge_session",

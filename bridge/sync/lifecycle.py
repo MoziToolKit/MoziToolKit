@@ -138,7 +138,7 @@ class SyncLifecycleMixin:
 
     def start(
         self,
-        url: str = "ws://127.0.0.1:8765",
+        url: str = "ws://127.0.0.1:21924",
         auto_reconnect: bool = True,
         max_reconnect_attempts: int = 5,
         model_db: Optional[Any] = None,
@@ -154,8 +154,9 @@ class SyncLifecycleMixin:
         smooth_biome_blend: Optional[bool] = None,
         prefs: Optional[Any] = None,
     ) -> bool:
-        """Starts the background LiveSync client thread connecting to `url`."""
-        if not is_online_access_allowed():
+        """Starts the background LiveSync client thread connecting to `url` (`ws://` or `ipc://`)."""
+        is_ipc = isinstance(url, str) and url.strip().lower().startswith("ipc://")
+        if not is_ipc and not is_online_access_allowed():
             self._last_error = ONLINE_ACCESS_DENIED_MESSAGE
             logger.warning("Refused LiveSync start: %s", ONLINE_ACCESS_DENIED_MESSAGE)
             return False
@@ -232,7 +233,7 @@ class SyncLifecycleMixin:
 
     def start_with_cache(
         self,
-        url: str = "ws://127.0.0.1:8765",
+        url: str = "ws://127.0.0.1:21924",
         auto_reconnect: bool = True,
         max_reconnect_attempts: int = 5,
         server_uuid: str = "",
@@ -260,7 +261,8 @@ class SyncLifecycleMixin:
         Starts the LiveSync client using cached handshake parameters for 0ms zero-rebuild reconnect.
         Restores VoxelStorage from `point_cloud` if provided.
         """
-        if not is_online_access_allowed():
+        is_ipc = isinstance(url, str) and url.strip().lower().startswith("ipc://")
+        if not is_ipc and not is_online_access_allowed():
             self._last_error = ONLINE_ACCESS_DENIED_MESSAGE
             logger.warning("Refused LiveSync cached start: %s", ONLINE_ACCESS_DENIED_MESSAGE)
             return False

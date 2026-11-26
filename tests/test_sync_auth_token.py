@@ -34,7 +34,7 @@ def _start_with_token(token):
          patch("MoziToolKit.bridge.sync.get_cache_timestamp", return_value=0.0), \
          patch("MoziToolKit.bridge.sync.get_configured_ctm_solver", return_value=None), \
          patch("MoziToolKit.utils.system.get_prefs", return_value=None):
-        started = session.start(url="ws://127.0.0.1:8765", auth_token=token, num_threads=1)
+        started = session.start(url="ws://127.0.0.1:21924", auth_token=token, num_threads=1)
 
     return started, calls[0] if calls else {}
 

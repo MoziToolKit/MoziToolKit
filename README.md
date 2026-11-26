@@ -14,7 +14,7 @@ All core features—including Anvil save (`.mca`) importing, resource/PBR pack c
 
 - **Core Native Engine (`libmozitoolkit`)** — Rust core library (`libmtk_py` / `libmtk_blender_dna`) handling meshing, face culling, atlas packing, biome palettes, and Anvil parsing under `GPL-3.0-or-later`:
   - GitHub: <https://github.com/MoziToolKit/libmozitoolkit>
-- **Live Sync Companion Mod (`yefira`, Optional)** — Open-source Minecraft mod (Fabric / Forge / NeoForge) that streams local or self-hosted world selections over WebSocket (`ws://127.0.0.1:8765` by default):
+- **Live Sync Companion Mod (`yefira`, Optional)** — Open-source Minecraft mod (Fabric / Forge / NeoForge) that streams local worlds via local IPC (`ipc://`, zero network ports) or self-hosted worlds over WebSocket (`ws://127.0.0.1:21924` by default):
   - GitHub: <https://github.com/MoziToolKit/yefira>
 
 ---

@@ -213,7 +213,7 @@ class TestSaveAnimationRouting(unittest.TestCase):
         with patch("MoziToolKit.bridge.sync.get_libmtk", return_value=mock_mtk), \
              patch("MoziToolKit.utils.system.get_prefs", return_value=types.SimpleNamespace(thread_count=1, enable_animated_textures=False)):
 
-            client.start(url="ws://127.0.0.1:8765", enable_animated_textures=False)
+            client.start(url="ws://127.0.0.1:21924", enable_animated_textures=False)
             self.assertTrue(len(config_calls) > 0)
             cfg_kwargs = config_calls[-1]
             self.assertIn("enable_animated_textures", cfg_kwargs)

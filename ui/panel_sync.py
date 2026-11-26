@@ -16,7 +16,11 @@ from ..utils.world.sync_container import (
     find_world_mesh_child,
     find_voxel_cloud_child,
 )
-from ..operators.sync.properties import get_active_sync_container
+from ..operators.sync.properties import (
+    NO_IPC_INSTANCE_ID,
+    get_active_sync_container,
+    get_discovered_ipc_instance,
+)
 from ..utils.system import get_prefs
 from .common import draw_online_access_warning, draw_vanilla_pack_warning
 
@@ -90,12 +94,14 @@ def _draw_live_sync_content(layout: bpy.types.UILayout, context: bpy.types.Conte
         layout.label(text=tr("Live Sync properties not initialized"), icon='ERROR')
         return
 
-    # Check network permission if applicable
-    if draw_online_access_warning(
-        layout,
-        "Enable 'Allow Online Access' in Preferences > System > Network to use Live Sync.",
-    ):
-        return
+    sync_mode = getattr(props, "sync_mode", "LOCAL_IPC")
+
+    # Check network permission only when using Remote WebSocket mode
+    if sync_mode == "REMOTE_WS":
+        draw_online_access_warning(
+            layout,
+            "Enable 'Allow Online Access' in Preferences > System > Network to use Remote WebSocket Sync.",
+        )
 
     # Check vanilla client base pack
     draw_vanilla_pack_warning(
@@ -142,11 +148,28 @@ def _draw_live_sync_content(layout: bpy.types.UILayout, context: bpy.types.Conte
     box_conn = layout.box()
     box_conn.label(text=f"{tr('Connection')} ({root_obj.name})", icon='URL')
 
-    row_url = box_conn.row(align=True)
-    row_url.prop(props, "url", text="")
+    row_mode = box_conn.row(align=True)
+    row_mode.prop(props, "sync_mode", expand=True)
 
-    row_token = box_conn.row(align=True)
-    row_token.prop(props, "auth_token", text=tr("Auth Token"))
+    if sync_mode == "LOCAL_IPC":
+        row_inst = box_conn.row(align=True)
+        row_inst.prop(props, "ipc_instance", text="")
+        row_inst.operator("mozi.sync_refresh_instances", text="", icon='FILE_REFRESH')
+
+        selected_ipc = getattr(props, "ipc_instance", NO_IPC_INSTANCE_ID)
+        inst_info = get_discovered_ipc_instance(selected_ipc)
+        if inst_info and inst_info.get("requires_token"):
+            row_token = box_conn.row(align=True)
+            row_token.prop(props, "auth_token", text=tr("Auth Token"))
+        elif getattr(props, "auth_token", ""):
+            row_token = box_conn.row(align=True)
+            row_token.prop(props, "auth_token", text=tr("Auth Token"))
+    else:
+        row_url = box_conn.row(align=True)
+        row_url.prop(props, "url", text="")
+
+        row_token = box_conn.row(align=True)
+        row_token.prop(props, "auth_token", text=tr("Auth Token"))
 
     row_btn = box_conn.row(align=True)
     row_btn.scale_y = 1.25
@@ -320,11 +343,6 @@ class MOZI_PT_view3d_live_sync(bpy.types.Panel):
         if root_obj:
             _draw_live_sync_content(layout, context)
         else:
-            draw_online_access_warning(
-                layout,
-                "Enable 'Allow Online Access' in Preferences > System > Network to use Live Sync.",
-                separator=True,
-            )
             box = layout.box()
             box.label(text=tr("Live Sync (Yefira)"), icon="WORLD")
             col = box.column(align=True)
